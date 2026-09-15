@@ -8,13 +8,9 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Assets.Pipeline.Importers;
 
+[AssetImporter("inno.assets.binary")]
 internal sealed class BinaryAssetImporter : AssetImporter<BinaryAsset>
 {
-    /// <summary>
-    /// Gets the stable binary import protocol independent of the implementation type name.
-    /// </summary>
-    public override string importerId => "inno.assets.binary";
-
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.
     /// </summary>

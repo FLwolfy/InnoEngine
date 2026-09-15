@@ -9,13 +9,9 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Assets;
 
+[AssetImporter("inno.rendering.pipeline")]
 internal sealed class RenderPipelineAssetImporter : AssetImporter<RenderPipelineAsset>
 {
-    /// <summary>
-    /// Gets the stable importer identity used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.rendering.pipeline";
-
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.
     /// </summary>

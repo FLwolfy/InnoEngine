@@ -10,7 +10,7 @@
 
 ## 初始化与生命周期
 
-宿主提供 AssetPipeline、SerializationRegistry、TypeCatalog、GraphEditorModule、EditorInteractions、EditorShaderCompilation、AssetImportSettingsEdits 和 IEditorPreviewService。ShaderEditorDocuments Module 使用 LifetimeScope 拥有当前 generation 的节点、前端、drawer registry 和文档注册；停止时只保留未保存恢复数据并按依赖顺序退休，不写入源资产。专用 Panel 以 `revealHost: false` 打开共享文档，不额外弹出第二个 Document Host。
+宿主提供 AssetPipeline、SerializationRegistry、TypeCatalog、GraphEditorModule、EditorInteractions、EditorShaderCompilation、AssetImportSettingsEdits 和 IEditorPreviewService。ShaderEditorDocuments Module 使用 LifetimeScope 拥有当前 generation 的节点、前端、drawer registry 和 headless 文档注册；停止时只保留未保存恢复数据并按依赖顺序退休，不写入源资产。Shader Editor 是唯一图画布，Document Service 只管理单实例、Save/Revert、恢复和 reload 生命周期，不再提供可见 Documents Panel。
 
 文件条目 identity 与资产 identity 是不同身份：从文件条目的 `assetPath` 查询 AssetInfo，再以 `AssetInfo.persistentId` 打开图文档、查询编译、引用源码。不能拿文件条目的 ID 调用资产加载或当成 Shader/source reference。
 
@@ -48,7 +48,7 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 
 ## 保存与错误
 
-- 编辑、拖动、连接、Undo/Redo 只改变草稿；Save 按钮或画布聚焦时 Command/Ctrl+S 才写入 `.ishader`。共享 Document Host 的 Save/Save All 也显式保存。保存不以图编译成功为条件。
+- 编辑、拖动、连接、Undo/Redo 只改变草稿；Shader Editor 的 Save 按钮或画布聚焦时 Command/Ctrl+S 才写入 `.ishader`。保存不以图编译成功为条件。
 - 写盘前先保留 Library/Editor/ShaderRecovery 中的中立恢复数据；比较上次读取的源指纹，已发生的外部修改拒绝覆盖。
 - 文件切换、关闭 Shader Editor 面板和停止不应用草稿。恢复文件只位于 Library，不参与资产导入或 GPU 发布。失败保留文档、历史与恢复文件，并在画布显示错误。
 - 源码外部更新：未编辑文档接受新源；dirty 文档显示冲突，不覆盖磁盘。暂时缺失源保留图和 Undo barrier。

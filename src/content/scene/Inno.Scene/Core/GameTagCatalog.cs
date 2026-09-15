@@ -12,16 +12,21 @@ namespace Inno.Scene;
 /// Stores the project-wide tag definitions used to author and validate scene object assignments.
 /// </summary>
 [StableTypeId("5bd9122b-8ce7-4ddd-8c47-32e4235f819e")]
-[ProjectSettingDefinition("inno.scene.tags")]
+[ProjectSettingDefinition(GameTagCatalog.settingProtocolId)]
 public sealed class GameTagCatalog : ISerializable
 {
+    /// <summary>
+    /// Gets the immutable project-setting protocol value used by discovery metadata.
+    /// </summary>
+    public const string settingProtocolId = "inno.scene.tags";
+
     [SerializableProperty]
     private string[] m_tags = [GameObject.defaultTag];
 
     /// <summary>
     /// Gets the stable project setting protocol for the project-wide tag catalog.
     /// </summary>
-    public static ProjectSettingId settingId => new("inno.scene.tags");
+    public static ProjectSettingId settingId => new(settingProtocolId);
 
     /// <summary>
     /// Gets the defined tags with the immutable default tag first.

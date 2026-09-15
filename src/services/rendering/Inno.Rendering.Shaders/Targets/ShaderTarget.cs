@@ -1,15 +1,28 @@
+using System;
 using System.Threading;
 using Inno.Core.Graphs;
 using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
+/// <summary>Declares the immutable identity used to select a Shader Target from an authored graph.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class ShaderTargetAttribute : Attribute
+{
+    /// <summary>Creates target discovery metadata.</summary>
+    /// <param name="id">Stable target identity persisted by Shader assets.</param>
+    public ShaderTargetAttribute(string id)
+        => this.id = string.IsNullOrWhiteSpace(id)
+            ? throw new ArgumentException("Shader target identity cannot be empty.", nameof(id))
+            : id;
+
+    /// <summary>Gets the stable target identity persisted by Shader assets.</summary>
+    public string id { get; }
+}
+
 /// <summary>Expands a domain's surface contract into ordinary graph stages before source dependency capture.</summary>
 public abstract class ShaderTarget
 {
-    /// <summary>Gets the stable domain target identity stored in shader documents.</summary>
-    public abstract string id { get; }
-
     /// <summary>Builds explicit stage interfaces, resource declarations, techniques and pass states.</summary>
     /// <param name="context">Invocation-scoped detached document and complete owner serialization services.</param>
     /// <param name="cancellationToken">Cancellation between expansion operations.</param>

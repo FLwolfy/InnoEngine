@@ -10,6 +10,31 @@ namespace Inno.Assets.Pipeline;
 /// </summary>
 public static class EditorAssets
 {
+    /// <summary>Encodes a detached native asset with the current authoring pipeline's converters and reference context.</summary>
+    /// <param name="asset">Complete detached value to encode without saving or importing it.</param>
+    /// <returns>Reload-safe native asset bytes suitable for draft state and History payloads.</returns>
+    public static byte[] EncodeNative(AssetObject asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        if (AssetExecutionContext.current is not AssetPipeline pipeline)
+            throw new InvalidOperationException(
+                "Encoding an authoring asset requires an asset pipeline execution context.");
+        return pipeline.CreateSourceStore().Encode(asset);
+    }
+
+    /// <summary>Decodes detached native asset bytes with the current authoring pipeline's converters and reference context.</summary>
+    /// <typeparam name="TAsset">Expected native asset type.</typeparam>
+    /// <param name="bytes">Bytes previously produced by the native asset source codec.</param>
+    /// <returns>A detached asset value that can be edited without publishing it.</returns>
+    public static TAsset DecodeNative<TAsset>(byte[] bytes) where TAsset : AssetObject
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        if (AssetExecutionContext.current is not AssetPipeline pipeline)
+            throw new InvalidOperationException(
+                "Decoding an authoring asset requires an asset pipeline execution context.");
+        return pipeline.CreateSourceStore().Decode<TAsset>(bytes);
+    }
+
     /// <summary>Captures reload-safe settings using the currently bound authoring owner's converters and references.</summary>
     /// <typeparam name="TValue">Current serializable settings type.</typeparam>
     /// <param name="value">Settings to capture without saving or mutating their referenced assets.</param>

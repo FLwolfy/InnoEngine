@@ -209,9 +209,9 @@ internal sealed class ConfiguredAsset : AssetObject
     [SerializableProperty] internal string value { get; set; } = string.Empty;
 }
 
+[AssetImporter("tests.configured")]
 internal sealed class ConfiguredImporter : AssetImporter<ConfiguredAsset>
 {
-    public override string importerId => "tests.configured";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".configured"];
     public override ISerializable CreateImportSettings() => new ConfiguredSettings();
     protected override ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<ConfiguredAsset> output, CancellationToken cancellationToken)

@@ -28,14 +28,9 @@ public enum EditorDocumentCloseMode
 public interface IEditorDocumentService
 {
     /// <summary>
-    /// Gets open documents in tab order.
+    /// Gets the currently owned source documents.
     /// </summary>
     IReadOnlyList<EditorDocumentContext> documents { get; }
-
-    /// <summary>
-    /// Gets the focused document, or <see langword="null"/>.
-    /// </summary>
-    EditorDocumentContext? activeDocument { get; }
 
     /// <summary>
     /// Registers one current-generation document provider.
@@ -49,7 +44,7 @@ public interface IEditorDocumentService
     IDisposable RegisterProvider(EditorDocumentProvider provider);
 
     /// <summary>
-    /// Opens and focuses a document or focuses its existing single instance.
+    /// Opens a document or returns its existing single instance.
     /// </summary>
     /// <param name="assetPath">
     /// Project asset path.
@@ -60,19 +55,7 @@ public interface IEditorDocumentService
     /// <returns>
     /// The stable document context.
     /// </returns>
-    /// <param name="revealHost">Whether to reveal the shared host; dedicated panels can retain its document lifetime without opening a second canvas.</param>
-    EditorDocumentContext Open(string assetPath, Guid assetId = default, bool revealHost = true);
-
-    /// <summary>
-    /// Focuses an open document.
-    /// </summary>
-    /// <param name="documentId">
-    /// Stable tab identity.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> when the document exists.
-    /// </returns>
-    bool Focus(Guid documentId);
+    EditorDocumentContext Open(string assetPath, Guid assetId = default);
 
     /// <summary>Updates an open document's source location after an identity-preserving asset move, without changing history or focus.</summary>
     /// <param name="documentId">Existing document identity.</param>
@@ -144,30 +127,4 @@ public interface IEditorDocumentService
     /// </returns>
     bool Close(Guid documentId, EditorDocumentCloseMode mode);
 
-    /// <summary>
-    /// Draws the active document through its current provider.
-    /// </summary>
-    /// <returns>
-    /// <see langword="true"/> when a provider drew a document.
-    /// </returns>
-    bool DrawActive();
-
-    /// <summary>
-    /// Captures reload-safe open-document state.
-    /// </summary>
-    /// <returns>
-    /// Stable contexts in tab order.
-    /// </returns>
-    IReadOnlyList<EditorDocumentState> CaptureState();
-
-    /// <summary>
-    /// Restores reload-safe open-document state and focuses a tab.
-    /// </summary>
-    /// <param name="states">
-    /// Complete contexts in tab order.
-    /// </param>
-    /// <param name="activeDocumentId">
-    /// Previously focused tab identity.
-    /// </param>
-    void RestoreState(IEnumerable<EditorDocumentState> states, Guid? activeDocumentId);
 }

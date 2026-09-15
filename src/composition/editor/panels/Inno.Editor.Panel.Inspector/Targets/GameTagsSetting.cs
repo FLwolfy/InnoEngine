@@ -25,8 +25,6 @@ internal sealed class GameTagsSetting : ProjectSettingEditor<GameTagCatalog>
     /// <summary>
     /// Gets the stable project-setting identity used for discovery and persistence.
     /// </summary>
-    public override ProjectSettingId settingId => GameTagCatalog.settingId;
-
     /// <summary>
     /// Gets the presentation section that groups this setting.
     /// </summary>

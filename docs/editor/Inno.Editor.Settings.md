@@ -74,8 +74,6 @@ using InnoEngine.Settings;
 [ProjectSettingPath("Project/MyPlugin/Rendering")]
 public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSettings>
 {
-    public override ProjectSettingId settingId => MyRenderingSettings.settingId;
-
     public override string description => "Configures the runtime rendering provider.";
 
     protected override void OnDraw(MyRenderingSettings setting)
@@ -86,6 +84,8 @@ public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSet
     }
 }
 ```
+
+Editor presentation 不再 override 一个常量 `settingId`。Catalog 从 `TSetting` 自身的 `ProjectSettingDefinitionAttribute` 读取唯一协议 ID，并在构造 presentation 时绑定；`ProjectSettingPathAttribute` 只携带 UI placement。这样运行时定义 Attribute 是身份的单一权威，多个 presentation 不会重复声明同一常量。
 
 `Project/Identity/Project ID` 是内置的 `ProjectIdentitySettings` drawer；它只接受 portable lowercase namespace。Layer、Tag、Sorting Layer 等 Project-owned 定义不再让用户输入完整 ID，而是保存 local key 并在运行时组合为 `projectId.name`。Game/Plugin 导出身份也直接读取这个 Project ID，不在 Build Settings 或导出 modal 中维护第二份可编辑 ID。
 

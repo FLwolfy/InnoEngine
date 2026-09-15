@@ -11,10 +11,9 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Rendering.Assets;
 
+[AssetImporter("inno.rendering.shader")]
 internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
 {
-    /// <inheritdoc />
-    public override string importerId => "inno.rendering.shader";
     /// <inheritdoc />
     public override IReadOnlyList<string> supportedExtensions { get; } = [".ishader"];
 

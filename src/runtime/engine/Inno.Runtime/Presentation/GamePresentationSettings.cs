@@ -11,13 +11,18 @@ namespace Inno.Runtime;
 /// </summary>
 [GenerateSerializationConverter]
 [StableTypeId("4068d172-87ac-41b3-ae64-247d25889336")]
-[ProjectSettingDefinition("inno.runtime.game-presentation")]
+[ProjectSettingDefinition(GamePresentationSettings.settingProtocolId)]
 public sealed class GamePresentationSettings : ISerializable
 {
     /// <summary>
+    /// Gets the immutable project-setting protocol value used by discovery metadata.
+    /// </summary>
+    public const string settingProtocolId = "inno.runtime.game-presentation";
+
+    /// <summary>
     /// Gets the stable project-setting identity for game presentation.
     /// </summary>
-    public static ProjectSettingId settingId => new("inno.runtime.game-presentation");
+    public static ProjectSettingId settingId => new(settingProtocolId);
 
     /// <summary>
     /// Gets or sets whether the complete reference frame is fitted inside the available surface.

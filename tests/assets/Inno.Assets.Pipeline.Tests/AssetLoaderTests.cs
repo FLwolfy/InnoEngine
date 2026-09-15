@@ -50,7 +50,7 @@ public sealed class AssetLoaderTests : IDisposable
         m_types = new TypeCatalog(m_modules);
         m_serialization = new SerializationRegistry(m_types);
         SlowAssetImporter.Reset();
-        ImporterConflictProbe.mode = ImporterConflictMode.None;
+        ImporterConflictProbe.duplicateExtension = false;
     }
 
     public void Dispose()
@@ -915,12 +915,21 @@ public sealed class AssetLoaderTests : IDisposable
     public void DuplicateImporterId_IsRejectedDuringAutomaticDiscovery()
     {
         using TestWorkspace workspace = new();
-        workspace.WriteText("Conflict/value.probea", "value");
+        workspace.WriteText("Conflict/initialize.txt", "initialize");
         using var loader = workspace.CreateLoader(m_types, m_serialization, m_identities, m_diagnostics, m_logs);
-        ImporterConflictProbe.mode = ImporterConflictMode.DuplicateId;
-
+        Assert.True(loader.Import(AssetPath.Project("Conflict/initialize.txt")));
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => loader.Import(AssetPath.Project("Conflict/value.probea")));
+            () => m_modules.Load(new AssemblyLoadRequest
+            {
+                moduleName = "DuplicateAssetImporters",
+                mainAssemblyPath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Modules",
+                    "DuplicateAssetImporters",
+                    "Inno.Assets.Pipeline.DuplicateImporterFixture.dll"),
+                domain = AssemblyDomain.InnoPlugin,
+                scope = AssemblyScope.Editor
+            }));
 
         Assert.Contains("importer id", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -931,7 +940,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Conflict/value.conflict", "value");
         using var loader = workspace.CreateLoader(m_types, m_serialization, m_identities, m_diagnostics, m_logs);
-        ImporterConflictProbe.mode = ImporterConflictMode.DuplicateExtension;
+        ImporterConflictProbe.duplicateExtension = true;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
             () => loader.Import(AssetPath.Project("Conflict/value.conflict")));
@@ -1972,6 +1981,7 @@ internal sealed class PrivateConstructorAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
+[AssetImporter("inno.tests.private-constructor")]
 internal sealed class PrivateConstructorAssetImporter : AssetImporter<PrivateConstructorAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = [".privateasset"];
@@ -1980,7 +1990,6 @@ internal sealed class PrivateConstructorAssetImporter : AssetImporter<PrivateCon
     {
     }
 
-    public override string importerId => "inno.tests.private-constructor";
     public override IReadOnlyList<string> supportedExtensions => s_extensions;
 
     protected override ValueTask ImportAsync(
@@ -1999,11 +2008,11 @@ internal sealed class DeferredAsset : AssetObject;
 [StableTypeId("79cef88a-3d5a-4c36-8095-a59cae3c641c")]
 internal sealed class ExtensionDependentAsset : AssetObject;
 
+[AssetImporter("tests.extension-dependent")]
 internal sealed class ExtensionDependentImporter : AssetImporter<ExtensionDependentAsset>
 {
     internal static bool available;
     internal static int attempts;
-    public override string importerId => "tests.extension-dependent";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".extensionasset"];
 
     protected override ValueTask ImportAsync(AssetImportContext context,
@@ -2017,9 +2026,9 @@ internal sealed class ExtensionDependentImporter : AssetImporter<ExtensionDepend
     }
 }
 
+[AssetImporter("tests.extension-consumer")]
 internal sealed class ExtensionConsumerImporter : AssetImporter<ExtensionDependentAsset>
 {
-    public override string importerId => "tests.extension-consumer";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".extensiondependent"];
 
     protected override ValueTask ImportAsync(AssetImportContext context,
@@ -2036,13 +2045,12 @@ internal sealed class ExtensionConsumerImporter : AssetImporter<ExtensionDepende
     }
 }
 
+[AssetImporter("inno.tests.deferred")]
 internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = [".deferredasset"];
 
     internal static bool isAvailable { get; set; } = true;
-
-    public override string importerId => "inno.tests.deferred";
 
     public override IReadOnlyList<string> supportedExtensions
         => isAvailable ? s_extensions : Array.Empty<string>();
@@ -2060,9 +2068,9 @@ internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>
 [StableTypeId("a49b603c-0f5f-4861-903a-3819513da002")]
 internal sealed class DependencyAsset : AssetObject;
 
+[AssetImporter("inno.tests.runtime-dependency")]
 internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
 {
-    public override string importerId => "inno.tests.runtime-dependency";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".depgraph"];
 
     protected override ValueTask ImportAsync(
@@ -2078,9 +2086,9 @@ internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
     }
 }
 
+[AssetImporter("inno.tests.runtime-dependency-alternate")]
 internal sealed class AlternateDependencyAssetImporter : AssetImporter<DependencyAsset>
 {
-    public override string importerId => "inno.tests.runtime-dependency-alternate";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".depgraph2"];
 
     protected override ValueTask ImportAsync(
@@ -2093,9 +2101,9 @@ internal sealed class AlternateDependencyAssetImporter : AssetImporter<Dependenc
     }
 }
 
+[AssetImporter("inno.tests.build-input")]
 internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
 {
-    public override string importerId => "inno.tests.build-input";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".buildinput"];
     public override AssetDeploymentScope deploymentScope => AssetDeploymentScope.AuthoringOnly;
 
@@ -2112,9 +2120,9 @@ internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
     }
 }
 
+[AssetImporter("inno.tests.build-consumer")]
 internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset>
 {
-    public override string importerId => "inno.tests.build-consumer";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".buildconsumer"];
 
     protected override ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<DependencyAsset> output,
@@ -2129,9 +2137,9 @@ internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset
 [StableTypeId("a80d363f-8e49-4615-89ee-589613b91c03")]
 internal sealed class ImportGraphAsset : AssetObject;
 
+[AssetImporter("inno.tests.import-dependency")]
 internal sealed class ImportGraphAssetImporter : AssetImporter<ImportGraphAsset>
 {
-    public override string importerId => "inno.tests.import-dependency";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".importgraph"];
 
     protected override ValueTask ImportAsync(
@@ -2154,13 +2162,13 @@ internal sealed class SlowAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
+[AssetImporter("inno.tests.slow")]
 internal sealed class SlowAssetImporter : AssetImporter<SlowAsset>
 {
     internal static readonly ManualResetEventSlim importStarted = new(false);
     internal static readonly ManualResetEventSlim allowImport = new(false);
     internal static int importCount;
 
-    public override string importerId => "inno.tests.slow";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".slowasset"];
 
     internal static void Reset()
@@ -2191,9 +2199,9 @@ internal sealed class MutableAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
+[AssetImporter("inno.tests.mutable")]
 internal sealed class MutableAssetImporter : AssetImporter<MutableAsset>
 {
-    public override string importerId => "inno.tests.mutable";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".mutableasset"];
 
     protected override ValueTask ImportAsync(
@@ -2244,9 +2252,9 @@ internal sealed class HookAsset : AssetObject
     }
 }
 
+[AssetImporter("inno.tests.hook")]
 internal sealed class HookAssetImporter : AssetImporter<HookAsset>
 {
-    public override string importerId => "inno.tests.hook";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".hookasset"];
 
     protected override ValueTask ImportAsync(
@@ -2259,29 +2267,19 @@ internal sealed class HookAssetImporter : AssetImporter<HookAsset>
     }
 }
 
-internal enum ImporterConflictMode
-{
-    None,
-    DuplicateId,
-    DuplicateExtension
-}
-
 internal static class ImporterConflictProbe
 {
-    internal static ImporterConflictMode mode;
+    internal static bool duplicateExtension;
 }
 
 [StableTypeId("da675da1-9276-40c4-9964-0eb4b8ff9a07")]
 internal sealed class ImporterConflictAsset : AssetObject;
 
+[AssetImporter("inno.tests.conflict-a")]
 internal sealed class ImporterConflictAssetImporterA : AssetImporter<ImporterConflictAsset>
 {
-    public override string importerId => ImporterConflictProbe.mode == ImporterConflictMode.DuplicateId
-        ? "inno.tests.conflict"
-        : "inno.tests.conflict-a";
-
     public override IReadOnlyList<string> supportedExtensions =>
-        ImporterConflictProbe.mode == ImporterConflictMode.DuplicateExtension
+        ImporterConflictProbe.duplicateExtension
             ? [".conflict"]
             : [".probea"];
 
@@ -2295,14 +2293,11 @@ internal sealed class ImporterConflictAssetImporterA : AssetImporter<ImporterCon
     }
 }
 
+[AssetImporter("inno.tests.conflict-b")]
 internal sealed class ImporterConflictAssetImporterB : AssetImporter<ImporterConflictAsset>
 {
-    public override string importerId => ImporterConflictProbe.mode == ImporterConflictMode.DuplicateId
-        ? "inno.tests.conflict"
-        : "inno.tests.conflict-b";
-
     public override IReadOnlyList<string> supportedExtensions =>
-        ImporterConflictProbe.mode == ImporterConflictMode.DuplicateExtension
+        ImporterConflictProbe.duplicateExtension
             ? [".conflict"]
             : [".probeb"];
 
@@ -2323,10 +2318,9 @@ internal sealed class TestBuildDefinitionAsset : AssetObject
     internal string label { get; set; } = string.Empty;
 }
 
+[AssetBuildProcessor("inno.tests.aggregate-build")]
 internal sealed class TestBuildProcessor : AssetBuildProcessor<TestBuildDefinitionAsset>
 {
-    public override string processorId => "inno.tests.aggregate-build";
-
     protected override ValueTask BuildAsync(
         AssetBuildContext<TestBuildDefinitionAsset> context,
         AssetArtifactWriter output,

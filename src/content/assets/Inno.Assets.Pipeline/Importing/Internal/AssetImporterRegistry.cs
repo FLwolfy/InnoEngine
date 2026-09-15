@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Frozen;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Extensibility.Types;
 
@@ -58,24 +59,34 @@ internal sealed class AssetImporterRegistry
     /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        Type[] discovered = types.GetSubTypesOf<AssetImporter>()
+        Type[] discovered = types.GetTypesWithAttribute<AssetImporterAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();
+        (Type type, string id)[] registrations = discovered.Select(static type =>
+        {
+            if (type.IsAbstract || !typeof(AssetImporter).IsAssignableFrom(type))
+            {
+                throw new InvalidOperationException(
+                    $"Asset importer metadata on '{type.FullName}' requires a concrete {nameof(AssetImporter)} subtype.");
+            }
+            return (type, type.GetCustomAttribute<AssetImporterAttribute>(inherit: false)!.id);
+        }).ToArray();
+        string? duplicateId = registrations
+            .GroupBy(static registration => registration.id, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
+        if (duplicateId is not null)
+            throw new InvalidOperationException($"Asset importer id '{duplicateId}' is registered by multiple importers.");
+
         var byExtension = new Dictionary<string, AssetImporter>(StringComparer.OrdinalIgnoreCase);
         var byId = new Dictionary<string, AssetImporter>(StringComparer.Ordinal);
         var typesById = new Dictionary<string, Type>(StringComparer.Ordinal);
-        foreach (Type type in discovered)
+        foreach ((Type type, string importerId) in registrations)
         {
             AssetImporter importer = CreateExtension<AssetImporter>(type);
-            if (string.IsNullOrWhiteSpace(importer.importerId))
-                throw new InvalidOperationException($"Asset importer '{type.FullName}' has an empty importer id.");
-            if (!byId.TryAdd(importer.importerId, importer))
-            {
-                throw new InvalidOperationException(
-                    $"Asset importer id '{importer.importerId}' is registered by multiple importers.");
-            }
-            typesById.Add(importer.importerId, type);
+            importer.BindImporterId(importerId);
+            byId.Add(importerId, importer);
+            typesById.Add(importerId, type);
 
             foreach (string declaredExtension in importer.supportedExtensions)
             {

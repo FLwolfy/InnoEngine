@@ -14,11 +14,6 @@ internal sealed class ProjectIdentitySettingsEditor : ProjectSettingEditor<Proje
     private string m_error = string.Empty;
 
     /// <summary>
-    /// Gets the stable project-setting identity used for discovery and persistence.
-    /// </summary>
-    public override ProjectSettingId settingId => ProjectIdentitySettings.settingId;
-
-    /// <summary>
     /// Gets the presentation section that groups this setting.
     /// </summary>
     public override string section => "Identity";

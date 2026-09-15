@@ -14,9 +14,14 @@ namespace Inno.Scene.Layers;
 /// </summary>
 [RequiresSerializationConverter]
 [StableTypeId("bd64db72-60b2-4c79-af70-c6276202ad48")]
-[ProjectSettingDefinition("inno.scene.layers")]
+[ProjectSettingDefinition(GameLayerCatalog.settingProtocolId)]
 public sealed class GameLayerCatalog : ISerializable
 {
+    /// <summary>
+    /// Gets the immutable project-setting protocol value used by discovery metadata.
+    /// </summary>
+    public const string settingProtocolId = "inno.scene.layers";
+
     private const string C_DEFAULT_LAYER_NAME = "Default";
 
     [SerializableProperty]
@@ -31,7 +36,7 @@ public sealed class GameLayerCatalog : ISerializable
     /// <summary>
     /// Gets the stable project setting protocol for the project-wide layer catalog.
     /// </summary>
-    public static ProjectSettingId settingId => new("inno.scene.layers");
+    public static ProjectSettingId settingId => new(settingProtocolId);
 
     /// <summary>
     /// Creates a layer stack containing the immutable default layer.

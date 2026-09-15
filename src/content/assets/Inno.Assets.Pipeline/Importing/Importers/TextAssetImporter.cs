@@ -9,13 +9,9 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Assets.Pipeline.Importers;
 
+[AssetImporter("inno.assets.text")]
 internal sealed class TextAssetImporter : AssetImporter<TextAsset>
 {
-    /// <summary>
-    /// Gets the stable text import protocol independent of the implementation type name.
-    /// </summary>
-    public override string importerId => "inno.assets.text";
-
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.
     /// </summary>

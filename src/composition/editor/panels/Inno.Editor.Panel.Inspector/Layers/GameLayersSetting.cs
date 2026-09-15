@@ -26,8 +26,6 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerCatalog>
     /// <summary>
     /// Gets the stable project-setting identity used for discovery and persistence.
     /// </summary>
-    public override ProjectSettingId settingId => GameLayerCatalog.settingId;
-
     /// <summary>
     /// Gets the presentation section that groups this setting.
     /// </summary>

@@ -240,7 +240,7 @@ generation 变化、源注销、domain 不匹配或成功 Drop 会结束当前�
 
 Editor 同时拥有 Scene、Asset、Graph 等多个 `IdentityAllocator` domain。需要跨帧保留对象身份的通用 UI（例如 Inspector lock）必须保存完整 `RuntimeIdentity`，并通过 `EditorInteractions.TryResolveIdentity` 回到该 identity 自己的 domain；不得使用 `IdentityAllocator.current` 猜测当前 domain，也不得只保存 persistent Guid 后在错误 allocator 中查询。Inspector lock 同时保留原 domain 与 persistent ID，当前 runtime slot 退休后只在原 domain 重绑定同一稳定对象，因此 generation 替换不会锁到同 ID 的其他域。非 identity 的 collectible 插件对象只允许弱引用，避免 lock 阻止旧 ALC 回收。
 
-`IEditorDocumentService` 是共享的创作文档所有权服务，不等于可见的 Documents Panel。它统一管理 Shader、Material、Pipeline 等草稿的单实例身份、dirty 状态、Save/Revert/Close、恢复和 provider generation 重连；删除它会破坏显式保存与热重载数据安全。可见 Documents Panel 只是同一服务的可选宿主。打开文档时 persistent asset ID 与规范化 source path 同时保持唯一：同一路径的干净陈旧上下文会在 provider 回调后安全退休，含未保存修改的上下文则拒绝被替换并要求用户先 Save、Revert 或 Close，不能静默丢弃草稿。
+`IEditorDocumentService` 是无可见 Panel 的共享创作文档所有权服务。它统一管理 Shader、Material、Pipeline 等草稿的单实例身份、dirty 状态、Save/Revert/Close、恢复和 provider generation 重连；Shader Editor 与 Inspector 是各资产的唯一呈现入口。打开文档时 persistent asset ID 与规范化 source path 同时保持唯一：同一路径的干净陈旧上下文会在 provider 回调后安全退休，含未保存修改的上下文则拒绝被替换并要求用户先 Save、Revert 或 Close，不能静默丢弃草稿。
 
 candidate 激活前会取消 drag、清空 pending action/presentation/menu model。Selection 与 Focus 指向 retiring collectible 类型时先清除；若对象继承 `IdentityObject`，则暂存 persistent ID 并在下一次 Update 尝试绑定当前 generation 对象，解析失败才保持清空。
 

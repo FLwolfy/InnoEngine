@@ -13,14 +13,10 @@ namespace Inno.Scene.Assets.Importers;
 /// <summary>
 /// Imports and exports <c>.iprefab</c> source state.
 /// </summary>
+[AssetImporter("inno.engine.prefab")]
 internal sealed class PrefabAssetImporter : AssetImporter<PrefabAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = new[] { ".iprefab" };
-
-    /// <summary>
-    /// Gets the stable importer identity used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.engine.prefab";
 
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.

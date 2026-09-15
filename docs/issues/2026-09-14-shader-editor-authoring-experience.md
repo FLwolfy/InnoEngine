@@ -6,7 +6,7 @@
 
 本轮解决 Shader Editor 默认图方向、自动排版、源码函数创建、菜单、Group、诊断、Output 与统一图标问题。修改必须保持 `.ishader` 是唯一 Shader 图资产、`.ishadersource` 只提供可调用函数、`.imaterial` 只保存使用配置；不恢复完整源码 Shader、MaterialGraph 或 Adapter 旁路。
 
-扩展发现遵守新增的仓库规则：当基类或接口已经完整表达扩展身份时，直接按类型关系发现，不再要求无参数 marker Attribute。Attribute 只在需要携带稳定 ID、顺序、作用域、允许多实例或其他显式语义时使用。Shader Target、Template、节点编译器和源码 Frontend 因此分别按 `ShaderTarget`、`ShaderGraphTemplate`、`IShaderNodeCompiler`、`IShaderSourceFrontend` 发现。
+扩展发现遵守仓库统一规则：基类或接口表达行为契约；不可变 Stable ID、显示名、顺序、作用域或允许多实例等发现元数据由参数化 Attribute 表达。Shader Target 与 Template 因此使用 `[ShaderTarget(id)]`、`[ShaderGraphTemplate(id, displayName)]`；不带发现元数据的节点编译器和源码 Frontend 继续直接按接口发现。
 
 ## 完成内容
 
@@ -35,11 +35,11 @@
 - Shader/节点 Inspector 全部复用通用 Property Row，label 位于左侧、控件位于右侧。Shader Inspector 移除编辑命令，只保留始终显示的草稿 Preview 与 Shader 数据。
 - Shader Editor 使用带 padding 的居中空状态；编辑状态使用两行目标 Header：Shader 下拉选择在上，Save/Revert/Format/Check 在下，不显示大图标。
 - Check 移入全局 Editor Modal Host，与脚本/插件重载共享默认固定宽度、居中、遮罩、淡入淡出和阻塞生命周期；不再显示诊断正文或进度条，完成后无论成功失败均自动关闭，诊断进入统一 Console。
-- 全引擎扩展 marker 审查删除了 `AssetImporterExtension`、`AssetBuildProcessorExtension`、`SerializationExtension`，以及从未被 Registry 消费且与 `GraphNodeDefinition.id` 重复的 `GraphNodeExtension`。Importer、Build Processor、Converter 现在只按各自基类发现；静态图节点由领域 Registry 按基类或接口发现，数据驱动节点由领域 resolver 创建。保留的 Attribute 仅用于源码生成、AllowMultiple、强制 Converter、脚本 API 排除或需要参数的注册语义。
+- 全引擎扩展 marker 审查删除了无参数的 `AssetImporterExtension`、`AssetBuildProcessorExtension`、`SerializationExtension`，以及从未被 Registry 消费且与 `GraphNodeDefinition.id` 重复的 `GraphNodeExtension`。Importer 与 Build Processor 仍以各自基类表达行为，但其不可变协议 ID 现在分别由带参数的 `[AssetImporter(id)]` 与 `[AssetBuildProcessor(id)]` 声明并由 Registry 在构造前绑定；Converter 按基类发现。静态图节点由领域 Registry 按基类或接口发现，数据驱动节点由领域 resolver 创建。保留的 Attribute 只用于稳定 ID、顺序、作用域、源码生成、AllowMultiple、强制 Converter、脚本 API 排除等确实需要声明数据或显式语义的场景。
 
 ## 边界说明
 
-- `ShaderTarget` 的继承与原无参数 `[ShaderTarget]` 确实表达了同一身份，双重要求没有增加语义，只制造漏标和热重载时序风险，因此删除 Attribute 是结构简化，不是放宽校验。
+- 原无参数 `[ShaderTarget]` 与继承重复，已经被携带唯一 Stable ID 的 `[ShaderTarget(id)]` 取代。Registry 在构造实例前读取和校验 ID；`ShaderTarget` 不再要求扩展用 `override id` 返回常量。
 - `[EditorAction(...)]`、`[AssetIcon(...)]`、`[InspectionDrawer(...)]` 等仍合理，因为它们携带 action ID、区域、扩展名、优先级或目标类型等注册参数。
 - Format 属于 Editor 视图状态；Save 才会把排版写入资产，未保存排版不影响 Scene/Game 或 canonical artifact。
 - Output 节点定义 GPU 阶段的最终接口；Pass 仍作为 Shader 定义中的渲染状态和 Role 绑定存在，但不再作为一键复制阶段节点的创作对象。

@@ -138,7 +138,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     {
         Guid id = AssetId(entry);
         if (m_drafts.TryGetValue(id, out Draft? existing)) return existing;
-        EditorDocumentContext document = interactions.documents.Open(entry.assetPath.ToString(), id, revealHost: false);
+        EditorDocumentContext document = interactions.documents.Open(entry.assetPath.ToString(), id);
         return m_drafts[document.assetId];
     }
 
@@ -467,11 +467,6 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         public override string id => "inno.shader.graph";
         public override bool CanOpen(string assetPath) => assetPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase);
         public override void Open(EditorDocumentContext context) => owner.Open(context);
-        public override void Draw(EditorDocumentContext context)
-        {
-            owner.Open(context);
-            new ShaderEditorCanvas(owner, owner.m_drafts[context.assetId]).Draw();
-        }
         public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
         public override bool Revert(EditorDocumentContext context) => owner.Reload(owner.m_drafts[context.assetId]);
         public override void Close(EditorDocumentContext context)

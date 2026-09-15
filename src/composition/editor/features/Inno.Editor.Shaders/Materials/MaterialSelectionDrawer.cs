@@ -25,44 +25,46 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetInspectionSelection target)
         => (target.assetIds.Count + " Assets", null);
 
-    protected override void Draw(InspectionDrawContext context, AssetInspectionSelection target)
+    protected override void DrawHeader(InspectionDrawContext context, AssetInspectionSelection target)
     {
-        if (!context.interactions.TryGetModule<MaterialDocuments>(out var documents) || documents is null) return;
-        var drafts = new List<Inno.Editor.Assets.AssetDraftDocuments<MaterialAsset>.Draft>();
-        foreach (Guid id in target.assetIds)
-        {
-            if (!documents.assets.TryGetInfo(id, out AssetInfo? info) || info is null
-                || !documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry)
-                || !entry.extension.Equals(".imaterial", StringComparison.OrdinalIgnoreCase))
-            { Widget.Hint("Select Materials with compatible Shader interfaces to edit their common parameters."); return; }
-            Inno.Editor.Assets.AssetDraftDocuments<MaterialAsset>.Draft draft = documents.OpenDraft(info.assetPath);
-            documents.TouchInspection(draft);
-            drafts.Add(draft);
-        }
-        var materials = drafts.ToDictionary(value => value.id, value => documents.Read(value.id));
+        if (!TryOpenDrafts(context, target, out MaterialDocuments? documents, out var drafts)) return;
         bool readOnly = drafts.Any(value => value.readOnly);
-        UI.PushID("materials." + string.Join(".", target.assetIds));
         UI.BeginDisabled(readOnly);
         try
         {
             if (UI.Button("Save Selected"))
             {
-                documents.CommitMany(target.assetIds);
-                foreach (var draft in drafts) context.interactions.documents.Save(draft.documentId);
+                documents!.CommitMany(target.assetIds);
+                foreach (var draft in drafts) _ = context.interactions.documents.Save(draft.documentId);
             }
             UI.SameLine();
             if (UI.Button("Revert Selected"))
             {
-                documents.CommitMany(target.assetIds);
+                documents!.CommitMany(target.assetIds);
                 using var transaction = context.interactions.history.BeginTransaction("Revert Materials");
-                foreach (var draft in drafts) context.interactions.documents.Revert(draft.documentId);
+                foreach (var draft in drafts) _ = context.interactions.documents.Revert(draft.documentId);
                 transaction.Commit();
             }
+        }
+        finally { UI.EndDisabled(); }
+    }
+
+    protected override void Draw(InspectionDrawContext context, AssetInspectionSelection target)
+    {
+        if (!TryOpenDrafts(context, target, out MaterialDocuments? documents, out var drafts))
+        { Widget.Hint("Select Materials with compatible Shader interfaces to edit their common parameters."); return; }
+        MaterialDocuments owner = documents!;
+        var materials = drafts.ToDictionary(value => value.id, value => owner.Read(value.id));
+        bool readOnly = drafts.Any(value => value.readOnly);
+        UI.PushID("materials." + string.Join(".", target.assetIds));
+        UI.BeginDisabled(readOnly);
+        try
+        {
             Widget.Hint("Save runs per document. Unsaved edits do not change Scene/Game.");
             if (readOnly) Widget.Hint("Selection includes installed read-only content. Copy it to the project before editing.");
             foreach (var draft in drafts.Where(value => value.error.Length != 0))
                 Widget.Hint(draft.path.localPath + ": " + draft.error);
-            var edits = new SelectionEdits(documents, materials);
+            var edits = new SelectionEdits(owner, materials);
             MaterialAsset first = materials.Values.First();
             Widget.SectionHeader("Material Selection", "Changes are recorded together. Changing Shader retains each Material's independent overrides.");
             if (materials.Values.Any(value => value.shader?.identity.persistentId != first.shader?.identity.persistentId))
@@ -90,8 +92,9 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                             if (UI.Selectable(technique.value, !mixedTechnique && first.techniqueId == technique)) SetTechnique(technique);
                     }
                     finally { UI.EndCombo(); }
-                }
-            }
+        }
+    }
+
             foreach (ShaderKeywordDefinition keyword in firstDefinition.keywords)
             {
                 if (!materials.Values.All(material => material.shader is { isMissing: false, definition: { } definition }
@@ -112,7 +115,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 {
                     foreach (MaterialAsset material in materials.Values)
                         foreach (string option in keyword.options) material.SetKeyword(option, option == next);
-                    documents.ReplaceMany(materials);
+                    owner.ReplaceMany(materials);
                 }
             }
             Widget.SectionHeader("Common Parameters", "Only compatible Material-owned inputs appear here. Unrelated overrides are retained per Material.");
@@ -122,7 +125,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 if (property.bindingOwner != ShaderPropertyBindingOwner.Material
                     || property.bindingKind is not (ShaderPropertyBindingKind.Uniform or ShaderPropertyBindingKind.SampledTexture)) continue;
                 var values = new List<MaterialValue>();
-                ShaderParameterPresentation presentation = documents.Presentation(first.shader, property.id, out string presentationError);
+                ShaderParameterPresentation presentation = owner.Presentation(first.shader, property.id, out string presentationError);
                 if (presentationError.Length != 0) Widget.Hint("Parameter presentation unavailable: " + presentationError);
                 if (!presentation.visible) continue;
                 bool compatible = true;
@@ -132,7 +135,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                     int index = Array.FindIndex(declarations, value => value.id == property.id && value.type == property.type
                         && value.bindingKind == property.bindingKind && value.bindingOwner == property.bindingOwner);
                     if (index < 0) { compatible = false; break; }
-                    ShaderParameterPresentation other = documents.Presentation(material.shader!, property.id, out _);
+                    ShaderParameterPresentation other = owner.Presentation(material.shader!, property.id, out _);
                     if (!other.visible) { compatible = false; break; }
                     if (other.hasRange)
                     {
@@ -169,13 +172,13 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                     if (mixed && UI.SmallButton("Use First Value for Selection"))
                     {
                         foreach (MaterialAsset material in materials.Values) material.Set(property.id, values[0]);
-                        documents.ReplaceMany(materials);
+                        owner.ReplaceMany(materials);
                     }
                     if (UI.SmallButton("Reset Selected Overrides"))
                     {
                         foreach (MaterialAsset material in materials.Values)
                             material.ReplaceProperties(material.properties.Where(value => value.id != property.id).ToArray());
-                        documents.ReplaceMany(materials);
+                        owner.ReplaceMany(materials);
                     }
                 }
                 finally { UI.PopID(); }
@@ -183,17 +186,38 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
             if (materials.Values.Any(value => value.properties.Count != 0) && UI.Button("Reset All Selected Overrides"))
             {
                 foreach (MaterialAsset material in materials.Values) material.ReplaceProperties([]);
-                documents.ReplaceMany(materials);
+                owner.ReplaceMany(materials);
             }
-            if (!UI.IsAnyItemActive()) documents.CommitMany(target.assetIds);
+            if (!UI.IsAnyItemActive()) owner.CommitMany(target.assetIds);
 
             void SetTechnique(ShaderTechniqueId technique)
             {
                 foreach (MaterialAsset material in materials.Values) material.techniqueId = technique;
-                documents.ReplaceMany(materials);
+                owner.ReplaceMany(materials);
             }
         }
         finally { UI.EndDisabled(); UI.PopID(); }
+    }
+
+    private static bool TryOpenDrafts(
+        InspectionDrawContext context,
+        AssetInspectionSelection target,
+        out MaterialDocuments? documents,
+        out List<Inno.Editor.Assets.AssetDraftDocuments<MaterialAsset>.Draft> drafts)
+    {
+        drafts = [];
+        if (!context.interactions.TryGetModule(out documents) || documents is null) return false;
+        foreach (Guid id in target.assetIds)
+        {
+            if (!documents.assets.TryGetInfo(id, out AssetInfo? info) || info is null
+                || !documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry)
+                || !entry.extension.Equals(".imaterial", StringComparison.OrdinalIgnoreCase))
+                return false;
+            var draft = documents.OpenDraft(info.assetPath);
+            documents.TouchInspection(draft);
+            drafts.Add(draft);
+        }
+        return drafts.Count != 0;
     }
 
     private sealed class SelectionEdits(MaterialDocuments documents, IReadOnlyDictionary<Guid, MaterialAsset> materials) : IInspectionPropertyEditService

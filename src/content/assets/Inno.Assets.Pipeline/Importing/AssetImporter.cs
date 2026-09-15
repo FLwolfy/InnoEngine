@@ -9,14 +9,40 @@ using Inno.Core.Serialization;
 namespace Inno.Assets.Pipeline;
 
 /// <summary>
+/// Declares the immutable protocol identity of an automatically discovered asset importer.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class AssetImporterAttribute : Attribute
+{
+    /// <summary>
+    /// Creates importer discovery metadata.
+    /// </summary>
+    /// <param name="id">Globally stable importer protocol identifier.</param>
+    public AssetImporterAttribute(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        this.id = id.Trim();
+    }
+
+    /// <summary>
+    /// Gets the globally stable importer protocol identifier.
+    /// </summary>
+    public string id { get; }
+}
+
+/// <summary>
 /// Defines metadata shared by automatically discovered asset importers.
 /// </summary>
 public abstract class AssetImporter
 {
+    private string? m_importerId;
+
     /// <summary>
     /// Gets the stable importer implementation identifier.
     /// </summary>
-    public abstract string importerId { get; }
+    public string importerId => m_importerId
+        ?? throw new InvalidOperationException(
+            $"Asset importer '{GetType().FullName}' has not been bound to discovery metadata.");
 
     /// <summary>
     /// Gets whether imported assets are deployed or retained only for authoring workflows.
@@ -49,6 +75,17 @@ public abstract class AssetImporter
         AssetExportContext context,
         AssetObject asset,
         CancellationToken cancellationToken);
+
+    internal void BindImporterId(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (m_importerId is not null && !string.Equals(m_importerId, id, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Asset importer '{GetType().FullName}' cannot be bound to more than one protocol ID.");
+        }
+        m_importerId = id;
+    }
 }
 
 /// <summary>

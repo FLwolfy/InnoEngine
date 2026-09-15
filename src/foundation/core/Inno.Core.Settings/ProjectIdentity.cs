@@ -250,15 +250,20 @@ public readonly record struct ProjectScopedId
 /// Stores the editable identity namespace of the current project.
 /// </summary>
 [StableTypeId("d5f90462-506d-4ff7-aa9f-0f14da28b9c3")]
-[ProjectSettingDefinition("inno.project.identity", allowPluginContributions: false)]
+[ProjectSettingDefinition(ProjectIdentitySettings.settingProtocolId, allowPluginContributions: false)]
 public sealed class ProjectIdentitySettings : ISerializable
 {
+    /// <summary>
+    /// Gets the immutable project-setting protocol value used by discovery metadata.
+    /// </summary>
+    public const string settingProtocolId = "inno.project.identity";
+
     private string m_projectId = "inno.project";
 
     /// <summary>
     /// Gets the stable project setting protocol identity.
     /// </summary>
-    public static ProjectSettingId settingId => new("inno.project.identity");
+    public static ProjectSettingId settingId => new(settingProtocolId);
 
     /// <summary>
     /// Gets or sets the editable project namespace.

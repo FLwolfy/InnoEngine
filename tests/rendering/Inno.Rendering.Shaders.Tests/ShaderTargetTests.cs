@@ -79,17 +79,16 @@ public sealed class ShaderTargetTests : IDisposable
     public void Dispose()
     { m_targets.Dispose(); m_serialization.Dispose(); m_types.Dispose(); m_modules.Dispose(); }
 
+    [ShaderTarget("tests.surface-target")]
     public sealed class SurfaceTarget : ShaderTarget
     {
-        public override string id => "tests.surface-target";
         public override GraphDocument Expand(ShaderTargetContext context, CancellationToken cancellationToken)
             => ShaderGraphTemplates.CreateRaster(context.serialization, context.references);
     }
 
+    [ShaderGraphTemplate("tests.surface-template", "Test Surface")]
     public sealed class SurfaceTemplate : ShaderGraphTemplate
     {
-        public override string id => "tests.surface-template";
-        public override string displayName => "Test Surface";
         public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
         {
             GraphDocument graph = ShaderGraphDocument.Create(new("Surface", [], [], []), serialization, context);

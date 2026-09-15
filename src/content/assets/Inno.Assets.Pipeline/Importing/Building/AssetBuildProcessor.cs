@@ -8,14 +8,40 @@ using Inno.Assets;
 namespace Inno.Assets.Pipeline;
 
 /// <summary>
+/// Declares the immutable cache protocol identity of an automatically discovered asset build processor.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class AssetBuildProcessorAttribute : Attribute
+{
+    /// <summary>
+    /// Creates build-processor discovery metadata.
+    /// </summary>
+    /// <param name="id">Globally stable build processor identifier.</param>
+    public AssetBuildProcessorAttribute(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        this.id = id.Trim();
+    }
+
+    /// <summary>
+    /// Gets the globally stable build processor identifier.
+    /// </summary>
+    public string id { get; }
+}
+
+/// <summary>
 /// Defines an automatically discovered aggregate asset build processor.
 /// </summary>
 public abstract class AssetBuildProcessor
 {
+    private string? m_processorId;
+
     /// <summary>
     /// Gets the stable processor identifier used by build cache keys.
     /// </summary>
-    public abstract string processorId { get; }
+    public string processorId => m_processorId
+        ?? throw new InvalidOperationException(
+            $"Asset build processor '{GetType().FullName}' has not been bound to discovery metadata.");
 
     /// <summary>
     /// Gets the definition type accepted by this processor.
@@ -27,6 +53,17 @@ public abstract class AssetBuildProcessor
         IReadOnlyList<AssetInfo> inputs,
         AssetArtifactWriter output,
         CancellationToken cancellationToken);
+
+    internal void BindProcessorId(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (m_processorId is not null && !string.Equals(m_processorId, id, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Asset build processor '{GetType().FullName}' cannot be bound to more than one protocol ID.");
+        }
+        m_processorId = id;
+    }
 }
 
 /// <summary>

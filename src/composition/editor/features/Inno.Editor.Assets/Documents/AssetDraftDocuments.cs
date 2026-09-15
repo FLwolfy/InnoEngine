@@ -73,7 +73,7 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         if (!path.localPath.EndsWith(m_extension, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The source extension does not belong to this document provider.", nameof(path));
         if (!m_assets.TryGetInfo(path, out AssetInfo? info) || info is null) throw new IOException("The asset identity is unavailable.");
-        m_interactions.documents.Open(path.ToString(), info.persistentId, revealHost: false);
+        m_interactions.documents.Open(path.ToString(), info.persistentId);
         return info.persistentId;
     }
 
@@ -266,7 +266,7 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         if (draft.isDirty) m_interactions.documents.SetDirty(draft.documentId);
     }
 
-    /// <summary>Registers the feature provider with the shared document host.</summary>
+    /// <summary>Registers the feature provider with the headless document ownership service.</summary>
     public void Start()
     {
         if (m_provider is not null) throw new InvalidOperationException("This draft provider is already started.");
@@ -346,8 +346,6 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         public override string id => owner.m_providerId;
         public override bool CanOpen(string assetPath) => assetPath.EndsWith(owner.m_extension, StringComparison.OrdinalIgnoreCase);
         public override void Open(EditorDocumentContext context) => owner.Open(context);
-        public override void Draw(EditorDocumentContext context)
-            => Inno.Native.ImGui.ImGui.TextUnformatted("Select this asset in the Asset Browser to edit its draft in the Inspector.");
         public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
         public override bool Revert(EditorDocumentContext context) => owner.Revert(owner.m_drafts[context.assetId]);
         public override void Close(EditorDocumentContext context)

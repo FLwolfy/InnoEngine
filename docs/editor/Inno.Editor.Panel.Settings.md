@@ -53,14 +53,14 @@ Runtime/Plugin 字段：
 public sealed class RenderingSettingsEditor
     : ProjectSettingEditor<MyRenderingSettings>
 {
-    public override ProjectSettingId settingId => MyRenderingSettings.settingId;
-
     protected override void OnDraw(MyRenderingSettings setting)
     {
         // Draw through InnoEditor.ImGui and mutate only this staged snapshot.
     }
 }
 ```
+
+`ProjectSettingId` 由 `MyRenderingSettings` 的 `ProjectSettingDefinitionAttribute` 提供，Editor presentation 不重复 override 常量身份。
 
 同一个 `ProjectSettingId` 可以注册多个 `ProjectSettingEditor<TSetting>` presentation，前提是它们使用完全相同的 `TSetting`。不同 presentation 可以使用同一 `pagePath` 和不同 `section`，由 frontend 绘制为同级、全宽的分节横线；它们共享一个 staged setting、Reset、dirty 判断与 Apply，不复制运行时配置对象。Renderer 与 Sorting Layers 这类同属一个设置协议、但视觉上应分节的内容应采用这种组合方式，不应在 `OnDraw` 内手写嵌套 separator。
 

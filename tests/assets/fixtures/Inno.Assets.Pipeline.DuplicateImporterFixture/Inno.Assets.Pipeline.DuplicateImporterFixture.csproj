@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InnoAssemblyDomain>InnoPlugin</InnoAssemblyDomain>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/content/assets/Inno.Assets.Pipeline/Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../src/content/assets/Inno.Assets/Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../src/foundation/extensibility/Inno.Extensibility.Types/Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

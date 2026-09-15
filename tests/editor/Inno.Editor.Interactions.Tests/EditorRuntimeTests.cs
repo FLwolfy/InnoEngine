@@ -229,7 +229,6 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Same(opened, focused);
         Assert.Equal("Assets/OtherName.ispriteatlas2d", opened.assetPath);
         Assert.Equal("OtherName.ispriteatlas2d", opened.title);
-        Assert.Same(opened, documents.activeDocument);
         Assert.True(opened.isDirty);
         Assert.False(documents.Close(opened.documentId, EditorDocumentCloseMode.Cancel));
         Assert.Single(documents.documents);
@@ -268,15 +267,12 @@ public sealed class EditorRuntimeTests : IDisposable
         var firstProvider = new TestDocumentProvider();
         IDisposable firstLease = documents.RegisterProvider(firstProvider);
         EditorDocumentContext opened = documents.Open("Assets/World.itilemap2d", Guid.NewGuid());
-        opened.activeTool = "tilemap/brush";
         opened.SetViewParameter("zoom", "2.5");
         documents.SetDirty(opened.documentId);
-        IReadOnlyList<EditorDocumentState> state = documents.CaptureState();
 
         firstLease.Dispose();
 
         Assert.False(opened.isProviderAvailable);
-        Assert.False(documents.DrawActive());
         Assert.False(documents.Save(opened.documentId));
 
         var replacement = new TestDocumentProvider();
@@ -284,18 +280,10 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.True(opened.isProviderAvailable);
         Assert.Equal(1, replacement.openCount);
-        Assert.True(documents.DrawActive());
-        Assert.Equal(1, replacement.drawCount);
-        Assert.True(documents.Close(opened.documentId, EditorDocumentCloseMode.Discard));
-
-        documents.RestoreState(state, opened.documentId);
-
         EditorDocumentContext restored = Assert.Single(documents.documents);
-        Assert.Equal(opened.documentId, restored.documentId);
-        Assert.Equal("tilemap/brush", restored.activeTool);
         Assert.True(restored.TryGetViewParameter("zoom", out string zoom));
         Assert.Equal("2.5", zoom);
-        Assert.Same(restored, documents.activeDocument);
+        Assert.True(documents.Close(opened.documentId, EditorDocumentCloseMode.Discard));
     }
 
     [Fact]
@@ -1214,8 +1202,6 @@ public sealed class MultiPresentationSetting : ISerializable
 [ProjectSettingPath("Project/Tests/Multi/Primary")]
 public sealed class PrimaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
 {
-    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
-
     protected override void OnDraw(MultiPresentationSetting setting)
         => _ = setting;
 }
@@ -1223,8 +1209,6 @@ public sealed class PrimaryMultiPresentationEditor : ProjectSettingEditor<MultiP
 [ProjectSettingPath("Project/Tests/Multi/Secondary")]
 public sealed class SecondaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
 {
-    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
-
     protected override void OnDraw(MultiPresentationSetting setting)
         => _ = setting;
 }
@@ -1469,7 +1453,6 @@ public sealed class TestDrop : EditorDrop<DragSource, DropTarget>
 public sealed class TestDocumentProvider : EditorDocumentProvider
 {
     public int openCount { get; private set; }
-    public int drawCount { get; private set; }
     public int saveCount { get; private set; }
     public int closeCount { get; private set; }
 
@@ -1480,8 +1463,6 @@ public sealed class TestDocumentProvider : EditorDocumentProvider
            || assetPath.EndsWith(".itilemap2d", StringComparison.Ordinal);
 
     public override void Open(EditorDocumentContext context) => openCount++;
-
-    public override void Draw(EditorDocumentContext context) => drawCount++;
 
     public override bool Save(EditorDocumentContext context)
     {

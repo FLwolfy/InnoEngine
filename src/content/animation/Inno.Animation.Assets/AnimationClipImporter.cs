@@ -11,14 +11,10 @@ namespace Inno.Animation.Assets;
 /// <summary>
 /// Imports and exports structured <c>.ianim</c> animation clip sources.
 /// </summary>
+[AssetImporter("inno.animation.clip")]
 public sealed class AnimationClipImporter : AssetImporter<AnimationClipAsset>
 {
     private static readonly IReadOnlyList<string> S_EXTENSIONS = [".ianim"];
-
-    /// <summary>
-    /// Gets the stable importer identifier used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.animation.clip";
 
     /// <summary>
     /// Gets the current structured animation source extension.

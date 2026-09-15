@@ -17,6 +17,11 @@ internal sealed class MaterialInspectionDrawer(IInspectionIconProvider<AssetFile
             && documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, MaterialAsset target)
         => (target.name, null);
+    protected override void DrawHeader(InspectionDrawContext context, MaterialAsset target)
+    {
+        if (context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null)
+            MaterialInspector.DrawHeader(context, documents, documents.Open(target));
+    }
     protected override void Draw(InspectionDrawContext context, MaterialAsset target)
     {
         if (context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null)
@@ -33,6 +38,11 @@ internal sealed class MaterialSourceDrawer(IInspectionIconProvider<AssetFileEntr
         => !target.isDirectory && target.extension.Equals(".imaterial", StringComparison.OrdinalIgnoreCase);
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
         => (target.nameWithoutExtension, null);
+    protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
+    {
+        if (context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null)
+            MaterialInspector.DrawHeader(context, documents, documents.OpenDraft(target.assetPath));
+    }
     protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null)
@@ -42,6 +52,21 @@ internal sealed class MaterialSourceDrawer(IInspectionIconProvider<AssetFileEntr
 
 internal static class MaterialInspector
 {
+    internal static void DrawHeader(
+        InspectionDrawContext context,
+        MaterialDocuments documents,
+        Inno.Editor.Assets.AssetDraftDocuments<MaterialAsset>.Draft draft)
+    {
+        EditorWidget.Disabled(draft.readOnly, () =>
+        {
+            if (NativeImGui.Button("Save"))
+                _ = context.interactions.documents.Save(draft.documentId);
+            NativeImGui.SameLine();
+            if (NativeImGui.Button("Revert"))
+                _ = context.interactions.documents.Revert(draft.documentId);
+        });
+    }
+
     internal static void Draw(InspectionDrawContext context, MaterialDocuments documents, Inno.Editor.Assets.AssetDraftDocuments<MaterialAsset>.Draft draft)
     {
         documents.TouchInspection(draft);
@@ -51,12 +76,6 @@ internal static class MaterialInspector
         try
         {
             EditorWidget.SectionHeader("Material", "Edits stay in this draft. Save publishes through normal asset import; Revert reloads the source.");
-            EditorWidget.Disabled(draft.readOnly, () =>
-            {
-                if (NativeImGui.Button("Save")) documents.interactions.documents.Save(draft.documentId);
-                NativeImGui.SameLine();
-                if (NativeImGui.Button("Revert")) documents.interactions.documents.Revert(draft.documentId);
-            });
             EditorWidget.Hint(draft.isDirty ? "Unsaved changes · Scene/Game unchanged" : "Saved · compilation and import are separate");
             if (draft.error.Length != 0) EditorWidget.Hint(draft.error);
             if (draft.readOnly) EditorWidget.Hint("Installed material · copy to the project to edit");

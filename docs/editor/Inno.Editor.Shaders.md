@@ -74,6 +74,6 @@ File Browser 的 Create 菜单支持创建 Material 和从选中 Shader 创建 M
 参数节点 Inspector 可编辑分组、hover 说明、材质可见性与 Float 编辑范围。多选材质只显示共同可见且类型兼容的参数，数值范围使用交集；不把改动前已超界的值静默钳制。隐藏是创作 UI 策略，不禁止运行时通过稳定 ID 设置参数。
 展示记录保存在 `inno.editor.parameter.*` 图 metadata，由同一参数的所有节点共享。语义指纹排除此保留前缀；仅改展示不重编译 GPU 程序。Material 使用已导入的 Shader 创作快照，按资产 contentVersion 缓存，不每帧重读整个图；未保存 Shader 草稿不会改变 Material Inspector。
 
-保存使用共享 Document Host，Save/Revert/关闭确认/全部保存不另建系统。MaterialDocuments 组合 [AssetDraftDocuments](Inno.Editor.Assets.md)，恢复数据在 Library/Editor/AssetDrafts/inno.material；外部修改冲突保留两份内容，不覆盖外部源。
+保存复用 headless Document Service；Inspector Header 提供 Save/Revert，关闭确认和全部保存仍走同一服务，不另建状态系统。MaterialDocuments 组合 [AssetDraftDocuments](Inno.Editor.Assets.md)，恢复数据在 Library/Editor/AssetDrafts/inno.material；外部修改冲突保留两份内容，不覆盖外部源。
 资产/节点多选只保存稳定 ID；Drawer 重新查询当前 generation，不把节点选择当作 File Browser 选择。
 完整渲染预览及 UI 验收仍见[实施记录](../issues/2026-09-12-shader-authoring-execution.md)，不能把编译预览等同为画面预览。

@@ -8,12 +8,9 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Scripting.Compiler;
 
+[AssetImporter("inno.editor.script-assembly-definition")]
 internal sealed class ScriptAssemblyDefinitionImporter : AssetImporter<ScriptAssemblyDefinitionAsset>
 {
-    /// <summary>
-    /// Gets the stable importer identity used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.editor.script-assembly-definition";
     /// <summary>
     /// Gets whether imported output is deployed to runtime, editor, or both domains.
     /// </summary>

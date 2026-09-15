@@ -3,7 +3,7 @@ using System;
 namespace Inno.Editor.Interactions;
 
 /// <summary>
-/// Implements one reloadable asset-document kind without owning the document host or persistent tab identity.
+/// Implements one reloadable asset-document kind without owning presentation or source identity.
 /// </summary>
 public abstract class EditorDocumentProvider
 {
@@ -31,14 +31,6 @@ public abstract class EditorDocumentProvider
     /// </param>
     public virtual void Open(EditorDocumentContext context)
         => ArgumentNullException.ThrowIfNull(context);
-
-    /// <summary>
-    /// Draws the document body inside the unified host's active content region.
-    /// </summary>
-    /// <param name="context">
-    /// Stable document context owned by the host.
-    /// </param>
-    public abstract void Draw(EditorDocumentContext context);
 
     /// <summary>
     /// Saves all document changes to its asset source.
@@ -78,7 +70,7 @@ public abstract class EditorDocumentProvider
     }
 
     /// <summary>
-    /// Releases transient provider state after a document tab closes.
+    /// Releases transient provider state after a document closes.
     /// </summary>
     /// <param name="context">
     /// Stable document context owned by the host.

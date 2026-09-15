@@ -13,12 +13,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Inno.Scripting.Compiler;
 
+[AssetImporter("inno.editor.csharp-script")]
 internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
 {
-    /// <summary>
-    /// Gets the stable importer identity used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.editor.csharp-script";
     /// <summary>
     /// Gets whether imported output is deployed to runtime, editor, or both domains.
     /// </summary>

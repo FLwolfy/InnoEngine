@@ -43,8 +43,7 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
         ArgumentNullException.ThrowIfNull(identityDomains);
         m_identityDomains = identityDomains.ToDictionary(static allocator => allocator.domainId);
         m_log = log ?? throw new ArgumentNullException(nameof(log));
-        m_documents = new EditorDocumentService(
-            () => m_catalog?.TryOpenPanel("editor.documents") == true);
+        m_documents = new EditorDocumentService();
         m_history = new EditorHistory(new EditorHistoryOptions
         {
             cacheDirectory = Path.Combine(editor.projectDirectory, "Library", "Editor", "History")
@@ -65,7 +64,7 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     public IEditorHistory history => m_history;
 
     /// <summary>
-    /// Gets the reload-safe document host used by asset editors and the unified document panel.
+    /// Gets the headless reload-safe document lifetime used by dedicated asset editors and Inspectors.
     /// </summary>
     public IEditorDocumentService documents => m_documents;
 

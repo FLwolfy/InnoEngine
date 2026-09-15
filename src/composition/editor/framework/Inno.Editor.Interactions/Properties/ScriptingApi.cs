@@ -39,7 +39,6 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(IEditorDocumentService), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorDocumentProvider), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorDocumentContext), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorDocumentState), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorDocumentCloseMode), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportPointerPhase), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportCursor), ScriptingApiScope.Editor)]

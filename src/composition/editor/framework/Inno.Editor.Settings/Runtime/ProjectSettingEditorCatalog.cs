@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
@@ -81,6 +82,12 @@ internal sealed class ProjectSettingEditorCatalog : TypeRegistry<ProjectSettingE
             .Cast<ProjectSettingPathAttribute>()
             .Single();
         ProjectSettingEditor definition = CreateExtension<ProjectSettingEditor>(type);
+        ProjectSettingDefinitionAttribute setting = definition.valueType
+            .GetCustomAttribute<ProjectSettingDefinitionAttribute>(inherit: false)
+            ?? throw new InvalidOperationException(
+                $"Project setting editor '{type.FullName}' targets '{definition.valueType.FullName}', " +
+                $"which is missing {nameof(ProjectSettingDefinitionAttribute)}.");
+        definition.BindSettingId(new ProjectSettingId(setting.id));
         definition.BindSerialization(m_serialization);
         definition.BindPlacement(attribute.path, attribute.order);
         return definition;

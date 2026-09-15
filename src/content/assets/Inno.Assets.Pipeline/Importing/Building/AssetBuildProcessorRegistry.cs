@@ -2,6 +2,7 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Extensibility.Types;
 
@@ -41,14 +42,30 @@ internal sealed class AssetBuildProcessorRegistry
     /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        Type[] discovered = types.GetSubTypesOf<AssetBuildProcessor>()
+        Type[] discovered = types.GetTypesWithAttribute<AssetBuildProcessorAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();
+        (Type type, string id)[] registrations = discovered.Select(static type =>
+        {
+            if (type.IsAbstract || !typeof(AssetBuildProcessor).IsAssignableFrom(type))
+            {
+                throw new InvalidOperationException(
+                    $"Asset build processor metadata on '{type.FullName}' requires a concrete {nameof(AssetBuildProcessor)} subtype.");
+            }
+            return (type, type.GetCustomAttribute<AssetBuildProcessorAttribute>(inherit: false)!.id);
+        }).ToArray();
+        string? duplicateId = registrations
+            .GroupBy(static registration => registration.id, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
+        if (duplicateId is not null)
+            throw new InvalidOperationException($"Asset build processor ID '{duplicateId}' is registered more than once.");
+
         var processors = new Dictionary<Type, AssetBuildProcessor>();
-        foreach (Type type in discovered)
+        foreach ((Type type, string processorId) in registrations)
         {
             AssetBuildProcessor processor = CreateExtension<AssetBuildProcessor>(type);
+            processor.BindProcessorId(processorId);
             if (!processors.TryAdd(processor.definitionType, processor))
             {
                 throw new InvalidOperationException(

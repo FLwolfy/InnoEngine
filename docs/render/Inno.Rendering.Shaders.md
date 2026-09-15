@@ -87,11 +87,11 @@ Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身�
 
 | API | 契约 |
 | --- | --- |
-| `ShaderTarget.id/Expand(context, cancellationToken)` | `ShaderTarget` 的具体非抽象子类会被直接发现；插件将领域输出展开为已有阶段图，声明 Contract/Role 和绑定，不生成原生 Shader 字符串 |
+| `[ShaderTarget(id)]` 与 `ShaderTarget.Expand(context, cancellationToken)` | Attribute 提供构造前可读取的唯一稳定 ID；基类只承载行为。插件将领域输出展开为已有阶段图，声明 Contract/Role 和绑定，不生成原生 Shader 字符串 |
 | `ShaderTargetContext.document/serialization/references` | 独立原图副本、借用的 owner converter 和完整引用上下文，只在调用期间有效 |
 | `ShaderTargetRegistry(types).ids/Expand/Dispose` | 宿主的 generation-scoped 发现与调用；Missing Target 明确失败且不改原图 |
 | `ShaderGraphDocument.targetKey/ReadTarget/SetTarget` | 持久化稳定 Target ID；未指定领域 Target 的图显式创作通用阶段 |
-| `ShaderGraphTemplate.id/displayName/Create` | `ShaderGraphTemplate` 的具体非抽象子类会被直接发现，并向 File Browser 贡献 Shader 创建模板 |
+| `[ShaderGraphTemplate(id, displayName)]` 与 `ShaderGraphTemplate.Create` | Attribute 提供不可变创建元数据；基类只承载创建行为，并向 File Browser 贡献 Shader 创建模板 |
 | `ShaderGraphTemplateInfo(id, displayName)` | 不含 provider 的菜单快照 |
 | `ShaderGraphTemplateRegistry(types).templates/Create/Dispose` | 按稳定 ID 创建独立图，重复 ID 或缺失模板明确失败 |
 
@@ -99,7 +99,7 @@ Target 在导入时先展开，随后捕获其引入的源码与资产依赖，�
 Authoring Artifact 同时保存原图与展开图；Export/Editor 读取原图，编译读取展开图。目标生成的节点位置不影响语义指纹。
 Target 与 Template 的 provider 只存活于 TypeRegistry snapshot，公共菜单快照只含字符串；运行时不解释 Target 或图。
 
-`ShaderTarget.id` 属于实例契约是有意设计：Target Registry 为当前 generation 主动构造并持有全部 Target，随后才建立 ID 索引，所以继承已经完整表达发现身份，实例 `id` 是唯一 Stable ID 来源。这里不再增加 `[ShaderTarget(id)]`；那会让同一个值在 Attribute 与实例中重复。相对地，Render Pipeline Runtime 需要在构造实例前从资产 ID 路由到 `Type`，因此使用携带 ID 的 `[RenderPipelineExtension(id)]`。统一的是生命周期规则，而不是强制两种 Registry 使用相同语法。
+Shader Target、Shader Template 与 Render Pipeline 使用同一条身份规则：继承表达行为，参数化 Attribute 是不可变 Stable ID 的唯一来源。Registry 先读取元数据、校验重复 ID，再构造扩展；扩展实例不再暴露返回常量的 `id` 覆盖成员。
 
 ```csharp
 using System.Collections.Generic;

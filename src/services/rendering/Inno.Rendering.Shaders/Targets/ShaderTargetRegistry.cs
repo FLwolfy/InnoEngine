@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using Inno.Core.Graphs;
 using Inno.Core.Serialization;
@@ -64,14 +65,30 @@ public sealed class ShaderTargetRegistry : IDisposable
 
         protected override IReadOnlyDictionary<string, ShaderTarget> Build(TypeCacheSnapshot types)
         {
+            (Type type, string id)[] registrations = types.GetTypesWithAttribute<ShaderTargetAttribute>()
+                .Select(value => value.Resolve(types))
+                .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+                .Select(static type =>
+                {
+                    if (type.IsAbstract || !typeof(ShaderTarget).IsAssignableFrom(type))
+                    {
+                        throw new InvalidOperationException(
+                            $"Shader target '{type.FullName}' must be a concrete {nameof(ShaderTarget)}.");
+                    }
+                    return (type, type.GetCustomAttribute<ShaderTargetAttribute>(inherit: false)!.id);
+                })
+                .ToArray();
+            string? duplicateId = registrations
+                .GroupBy(static registration => registration.id, StringComparer.Ordinal)
+                .FirstOrDefault(static group => group.Count() > 1)?.Key;
+            if (duplicateId is not null)
+                throw new InvalidOperationException($"Duplicate shader target '{duplicateId}'.");
+
             var targets = new Dictionary<string, ShaderTarget>(StringComparer.Ordinal);
-            foreach (Type type in types.GetSubTypesOf<ShaderTarget>().Select(value => value.Resolve(types))
-                         .Where(static type => !type.IsAbstract)
-                         .OrderBy(static type => type.FullName, StringComparer.Ordinal))
+            foreach ((Type type, string id) in registrations)
             {
                 ShaderTarget target = CreateExtension<ShaderTarget>(type);
-                ArgumentException.ThrowIfNullOrWhiteSpace(target.id);
-                if (!targets.TryAdd(target.id, target)) throw new InvalidOperationException($"Duplicate shader target '{target.id}'.");
+                targets.Add(id, target);
             }
             return targets;
         }

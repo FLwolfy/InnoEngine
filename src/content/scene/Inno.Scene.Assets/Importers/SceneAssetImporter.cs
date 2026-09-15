@@ -13,14 +13,10 @@ namespace Inno.Scene.Assets.Importers;
 /// <summary>
 /// Imports and exports <c>.iscene</c> source state.
 /// </summary>
+[AssetImporter("inno.engine.scene")]
 internal sealed class SceneAssetImporter : AssetImporter<SceneAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = new[] { ".iscene" };
-
-    /// <summary>
-    /// Gets the stable importer identity used in artifact fingerprints.
-    /// </summary>
-    public override string importerId => "inno.engine.scene";
 
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.

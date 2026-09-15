@@ -13,8 +13,6 @@ internal sealed class GamePresentationSetting : ProjectSettingEditor<GamePresent
     /// <summary>
     /// Gets the stable project-setting identity edited by this presentation.
     /// </summary>
-    public override ProjectSettingId settingId => GamePresentationSettings.settingId;
-
     /// <summary>
     /// Gets the section that groups Player presentation controls.
     /// </summary>

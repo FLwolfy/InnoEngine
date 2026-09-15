@@ -113,17 +113,16 @@ public sealed class ScriptingPipelineTests : IDisposable
                     => new Dictionary<string, ShaderIrValue> { ["value"] = context.builder.Constant(0.5f) };
             }
 
+            [ShaderTarget("tests.script-target")]
             public sealed class ShaderTargetProbe : ShaderTarget
             {
-                public override string id => "tests.script-target";
                 public override GraphDocument Expand(ShaderTargetContext context, CancellationToken cancellationToken)
                     => ShaderGraphTemplates.CreateRaster(context.serialization, context.references);
             }
 
+            [ShaderGraphTemplate("tests.script-template", "Script Surface")]
             public sealed class ShaderTemplateProbe : ShaderGraphTemplate
             {
-                public override string id => "tests.script-template";
-                public override string displayName => "Script Surface";
                 public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
                 {
                     GraphDocument graph = ShaderGraphTemplates.CreateRaster(serialization, context);
@@ -272,8 +271,6 @@ public sealed class ScriptingPipelineTests : IDisposable
             [ProjectSettingPath("Project/Tests/Probe")]
             public sealed class SettingsProbeEditor : ProjectSettingEditor<SettingsProbe>
             {
-                public override ProjectSettingId settingId => new("tests.scripting.settings-probe");
-
                 protected override void OnDraw(SettingsProbe setting)
                 {
                 }
@@ -1079,10 +1076,9 @@ public sealed class ScriptingPipelineTests : IDisposable
             using InnoEngine.Assets;
             using InnoEditor.Assets;
 
+            [AssetImporter("tests.shutdown-script-asset")]
             public sealed class ShutdownAssetImporter : AssetImporter<ShutdownAsset>
             {
-                public override string importerId => "tests.shutdown-script-asset";
-
                 public override IReadOnlyList<string> supportedExtensions { get; } = [".shutdownasset"];
 
                 protected override async ValueTask ImportAsync(

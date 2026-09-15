@@ -47,6 +47,8 @@ using Inno.Scripting.Api;
 [assembly: ScriptingApiExport(typeof(ShaderGraphPasteResult), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphPassProgram), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTarget), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(ShaderTargetAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTargetUnavailableException), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTargetContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphTemplate), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(ShaderGraphTemplateAttribute), ScriptingApiScope.Editor)]

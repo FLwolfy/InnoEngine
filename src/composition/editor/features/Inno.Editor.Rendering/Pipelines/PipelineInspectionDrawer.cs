@@ -21,6 +21,12 @@ internal sealed class PipelineInspectionDrawer(IInspectionIconProvider<AssetFile
             && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, RenderPipelineAsset target)
         => (target.name, null);
+    protected override void DrawHeader(InspectionDrawContext context, RenderPipelineAsset target)
+    {
+        if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetInfo(target.identity.persistentId, out AssetInfo? info) && info is not null)
+            PipelineInspector.DrawHeader(context, documents, documents.Open(info.assetPath));
+    }
     protected override void Draw(InspectionDrawContext context, RenderPipelineAsset target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
@@ -38,6 +44,11 @@ internal sealed class PipelineSourceDrawer(IInspectionIconProvider<AssetFileEntr
         => !target.isDirectory && target.extension.Equals(".irenderpipeline", StringComparison.OrdinalIgnoreCase);
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
         => (target.nameWithoutExtension, null);
+    protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
+    {
+        if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null)
+            PipelineInspector.DrawHeader(context, documents, documents.Open(target.assetPath));
+    }
     protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null)
@@ -47,6 +58,19 @@ internal sealed class PipelineSourceDrawer(IInspectionIconProvider<AssetFileEntr
 
 internal static class PipelineInspector
 {
+    internal static void DrawHeader(InspectionDrawContext context, PipelineDocuments documents, Guid id)
+    {
+        AssetDraftDocuments<RenderPipelineAsset>.Draft draft = documents.drafts.GetDraft(id);
+        UI.BeginDisabled(draft.readOnly);
+        try
+        {
+            if (UI.Button("Save")) _ = context.interactions.documents.Save(draft.documentId);
+            UI.SameLine();
+            if (UI.Button("Revert")) _ = context.interactions.documents.Revert(draft.documentId);
+        }
+        finally { UI.EndDisabled(); }
+    }
+
     internal static void Draw(InspectionDrawContext context, PipelineDocuments documents, Guid id)
     {
         AssetDraftDocuments<RenderPipelineAsset>.Draft draft = documents.drafts.GetDraft(id);
@@ -57,14 +81,6 @@ internal static class PipelineInspector
         try
         {
             Widget.SectionHeader("Render Pipeline", "This source is the configuration authority. Unsaved settings do not change Scene, Game or Player content.");
-            UI.BeginDisabled(draft.readOnly);
-            try
-            {
-                if (UI.Button("Save")) context.interactions.documents.Save(draft.documentId);
-                UI.SameLine();
-                if (UI.Button("Revert")) context.interactions.documents.Revert(draft.documentId);
-            }
-            finally { UI.EndDisabled(); }
             Widget.Hint(draft.isDirty ? "Unsaved changes · rendering unchanged" : "Saved · import and activation are separate");
             if (draft.error.Length != 0) Widget.Hint(draft.error);
             if (draft.readOnly) Widget.Hint("Installed Pipeline · copy into the project to edit");

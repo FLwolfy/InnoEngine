@@ -5,7 +5,7 @@ using System.IO;
 namespace Inno.Editor.Interactions;
 
 /// <summary>
-/// Stores only stable, reload-safe document identity and authoring view parameters owned by the document host.
+/// Stores only stable, reload-safe document identity and provider-owned draft parameters.
 /// </summary>
 public sealed class EditorDocumentContext
 {
@@ -21,7 +21,7 @@ public sealed class EditorDocumentContext
     }
 
     /// <summary>
-    /// Gets the stable identity of this open tab.
+    /// Gets the stable identity of this open source document.
     /// </summary>
     public Guid documentId { get; }
 
@@ -41,7 +41,7 @@ public sealed class EditorDocumentContext
     public string providerId { get; }
 
     /// <summary>
-    /// Gets or sets the author-facing tab title.
+    /// Gets or sets the author-facing source title used by diagnostics and dedicated editors.
     /// </summary>
     public string title { get; set; }
 
@@ -54,11 +54,6 @@ public sealed class EditorDocumentContext
     /// Gets whether a current-generation provider is available.
     /// </summary>
     public bool isProviderAvailable { get; internal set; }
-
-    /// <summary>
-    /// Gets or sets the stable active viewport tool identity.
-    /// </summary>
-    public string activeTool { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets an immutable snapshot of stable view parameters.
@@ -100,68 +95,4 @@ public sealed class EditorDocumentContext
         return m_viewParameters.TryGetValue(key, out value!);
     }
 
-    internal EditorDocumentState CaptureState()
-        => new(
-            documentId,
-            assetId,
-            assetPath,
-            providerId,
-            title,
-            isDirty,
-            activeTool,
-            new Dictionary<string, string>(m_viewParameters, StringComparer.Ordinal));
-
-    internal static EditorDocumentContext Restore(EditorDocumentState state)
-    {
-        var context = new EditorDocumentContext(
-            state.documentId,
-            state.assetId,
-            state.assetPath,
-            state.providerId)
-        {
-            title = state.title,
-            isDirty = state.isDirty,
-            activeTool = state.activeTool
-        };
-        foreach ((string key, string value) in state.viewParameters)
-            context.m_viewParameters.Add(key, value);
-        return context;
-    }
 }
-
-/// <summary>
-/// Contains one reload-safe open-document snapshot.
-/// </summary>
-/// <param name="documentId">
-/// Stable identity of the open document tab.
-/// </param>
-/// <param name="assetId">
-/// Persistent identity of the backing asset, or an empty value before assignment.
-/// </param>
-/// <param name="assetPath">
-/// Normalized project-relative asset path.
-/// </param>
-/// <param name="providerId">
-/// Stable identity of the document provider that owns the editing behavior.
-/// </param>
-/// <param name="title">
-/// Author-facing title displayed by the document host.
-/// </param>
-/// <param name="isDirty">
-/// Whether the document contains uncommitted authoring changes.
-/// </param>
-/// <param name="activeTool">
-/// Stable identity of the active document tool.
-/// </param>
-/// <param name="viewParameters">
-/// Reload-safe provider-owned view parameters.
-/// </param>
-public sealed record EditorDocumentState(
-    Guid documentId,
-    Guid assetId,
-    string assetPath,
-    string providerId,
-    string title,
-    bool isDirty,
-    string activeTool,
-    IReadOnlyDictionary<string, string> viewParameters);

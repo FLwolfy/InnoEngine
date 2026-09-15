@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Inno.Core.Graphs;
 using Inno.Core.Serialization;
 using Inno.Extensibility.Types;
@@ -29,7 +30,7 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
         get
         {
             using IDisposable operation = m_types.AcquireOperation("Describe shader templates");
-            return Array.AsReadOnly(m_registry.snapshot.Values.Select(static value => new ShaderGraphTemplateInfo(value.id, value.displayName))
+            return Array.AsReadOnly(m_registry.snapshot.Values.Select(static value => value.info)
                 .OrderBy(static value => value.displayName, StringComparer.Ordinal).ThenBy(static value => value.id, StringComparer.Ordinal).ToArray());
         }
     }
@@ -44,32 +45,51 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         using IDisposable operation = m_types.AcquireOperation("Create shader from template");
-        if (!m_registry.snapshot.TryGetValue(id, out ShaderGraphTemplate? template))
+        if (!m_registry.snapshot.TryGetValue(id, out Entry? entry))
             throw new InvalidOperationException($"Shader template '{id}' is unavailable.");
-        return template.Create(serialization, context).Clone();
+        return entry.template.Create(serialization, context).Clone();
     }
 
     /// <summary>Retires providers through the shared generation lifecycle.</summary>
     public void Dispose() => m_registry.Dispose();
 
-    private sealed class Registry(TypeCatalog types) : TypeRegistry<IReadOnlyDictionary<string, ShaderGraphTemplate>>(types)
+    private sealed record Entry(ShaderGraphTemplateInfo info, ShaderGraphTemplate template);
+
+    private sealed class Registry(TypeCatalog types) : TypeRegistry<IReadOnlyDictionary<string, Entry>>(types)
     {
-        internal IReadOnlyDictionary<string, ShaderGraphTemplate> snapshot => current;
-        protected override IReadOnlyDictionary<string, ShaderGraphTemplate> Build(TypeCacheSnapshot types)
+        internal IReadOnlyDictionary<string, Entry> snapshot => current;
+        protected override IReadOnlyDictionary<string, Entry> Build(TypeCacheSnapshot types)
         {
-            var templates = new Dictionary<string, ShaderGraphTemplate>(StringComparer.Ordinal);
-            foreach (Type type in types.GetSubTypesOf<ShaderGraphTemplate>().Select(value => value.Resolve(types))
-                         .Where(static type => !type.IsAbstract)
-                         .OrderBy(static value => value.FullName, StringComparer.Ordinal))
+            (Type type, ShaderGraphTemplateAttribute metadata)[] registrations = types
+                .GetTypesWithAttribute<ShaderGraphTemplateAttribute>()
+                .Select(value => value.Resolve(types))
+                .OrderBy(static value => value.FullName, StringComparer.Ordinal)
+                .Select(static type =>
+                {
+                    if (type.IsAbstract || !typeof(ShaderGraphTemplate).IsAssignableFrom(type))
+                    {
+                        throw new InvalidOperationException(
+                            $"Shader graph template '{type.FullName}' must be a concrete {nameof(ShaderGraphTemplate)}.");
+                    }
+                    return (type, type.GetCustomAttribute<ShaderGraphTemplateAttribute>(inherit: false)!);
+                })
+                .ToArray();
+            string? duplicateId = registrations
+                .GroupBy(static registration => registration.metadata.id, StringComparer.Ordinal)
+                .FirstOrDefault(static group => group.Count() > 1)?.Key;
+            if (duplicateId is not null)
+                throw new InvalidOperationException($"Duplicate shader template '{duplicateId}'.");
+
+            var templates = new Dictionary<string, Entry>(StringComparer.Ordinal);
+            foreach ((Type type, ShaderGraphTemplateAttribute metadata) in registrations)
             {
                 ShaderGraphTemplate template = CreateExtension<ShaderGraphTemplate>(type);
-                ArgumentException.ThrowIfNullOrWhiteSpace(template.id);
-                ArgumentException.ThrowIfNullOrWhiteSpace(template.displayName);
-                if (!templates.TryAdd(template.id, template)) throw new InvalidOperationException($"Duplicate shader template '{template.id}'.");
+                var entry = new Entry(new ShaderGraphTemplateInfo(metadata.id, metadata.displayName), template);
+                templates.Add(metadata.id, entry);
             }
             return templates;
         }
-        protected override void DisposeSnapshot(IReadOnlyDictionary<string, ShaderGraphTemplate> snapshot)
-            => DisposeExtensions(snapshot.Values);
+        protected override void DisposeSnapshot(IReadOnlyDictionary<string, Entry> snapshot)
+            => DisposeExtensions(snapshot.Values.Select(static value => value.template));
     }
 }
