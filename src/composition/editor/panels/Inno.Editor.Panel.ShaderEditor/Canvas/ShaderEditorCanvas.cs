@@ -113,7 +113,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private void DrawInspectorContents(IReadOnlyList<GraphNodeId> selected)
     {
         RefreshPorts();
-        bool graphNode = Controller.document.nodes.Any(static node => node.definitionId == ShaderGraphNodes.inputDefinitionId);
+        bool graphNode = ShaderGraphNodes.IsNodeGraph(Controller.document);
         if (!graphNode)
         {
             Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views.");
@@ -138,7 +138,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         }
         else
         {
-            Widget.SectionHeader("Graph Node", "Node Inputs and Node Outputs define the reusable typed interface. Check validates the interface; callers validate the inlined computation.");
+            Widget.SectionHeader("Graph Node", "Function Inputs and Function Outputs independently define the reusable typed interface. Check validates the interface; callers validate the inlined computation.");
             try
             {
                 ShaderGraphNodeInterface nodeInterface = ShaderGraphNodes.ReadInterface(Controller.document, owner.serialization, owner.context);
@@ -153,7 +153,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         if (selected.Count == 0)
         {
             Widget.SectionHeader(graphNode ? "Node Definition" : "Shader",
-                graphNode ? "Select Node Inputs or Node Outputs to edit this reusable node's public interface."
+                graphNode ? "Select Function Inputs or Function Outputs to edit this reusable node's public interface."
                     : "Target and public interface belong to this Shader, not to any Material override.");
             if (!graphNode) DrawTarget();
             if (Controller.document.metadata.ContainsKey(ShaderGraphDocument.definitionKey))
@@ -436,26 +436,32 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         bool selected = Canvas.selectedNodes.Contains(node.id);
         draw.AddRectFilled(rect.min + new Vector2(3, 5), rect.max + new Vector2(3, 5), Color(0, 0, 0, 0.25f), 6 * zoom);
         draw.AddRectFilled(rect.min, rect.max, Color(0.115f, 0.12f, 0.14f), 6 * zoom);
-        Vector4 headerColor = node.definitionId switch
-        {
-            ShaderGraphDocument.outputDefinitionId => EditorPalette.shaderOutputNodeHeader,
-            "inno.shader.stage-input" or "inno.shader.constant" or ShaderGraphNodes.inputDefinitionId => EditorPalette.shaderInputNodeHeader,
-            _ => EditorPalette.shaderNodeHeader
-        };
+        Vector4 headerColor = NodeHeaderColor(node);
         draw.AddRectFilled(rect.min, new(rect.max.X, rect.min.Y + C_HEADER * zoom),
-            UI.ColorConvertFloat4ToU32(headerColor), 6 * zoom);
+            UI.ColorConvertFloat4ToU32(headerColor), 6 * zoom, ImDrawFlags.RoundCornersTop);
         draw.AddRect(rect.min, rect.max, selected ? Color(0.65f, 0.47f, 0.88f) : Color(0.26f, 0.27f, 0.31f), 6 * zoom, ImDrawFlags.None, selected ? 2 : 1);
         draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, rect.min + new Vector2(10, 7) * zoom, UI.GetColorU32(ImGuiCol.Text), Title(node));
         foreach (ShaderNodePort port in draft.ports[node.id])
         {
             Vector2 point = points[new(node.id, new(port.id))];
             bool missing = draft.missingPorts.Contains(new(node.id, new(port.id)));
-            draw.AddCircleFilled(point, 5 * zoom, missing ? Color(0.95f, 0.35f, 0.3f) : Color(0.60f, 0.48f, 0.84f));
+            bool optional = port.direction == GraphPortDirection.Input && !port.required;
+            uint portColor = missing ? Color(0.95f, 0.35f, 0.3f) : Color(0.60f, 0.48f, 0.84f);
+            if (missing || !optional)
+                draw.AddCircleFilled(point, 5 * zoom, portColor);
+            else
+            {
+                draw.AddCircleFilled(point, 5 * zoom, portColor);
+                draw.AddCircleFilled(point, 2.75f * zoom, Color(0.115f, 0.12f, 0.14f));
+            }
             string label = port.id;
             float x = port.direction == GraphPortDirection.Input ? rect.min.X + 12 * zoom : rect.max.X - (UI.CalcTextSize(label).X + 12) * zoom;
-            draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, new(x, point.Y - 8 * zoom), UI.GetColorU32(ImGuiCol.Text), label);
+            draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, new(x, point.Y - 8 * zoom),
+                UI.ColorConvertFloat4ToU32(optional ? EditorPalette.textDisabled : EditorPalette.text), label);
             if (Vector2.DistanceSquared(point, UI.GetMousePos()) <= 64)
-                Widget.DrawTooltip(port.type.id + (missing ? " · missing port; reconnect explicitly" : ""));
+                Widget.DrawTooltip(port.type.id + (missing
+                    ? " · missing port; reconnect explicitly"
+                    : optional ? " · optional input" : port.direction == GraphPortDirection.Input ? " · required input" : ""));
         }
         if (draft.ports[node.id].Length == 0 && node.definitionId == ShaderGraphNodes.inputDefinitionId)
             draw.AddText(
@@ -479,17 +485,32 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         for (float y = ((Canvas.pan.y % spacing) + spacing) % spacing; y < m_size.Y; y += spacing)
             draw.AddLine(m_origin + new Vector2(0, y), m_origin + new Vector2(m_size.X, y), Color(0.105f, 0.115f, 0.135f));
     }
-    private void Groups(ImDrawListPtr draw)
+    private unsafe void Groups(ImDrawListPtr draw)
     {
         foreach (ShaderCanvasGroup group in draft.groups)
         {
             if (GroupRect(group) is not { } bounds) continue;
             Vector2 min = bounds.min, max = bounds.max;
             bool selected = draft.selectedGroupId == group.id;
-            draw.AddRectFilled(min, max, Color(0.16f, 0.13f, 0.20f, 0.35f), 8);
-            draw.AddRect(min, max, selected ? Color(0.65f, 0.47f, 0.88f) : Color(0.30f, 0.25f, 0.37f), 8,
+            Vector4 headerColor = GroupHeaderColor(group);
+            Vector4 bodyColor = new(headerColor.X, headerColor.Y, headerColor.Z, 0.16f);
+            Vector4 borderColor = selected
+                ? new(0.65f, 0.47f, 0.88f, 1f)
+                : new(
+                    MathF.Min(1f, headerColor.X * 1.22f),
+                    MathF.Min(1f, headerColor.Y * 1.22f),
+                    MathF.Min(1f, headerColor.Z * 1.22f),
+                    0.82f);
+            float headerHeight = C_HEADER * Canvas.zoom;
+            draw.AddRectFilled(min, max, UI.ColorConvertFloat4ToU32(bodyColor), 8 * Canvas.zoom);
+            draw.AddRectFilled(min, new(max.X, min.Y + headerHeight), UI.ColorConvertFloat4ToU32(headerColor),
+                8 * Canvas.zoom, ImDrawFlags.RoundCornersTop);
+            draw.AddLine(new(min.X, min.Y + headerHeight), new(max.X, min.Y + headerHeight),
+                UI.ColorConvertFloat4ToU32(borderColor));
+            draw.AddRect(min, max, UI.ColorConvertFloat4ToU32(borderColor), 8 * Canvas.zoom,
                 ImDrawFlags.None, selected ? 2f : 1f);
-            draw.AddText(min + new Vector2(12, 10), UI.GetColorU32(ImGuiCol.TextDisabled), group.title);
+            draw.AddText(UI.GetFont(), UI.GetFontSize() * Canvas.zoom, min + new Vector2(12, 7) * Canvas.zoom,
+                UI.GetColorU32(ImGuiCol.Text), group.title);
         }
     }
     private ShaderCanvasGroup? HitGroupHeader(Vector2 point)
@@ -569,7 +590,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         int rows = Math.Max(
             draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Input),
             draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
-        return rows == 0 && node.definitionId == ShaderGraphNodes.inputDefinitionId ? 1 : rows;
+        return rows == 0 && node.definitionId is ShaderGraphNodes.inputDefinitionId or ShaderGraphNodes.outputDefinitionId ? 1 : rows;
     }
     private GraphNodeRecord? HitNode(Vector2 point) => Controller.document.nodes.Reverse().FirstOrDefault(node => Contains(Rect(node), point));
     private GraphEndpoint? HitPort(Vector2 point, Dictionary<GraphEndpoint, Vector2> ports)
@@ -582,6 +603,72 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private GraphPosition ToGraph(Vector2 point) => new((point.X - m_origin.X - Canvas.pan.x) / Canvas.zoom, (point.Y - m_origin.Y - Canvas.pan.y) / Canvas.zoom);
     private static bool Contains((Vector2 min, Vector2 max) rect, Vector2 point) => point.X >= rect.min.X && point.Y >= rect.min.Y && point.X <= rect.max.X && point.Y <= rect.max.Y;
     private static uint Color(float r, float g, float b, float a = 1) => UI.ColorConvertFloat4ToU32(new(r, g, b, a));
+
+    private Vector4 NodeHeaderColor(GraphNodeRecord node)
+    {
+        string key = node.definitionId + "/" + Title(node);
+        return node.definitionId switch
+        {
+            ShaderGraphDocument.outputDefinitionId => StableHeaderColor(key, 258f, 34f),
+            ShaderGraphNodes.outputDefinitionId => StableHeaderColor(key, 258f, 34f),
+            "inno.shader.stage-input" or "inno.shader.constant" or ShaderGraphNodes.inputDefinitionId
+                => StableHeaderColor(key, 22f, 24f),
+            "inno.shader.sample" => StableHeaderColor(key, 158f, 30f),
+            "inno.shader.source" => StableHeaderColor(key, 198f, 42f),
+            "inno.shader.binary" => StableHeaderColor(key, 205f, 45f),
+            "inno.shader.construct" or "inno.shader.extract" or "inno.shader.select" or "inno.shader.reroute"
+                => StableHeaderColor(key, 178f, 58f),
+            "inno.shader.storage-load" or "inno.shader.storage-store" or "inno.shader.storage-atomic-add"
+                => StableHeaderColor(key, 105f, 42f),
+            "inno.shader.discard" => StableHeaderColor(key, 350f, 22f),
+            _ => StableHeaderColor(key, 0f, 360f)
+        };
+    }
+
+    private Vector4 GroupHeaderColor(ShaderCanvasGroup group)
+    {
+        Vector4 total = Vector4.Zero;
+        int count = 0;
+        foreach (string id in group.nodes)
+        {
+            if (Controller.document.FindNode(new(id)) is not GraphNodeRecord node) continue;
+            total += NodeHeaderColor(node);
+            count++;
+        }
+        if (count == 0) return EditorPalette.shaderNodeHeader;
+        Vector4 average = total / count;
+        return new(average.X, average.Y, average.Z, 0.92f);
+    }
+
+    private static Vector4 StableHeaderColor(string key, float startHue, float hueRange)
+    {
+        uint hash = 2166136261;
+        foreach (char value in key)
+        {
+            hash ^= value;
+            hash *= 16777619;
+        }
+        float hue = (startHue + hueRange * (hash & 0xffff) / 65535f) % 360f;
+        float saturation = 0.52f + 0.12f * ((hash >> 16) & 0xff) / 255f;
+        float brightness = 0.34f + 0.08f * ((hash >> 24) & 0xff) / 255f;
+        float chroma = brightness * saturation;
+        float sector = hue / 60f;
+        float secondary = chroma * (1f - MathF.Abs(sector % 2f - 1f));
+        (float red, float green, float blue) = sector switch
+        {
+            < 1f => (chroma, secondary, 0f),
+            < 2f => (secondary, chroma, 0f),
+            < 3f => (0f, chroma, secondary),
+            < 4f => (0f, secondary, chroma),
+            < 5f => (secondary, 0f, chroma),
+            _ => (chroma, 0f, secondary)
+        };
+        float match = brightness - chroma;
+        return new(red + match, green + match, blue + match, 1f);
+    }
+
+    private static bool CenteredAddButton(string label)
+        => Widget.CenteredButton(label, Widget.style.inspectorAddButtonTopPadding);
     private T Read<T>(GraphNodeRecord node, string key, T value) => ShaderGraphDocument.Read(node, key, value, owner.serialization, owner.context);
     private void Set<T>(GraphNodeRecord node, string key, T value, bool continuous = false)
         => SetEncoded(node, key, ShaderGraphDocument.Encode(value, owner.serialization, owner.context), continuous);
@@ -643,7 +730,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         if (node.definitionId == ShaderGraphNodes.callDefinitionId)
             return Read(node, ShaderGraphNodes.interfaceKey, new ShaderGraphNodeInterface()).displayName;
         if (node.definitionId == ShaderGraphNodes.inputDefinitionId)
-            return Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings()).kind == ShaderGraphNodeKind.DomainOutput
+            return ShaderGraphNodes.ReadSettings(Controller.document, owner.serialization, owner.context).kind == ShaderGraphNodeKind.DomainOutput
                 ? "Domain Inputs"
                 : "Function Inputs";
         if (node.definitionId == ShaderGraphNodes.outputDefinitionId) return "Function Outputs";

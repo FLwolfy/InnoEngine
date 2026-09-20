@@ -101,6 +101,7 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
         builder.Add("Connections/Insert Reroute", "shader/reroute", order: 160);
         builder.Add("Organize/Group Selection", "shader/group", order: 1700);
         builder.Add("Organize/Ungroup Selection", "shader/ungroup", order: 180);
+        builder.Add("Organize/Collapse to Subgraph", "shader/collapse-subgraph", order: 190, separatorBefore: true);
         builder.Add("Assets/Show Shader in File Browser", "shader/reveal-shader", order: 1900);
         builder.Add("Assets/Show Source in File Browser", "shader/reveal-source", order: 1910);
         builder.Add("Assets/Copy Shader To Project", "shader/copy-to-project", order: 1920, separatorBefore: true);

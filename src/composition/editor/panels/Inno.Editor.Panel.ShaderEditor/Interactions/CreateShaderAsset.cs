@@ -34,7 +34,7 @@ internal sealed class CreateShaderAsset(ShaderEditorDocuments documents, AssetEd
         GraphDocument graph = (documents.templates ?? throw new InvalidOperationException("Shader templates have not started."))
             .Create(context.argument, documents.serialization, documents.context);
         AssetFileEntry created = browser.CreateSource(path, GraphDocumentCodec.Encode(graph, documents.serialization));
-        context.interactions.SetSelection(created);
+        browser.BeginCreatedSourceRename(created);
         context.interactions.OpenPanel("rendering.shader-editor");
     }
 }

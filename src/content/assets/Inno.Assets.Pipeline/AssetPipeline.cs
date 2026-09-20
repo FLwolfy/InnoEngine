@@ -859,13 +859,13 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     }
 
     /// <summary>
-    /// Saves an asset to a writable isolated source path.
+    /// Saves an asset to a writable isolated source path, preserving the destination source identity when it exists.
     /// </summary>
     /// <param name="path">
     /// Writable isolated source path.
     /// </param>
     /// <param name="asset">
-    /// Asset to save.
+    /// Asset to save. A detached value replaces the destination content without replacing its persistent identity.
     /// </param>
     /// <returns>
     /// <see langword="true"/> when an importer exported the asset.

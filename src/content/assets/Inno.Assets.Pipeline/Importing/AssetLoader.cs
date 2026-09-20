@@ -672,13 +672,13 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     }
 
     /// <summary>
-    /// Saves an asset to its initial or existing isolated source path.
+    /// Saves an asset to its initial or existing isolated source path while preserving an existing destination identity.
     /// </summary>
     /// <param name="path">
     /// The isolated source path.
     /// </param>
     /// <param name="asset">
-    /// The asset to export.
+    /// The asset to export. Detached replacement values do not replace an existing source's persistent identity.
     /// </param>
     /// <returns>
     /// <see langword="true"/> when an importer exported the asset.
@@ -1592,13 +1592,24 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         if (exported is null)
             return false;
         byte[] sourceBytes = exported.Value.ToArray();
-        Guid persistentId = asset.identity.persistentId;
+        AssetRecord? destinationRecord = FindRecordLocked(relativePath);
+        bool destinationOwnsIdentity = destinationRecord is not null
+            && destinationRecord.persistentId != Guid.Empty;
+        Guid persistentId = destinationOwnsIdentity
+            ? destinationRecord!.persistentId
+            : asset.identity.persistentId;
         if (persistentId == Guid.Empty)
             persistentId = Guid.NewGuid();
+        if (asset.identity.runtimeId is not null && asset.identity.persistentId != persistentId)
+        {
+            throw new InvalidOperationException(
+                $"Registered asset '{asset.identity.persistentId:D}' cannot replace destination identity " +
+                $"'{persistentId:D}' at '{relativePath}'.");
+        }
         ImportBuild build = BuildImportLocked(relativePath, sourceBytes, importer, persistentId);
         AssetRecord? provisionalRecord = null;
         bool registeredHere = false;
-        if (string.IsNullOrWhiteSpace(asset.assetPath.ToString()))
+        if (string.IsNullOrWhiteSpace(asset.assetPath.ToString()) && !destinationOwnsIdentity)
         {
             m_identities.InitializePersistentIdentity(asset, persistentId);
             registeredHere = m_identitiesActive && m_identities.Register(asset, persistentId);
@@ -1635,6 +1646,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         AssetRecord committed = m_recordsByPath[relativePath];
         if (committed.asset is null)
         {
+            if (asset.identity.persistentId != persistentId)
+                m_identities.InitializePersistentIdentity(asset, persistentId);
             committed.asset = asset;
             if (m_identitiesActive && asset.identity.runtimeId is null)
                 m_identities.Register(asset, persistentId);

@@ -80,7 +80,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     internal EditorShaderDraftCompilationSnapshot Check(Draft draft)
     {
         GraphDocumentController controller = Controller(draft);
-        if (controller.document.nodes.Any(static node => node.definitionId == ShaderGraphNodes.inputDefinitionId))
+        if (ShaderGraphNodes.IsNodeGraph(controller.document))
         {
             EditorShaderDraftCompilationSnapshot nodeSnapshot;
             try
@@ -193,7 +193,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         try
         {
             GraphDocument document = Controller(draft).document;
-            if (document.nodes.Any(static node => node.definitionId == ShaderGraphNodes.inputDefinitionId))
+            if (ShaderGraphNodes.IsNodeGraph(document))
             {
                 _ = ShaderGraphNodes.ReadInterface(document, serialization, context);
                 draft.compilationStatus = "Reusable node · interface valid";

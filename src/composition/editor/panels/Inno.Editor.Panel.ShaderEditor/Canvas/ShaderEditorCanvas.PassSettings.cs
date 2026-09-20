@@ -90,7 +90,7 @@ internal sealed partial class ShaderEditorCanvas
                 UI.Separator();
                 UI.PopID();
             }
-            if (UI.Button("Add Output"))
+            if (CenteredAddButton("Add Output"))
             {
                 stage.outputs = [.. stage.outputs, new() { id = "output-" + Guid.NewGuid().ToString("N"),
                     kind = stage.stage == ShaderStage.Vertex ? ShaderIrOutputKind.Varying : ShaderIrOutputKind.Color,
@@ -182,12 +182,12 @@ internal sealed partial class ShaderEditorCanvas
                         Gesture();
                         if (remove) { keyword.options = keyword.options.Where((_, index) => index != j).ToArray(); definitionChanged = true; break; }
                     }
-                    if (UI.SmallButton("Add Option")) { keyword.options = [.. keyword.options, "Option" + keyword.options.Length]; definitionChanged = true; }
+                    if (CenteredAddButton("Add Option")) { keyword.options = [.. keyword.options, "Option" + keyword.options.Length]; definitionChanged = true; }
                     definition.keywords[i] = keyword;
                     if (UI.SmallButton("Remove Keyword")) { definition.keywords = definition.keywords.Where((_, index) => index != i).ToArray(); definitionChanged = true; UI.PopID(); break; }
                     UI.PopID();
                 }
-                if (UI.Button("Add Keyword")) { definition.keywords = [.. definition.keywords, new("Keyword" + definition.keywords.Length, ["Off", "On"])]; definitionChanged = true; }
+                if (CenteredAddButton("Add Keyword")) { definition.keywords = [.. definition.keywords, new("Keyword" + definition.keywords.Length, ["Off", "On"])]; definitionChanged = true; }
             }
             if (definitionChanged)
             {

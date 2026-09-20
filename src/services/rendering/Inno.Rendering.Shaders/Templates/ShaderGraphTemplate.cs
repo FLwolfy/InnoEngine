@@ -52,6 +52,7 @@ internal sealed class ReusableShaderGraphNodeTemplate : ShaderGraphTemplate
     public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
     {
         GraphDocument graph = ShaderGraphDocument.Create(new("Graph Node", [], [], []), serialization, context);
+        ShaderGraphNodes.WriteSettings(graph, new ShaderGraphNodeSettings(), serialization, context);
         var input = new GraphNodeRecord(new("node-inputs"), ShaderGraphNodes.inputDefinitionId)
         {
             position = new(40, 120)

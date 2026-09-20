@@ -20,7 +20,7 @@ internal sealed class CreateAssetCommand(AssetEditorModule assets) : EditorActio
     protected override void Execute(EditorActionContext<string, string> context)
     {
         AssetFileEntry created = assets.CreateAsset(context.target, context.argument);
-        context.interactions.SetSelection(created);
+        assets.BeginCreatedSourceRename(created);
         context.interactions.OpenPanel("scene.inspector");
     }
 }

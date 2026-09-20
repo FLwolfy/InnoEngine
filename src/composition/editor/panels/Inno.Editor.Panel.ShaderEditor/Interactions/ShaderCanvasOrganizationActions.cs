@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Graphs;
+using Inno.Editor.Graph;
 using Inno.Editor.Interactions;
 using Inno.Editor.Panel.FileBrowser;
+using Inno.Rendering;
 using Inno.Rendering.Shaders;
 
 namespace Inno.Editor.Panel.ShaderEditor;
@@ -91,6 +94,213 @@ internal sealed class UngroupShaderNodes(ShaderEditorDocuments documents) : Shad
     }
 }
 
+[EditorAction("shader/collapse-subgraph", ShaderEditorCanvas.C_AREA)]
+internal sealed class CollapseShaderSubgraph(ShaderEditorDocuments documents, AssetEditorModule browser)
+    : ShaderSelectionAction(documents)
+{
+    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+    {
+        if (!base.Query(context).isEnabled) return EditorActionState.disabled;
+        ShaderEditorDocuments.Draft draft = documents.Open(context.target);
+        GraphDocument graph = documents.Controller(draft).document;
+        GraphNodeRecord[] selected = draft.canvas.selectedNodes.Select(graph.FindNode).OfType<GraphNodeRecord>().ToArray();
+        if (selected.Length != draft.canvas.selectedNodes.Count || selected.Any(static node =>
+                node.definitionId is ShaderGraphDocument.outputDefinitionId
+                    or ShaderGraphNodes.inputDefinitionId
+                    or ShaderGraphNodes.outputDefinitionId))
+            return EditorActionState.disabled;
+        string[] stages = selected.Select(node => ShaderGraphDocument.Read(node, ShaderGraphDocument.stageKey,
+                "", documents.serialization, documents.context))
+            .Distinct(StringComparer.Ordinal).ToArray();
+        if (stages.Length != 1 || stages[0].Length == 0) return EditorActionState.disabled;
+        HashSet<GraphNodeId> ids = selected.Select(static node => node.id).ToHashSet();
+        return graph.edges.Any(edge => ids.Contains(edge.input.nodeId) != ids.Contains(edge.output.nodeId))
+            ? EditorActionState.enabled
+            : EditorActionState.disabled;
+    }
+
+    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    {
+        ShaderEditorDocuments.Draft draft = documents.Open(context.target);
+        GraphDocumentController controller = documents.Controller(draft);
+        GraphDocument parent = controller.document;
+        HashSet<GraphNodeId> selected = [.. draft.canvas.selectedNodes];
+        GraphNodeRecord[] nodes = parent.nodes.Where(node => selected.Contains(node.id)).ToArray();
+        string stage = nodes.Select(node => ShaderGraphDocument.Read(node, ShaderGraphDocument.stageKey,
+                "", documents.serialization, documents.context))
+            .Distinct(StringComparer.Ordinal).Single();
+        GraphEdgeRecord[] incomingEdges = parent.edges
+            .Where(edge => selected.Contains(edge.input.nodeId) && !selected.Contains(edge.output.nodeId)).ToArray();
+        GraphEdgeRecord[] outgoingEdges = parent.edges
+            .Where(edge => selected.Contains(edge.output.nodeId) && !selected.Contains(edge.input.nodeId)).ToArray();
+
+        var inputGroups = incomingEdges.GroupBy(static edge => edge.output).ToArray();
+        var outputGroups = outgoingEdges.GroupBy(static edge => edge.output).ToArray();
+        var inputNames = new HashSet<string>(StringComparer.Ordinal);
+        var outputNames = new HashSet<string>(StringComparer.Ordinal);
+        ShaderGraphNodePortDefinition[] inputs = inputGroups.Select(group => Port(
+            Unique(group.First().input.portId.value, "input", inputNames),
+            draft.ports[group.First().input.nodeId].Single(port => port.id == group.First().input.portId.value).type,
+            required: true)).ToArray();
+        ShaderGraphNodePortDefinition[] outputs = outputGroups.Select(group => Port(
+            Unique(group.Key.portId.value, "output", outputNames),
+            draft.ports[group.Key.nodeId].Single(port => port.id == group.Key.portId.value).type,
+            required: false)).ToArray();
+
+        ShaderDefinition parentDefinition = ShaderGraphDocument.ReadDefinition(parent, documents.serialization, documents.context);
+        HashSet<string> ownedBindings = nodes.Where(static node => node.definitionId == "inno.shader.stage-input")
+            .Select(node => ShaderGraphDocument.Read(node, ShaderGraphDocument.settingsKey,
+                new ShaderGraphInputSettings(), documents.serialization, documents.context).id)
+            .ToHashSet(StringComparer.Ordinal);
+        ShaderDefinition childDefinition = new(
+            "Graph Node",
+            parentDefinition.properties.Where(property => ownedBindings.Contains(property.id.value)),
+            [],
+            []);
+        GraphDocument child = ShaderGraphDocument.Create(childDefinition, documents.serialization, documents.context);
+        string displayName = SuggestedName(documents, draft, selected);
+        var nodeSettings = new ShaderGraphNodeSettings
+        {
+            displayName = displayName,
+            createPath = "Project",
+            kind = ShaderGraphNodeKind.Function,
+            effect = outputs.Length == 0 ? ShaderGraphNodeEffect.SideEffect : ShaderGraphNodeEffect.Pure
+        };
+        ShaderGraphNodes.WriteSettings(child, nodeSettings, documents.serialization, documents.context);
+
+        float minX = nodes.Min(static node => node.position.x);
+        float minY = nodes.Min(static node => node.position.y);
+        var remap = new Dictionary<GraphNodeId, GraphNodeId>();
+        foreach (GraphNodeRecord source in nodes)
+        {
+            var id = new GraphNodeId("body/" + source.id.value);
+            var copy = new GraphNodeRecord(id, source.definitionId)
+            {
+                position = new(source.position.x - minX + 280, source.position.y - minY + 80)
+            };
+            foreach ((string key, GraphSerializedValue value) in source.values)
+                if (key != ShaderGraphDocument.stageKey) copy.SetValue(key, value.Clone());
+            child.AddNode(copy);
+            remap.Add(source.id, id);
+        }
+        foreach (GraphEdgeRecord edge in parent.edges.Where(edge => selected.Contains(edge.output.nodeId)
+                     && selected.Contains(edge.input.nodeId)))
+            child.AddEdge(new(
+                new("body/" + edge.id.value),
+                new(remap[edge.output.nodeId], edge.output.portId),
+                new(remap[edge.input.nodeId], edge.input.portId)));
+
+        if (inputs.Length != 0)
+        {
+            var boundary = new GraphNodeRecord(new("function-inputs"), ShaderGraphNodes.inputDefinitionId)
+            {
+                position = new(20, 80)
+            };
+            boundary.SetValue(ShaderGraphDocument.settingsKey, ShaderGraphDocument.Encode(
+                new ShaderGraphNodeInputSettings { ports = inputs }, documents.serialization, documents.context));
+            child.AddNode(boundary);
+            for (int index = 0; index < inputGroups.Length; index++)
+                foreach (GraphEdgeRecord edge in inputGroups[index])
+                    child.AddEdge(new(
+                        new("input/" + edge.id.value),
+                        new(boundary.id, new(inputs[index].id)),
+                        new(remap[edge.input.nodeId], edge.input.portId)));
+        }
+        if (outputs.Length != 0)
+        {
+            var boundary = new GraphNodeRecord(new("function-outputs"), ShaderGraphNodes.outputDefinitionId)
+            {
+                position = new(nodes.Max(static node => node.position.x) - minX + 600, 80)
+            };
+            boundary.SetValue(ShaderGraphDocument.settingsKey, ShaderGraphDocument.Encode(
+                new ShaderGraphNodeOutputSettings { ports = outputs }, documents.serialization, documents.context));
+            child.AddNode(boundary);
+            for (int index = 0; index < outputGroups.Length; index++)
+                child.AddEdge(new(
+                    new("output/" + index),
+                    new(remap[outputGroups[index].Key.nodeId], outputGroups[index].Key.portId),
+                    new(boundary.id, new(outputs[index].id))));
+        }
+
+        AssetPath path = UniquePath(draft.path, displayName, documents);
+        using EditorHistoryTransaction transaction = documents.interactions.history.BeginTransaction("Collapse Shader Subgraph");
+        AssetFileEntry created = browser.CreateSource(path, GraphDocumentCodec.Encode(child, documents.serialization));
+        Guid sourceId = documents.AssetId(created);
+        ShaderGraphNodeInterface nodeInterface = ShaderGraphNodes.ReadInterface(
+            child, documents.serialization, documents.context);
+        GraphDocument candidate = parent.Clone();
+        foreach (GraphNodeId id in selected) candidate.RemoveNode(id);
+        var call = new GraphNodeRecord(new(Guid.NewGuid().ToString("N")), ShaderGraphNodes.callDefinitionId)
+        {
+            position = new(nodes.Average(static node => node.position.x), nodes.Average(static node => node.position.y))
+        };
+        call.SetValue(ShaderGraphDocument.stageKey, ShaderGraphDocument.Encode(stage, documents.serialization, documents.context));
+        call.SetValue("sourceId", ShaderGraphDocument.Encode(sourceId, documents.serialization, documents.context));
+        call.SetValue("sourcePath", ShaderGraphDocument.Encode(path.ToString(), documents.serialization, documents.context));
+        call.SetValue(ShaderGraphNodes.interfaceKey, ShaderGraphDocument.Encode(nodeInterface, documents.serialization, documents.context));
+        candidate.AddNode(call);
+        for (int index = 0; index < inputGroups.Length; index++)
+            candidate.AddEdge(new(
+                new(Guid.NewGuid().ToString("N")),
+                inputGroups[index].Key,
+                new(call.id, new(inputs[index].id))));
+        for (int index = 0; index < outputGroups.Length; index++)
+            foreach (GraphEdgeRecord edge in outputGroups[index])
+                candidate.AddEdge(new(
+                    new(Guid.NewGuid().ToString("N")),
+                    new(call.id, new(outputs[index].id)),
+                    edge.input));
+
+        ShaderCanvasGroup[] groups = GroupShaderNodes.Read(documents, candidate).Select(group =>
+        {
+            group.nodes = group.nodes.Where(id => !selected.Contains(new(id))).ToArray();
+            return group;
+        }).Where(static group => group.nodes.Length != 0).ToArray();
+        candidate.SetMetadata(GroupShaderNodes.C_GROUPS,
+            ShaderGraphDocument.Encode(groups, documents.serialization, documents.context));
+        controller.ReplaceDocument(candidate, "Collapse Shader Subgraph");
+        transaction.Commit();
+        draft.canvas.SelectNodes([call.id]);
+        draft.selectedGroupId = "";
+        documents.Changed(draft);
+    }
+
+    private static ShaderGraphNodePortDefinition Port(string id, ShaderSourceType type, bool required)
+        => new() { id = id, type = ShaderGraphType.Capture(type), required = required };
+
+    private static string Unique(string candidate, string fallback, HashSet<string> used)
+    {
+        string root = string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;
+        string value = root;
+        for (int suffix = 2; !used.Add(value); suffix++) value = root + suffix;
+        return value;
+    }
+
+    private static string SuggestedName(ShaderEditorDocuments documents, ShaderEditorDocuments.Draft draft,
+        HashSet<GraphNodeId> selected)
+    {
+        ShaderCanvasGroup? group = GroupShaderNodes.Read(documents, documents.Controller(draft).document)
+            .FirstOrDefault(value => value.nodes.Length == selected.Count
+                && value.nodes.All(id => selected.Contains(new(id))));
+        return group is ShaderCanvasGroup exact && !string.IsNullOrWhiteSpace(exact.title)
+            ? exact.title
+            : "Shader Node";
+    }
+
+    private static AssetPath UniquePath(AssetPath source, string name, ShaderEditorDocuments documents)
+    {
+        AssetSourceMount mount = documents.assets.sourceMounts.Single(value => value.id == source.source);
+        string directory = Path.GetDirectoryName(source.localPath)?.Replace('\\', '/') ?? "";
+        string safeName = string.Concat(name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character)).Trim();
+        if (safeName.Length == 0) safeName = "Shader Node";
+        string prefix = directory.Length == 0 ? "" : directory + "/";
+        AssetPath path = new(source.source, prefix + safeName + ".ishader");
+        for (int suffix = 2; File.Exists(mount.Resolve(path.localPath)) || File.Exists(mount.Resolve(path.localPath) + ".imeta"); suffix++)
+            path = new(source.source, prefix + safeName + " " + suffix + ".ishader");
+        return path;
+    }
+}
+
 [EditorAction("shader/reveal-source", ShaderEditorCanvas.C_AREA)]
 internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
 {
@@ -164,7 +374,7 @@ internal sealed class CopyShaderToProject(ShaderEditorDocuments documents, Asset
         for (int index = 2; File.Exists(mount.Resolve(destination.localPath)) || File.Exists(mount.Resolve(destination.localPath) + ".imeta"); index++)
             destination = AssetPath.Project(name + " " + index + ".ishader");
         AssetFileEntry entry = browser.CreateSource(destination, GraphDocumentCodec.Encode(documents.Controller(draft).document, documents.serialization));
-        context.interactions.SetSelection(entry);
+        browser.BeginCreatedSourceRename(entry);
         context.interactions.OpenPanel("rendering.shader-editor");
     }
 }

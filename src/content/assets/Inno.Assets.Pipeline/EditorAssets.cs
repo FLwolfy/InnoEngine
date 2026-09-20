@@ -52,7 +52,7 @@ public static class EditorAssets
     /// The writable project asset path.
     /// </param>
     /// <param name="asset">
-    /// The complete source value to persist.
+    /// The complete source value to persist. Saving over an existing source retains that source's persistent identity.
     /// </param>
     /// <returns>
     /// <see langword="true"/> when the source was committed and imported successfully.

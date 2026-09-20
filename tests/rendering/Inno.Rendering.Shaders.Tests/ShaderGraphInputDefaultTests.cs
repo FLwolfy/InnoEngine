@@ -84,6 +84,15 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
             new ShaderDefinition("Optional Node", [], [], []),
             m_serialization,
             SerializationContext.empty);
+        ShaderGraphNodes.WriteSettings(
+            child,
+            new ShaderGraphNodeSettings
+            {
+                displayName = "Optional Node",
+                kind = ShaderGraphNodeKind.Function
+            },
+            m_serialization,
+            SerializationContext.empty);
         var boundaryInput = new GraphNodeRecord(new("node-inputs"), ShaderGraphNodes.inputDefinitionId);
         var boundaryOutput = new GraphNodeRecord(new("node-outputs"), ShaderGraphNodes.outputDefinitionId);
         child.AddNode(boundaryInput);
@@ -96,8 +105,6 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
         };
         Set(boundaryInput, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings
         {
-            displayName = "Optional Node",
-            kind = ShaderGraphNodeKind.Function,
             ports = [optional]
         });
         Set(boundaryOutput, ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings

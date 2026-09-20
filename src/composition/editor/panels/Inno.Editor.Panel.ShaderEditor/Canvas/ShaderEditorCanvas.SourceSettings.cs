@@ -84,7 +84,7 @@ internal sealed partial class ShaderEditorCanvas
                     }
                     UI.PopID();
                 }
-                if (UI.Button("Add Export")) { settings.exports = [.. settings.exports, "Function"]; changed = true; }
+                if (CenteredAddButton("Add Export")) { settings.exports = [.. settings.exports, "Function"]; changed = true; }
                 UI.TextWrapped("Every listed name is exported as an independent graph function. All other functions remain private helpers. Ports are parsed from each exported declaration; alternative implementations must expose matching interfaces.");
                 UI.SeparatorText("Alternative Implementations");
                 for (int i = 0; i < settings.implementations.Length; i++)
@@ -118,7 +118,7 @@ internal sealed partial class ShaderEditorCanvas
                     }
                     UI.PopID();
                 }
-                if (UI.Button("Add Implementation"))
+                if (CenteredAddButton("Add Implementation"))
                 { settings.implementations = [.. settings.implementations, null!]; changed = true; }
                 if (changed) draft.sourceSettings = owner.serialization.Serialize(settings, owner.context);
                 UI.Separator();

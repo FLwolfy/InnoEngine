@@ -127,6 +127,7 @@ internal sealed partial class ShaderEditorCanvas
         });
         Widget.DrawItemTooltip(path);
         InspectorRow("graph-node.kind", "Kind", () => UI.TextDisabled(nodeInterface.kind.ToString()));
+        InspectorRow("graph-node.effect", "Effect", () => UI.TextDisabled(nodeInterface.effect.ToString()));
         if (nodeInterface.kind == ShaderGraphNodeKind.DomainOutput)
             InspectorRow("graph-node.role", "Target Role", () => UI.TextDisabled(nodeInterface.role));
         RepairPorts(node);
@@ -134,49 +135,8 @@ internal sealed partial class ShaderEditorCanvas
 
     private void GraphInputs(GraphNodeRecord node)
     {
+        GraphInterfaceMetadata();
         ShaderGraphNodeInputSettings settings = Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings());
-        string displayName = settings.displayName;
-        InspectorRow("node-interface.name", "Node Name", () =>
-        {
-            bool changed = UI.InputText("##name", ref displayName, 256);
-            Gesture();
-            if (changed) { settings.displayName = displayName; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
-        });
-        string createPath = settings.createPath;
-        InspectorRow("node-interface.catalog", "Catalog", () =>
-        {
-            bool changed = UI.InputText("##catalog", ref createPath, 256);
-            Gesture();
-            if (changed) { settings.createPath = createPath; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
-        });
-        int createOrder = settings.createOrder;
-        InspectorRow("node-interface.order", "Order", () =>
-        {
-            bool changed = UI.InputInt("##order", ref createOrder);
-            Gesture();
-            if (changed) { settings.createOrder = createOrder; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
-        });
-        InspectorRow("node-interface.kind", "Kind", () =>
-        {
-            if (!Widget.BeginBoundedCombo("##kind", settings.kind.ToString())) return;
-            try
-            {
-                foreach (ShaderGraphNodeKind kind in Enum.GetValues<ShaderGraphNodeKind>())
-                    if (UI.Selectable(kind.ToString(), settings.kind == kind))
-                    { settings.kind = kind; Set(node, ShaderGraphDocument.settingsKey, settings); }
-            }
-            finally { UI.EndCombo(); }
-        });
-        if (settings.kind == ShaderGraphNodeKind.DomainOutput)
-        {
-            string role = settings.role;
-            InspectorRow("node-interface.role", "Target Role", () =>
-            {
-                bool changed = UI.InputText("##role", ref role, 256);
-                Gesture();
-                if (changed) { settings.role = role; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
-            });
-        }
         GraphPorts(node, settings.ports, inputs: true, ports =>
         {
             settings.ports = ports;
@@ -186,12 +146,83 @@ internal sealed partial class ShaderEditorCanvas
 
     private void GraphOutputs(GraphNodeRecord node)
     {
+        GraphInterfaceMetadata();
         ShaderGraphNodeOutputSettings settings = Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings());
         GraphPorts(node, settings.ports, inputs: false, ports =>
         {
             settings.ports = ports;
             Set(node, ShaderGraphDocument.settingsKey, settings);
         });
+    }
+
+    private void GraphInterfaceMetadata()
+    {
+        ShaderGraphNodeSettings settings = ShaderGraphNodes.ReadSettings(
+            Controller.document, owner.serialization, owner.context);
+        string displayName = settings.displayName;
+        InspectorRow("node-interface.name", "Node Name", () =>
+        {
+            bool changed = UI.InputText("##name", ref displayName, 256);
+            Gesture();
+            if (changed) { settings.displayName = displayName; SetGraphNodeSettings(settings, true); }
+        });
+        string createPath = settings.createPath;
+        InspectorRow("node-interface.catalog", "Catalog", () =>
+        {
+            bool changed = UI.InputText("##catalog", ref createPath, 256);
+            Gesture();
+            if (changed) { settings.createPath = createPath; SetGraphNodeSettings(settings, true); }
+        });
+        int createOrder = settings.createOrder;
+        InspectorRow("node-interface.order", "Order", () =>
+        {
+            bool changed = UI.InputInt("##order", ref createOrder);
+            Gesture();
+            if (changed) { settings.createOrder = createOrder; SetGraphNodeSettings(settings, true); }
+        });
+        InspectorRow("node-interface.kind", "Kind", () =>
+        {
+            if (!Widget.BeginBoundedCombo("##kind", settings.kind.ToString())) return;
+            try
+            {
+                foreach (ShaderGraphNodeKind kind in Enum.GetValues<ShaderGraphNodeKind>())
+                    if (UI.Selectable(kind.ToString(), settings.kind == kind))
+                    { settings.kind = kind; SetGraphNodeSettings(settings); }
+            }
+            finally { UI.EndCombo(); }
+        });
+        if (settings.kind == ShaderGraphNodeKind.Function)
+        {
+            InspectorRow("node-interface.effect", "Effect", () =>
+            {
+                if (!Widget.BeginBoundedCombo("##effect", settings.effect.ToString())) return;
+                try
+                {
+                    foreach (ShaderGraphNodeEffect effect in Enum.GetValues<ShaderGraphNodeEffect>())
+                        if (UI.Selectable(effect.ToString(), settings.effect == effect))
+                        { settings.effect = effect; SetGraphNodeSettings(settings); }
+                }
+                finally { UI.EndCombo(); }
+            });
+        }
+        if (settings.kind == ShaderGraphNodeKind.DomainOutput)
+        {
+            string role = settings.role;
+            InspectorRow("node-interface.role", "Target Role", () =>
+            {
+                bool changed = UI.InputText("##role", ref role, 256);
+                Gesture();
+                if (changed) { settings.role = role; SetGraphNodeSettings(settings, true); }
+            });
+        }
+    }
+
+    private void SetGraphNodeSettings(ShaderGraphNodeSettings settings, bool continuous = false)
+    {
+        GraphDocument candidate = Controller.document.Clone();
+        ShaderGraphNodes.WriteSettings(candidate, settings, owner.serialization, owner.context);
+        Controller.ReplaceDocument(candidate, "Edit Graph Node Interface", continuous ? draft.valueGesture : null);
+        owner.Changed(draft);
     }
 
     private void GraphPorts(GraphNodeRecord node, ShaderGraphNodePortDefinition[] ports, bool inputs,
@@ -249,12 +280,12 @@ internal sealed partial class ShaderEditorCanvas
             }
             finally { UI.PopID(); }
         }
-        if (UI.Button(inputs ? "Add Input" : "Add Output"))
+        if (CenteredAddButton(inputs ? "Add Input" : "Add Output"))
         {
             string prefix = inputs ? "input" : "output";
             string id = prefix;
             for (int suffix = 2; ports.Any(port => port.id == id); suffix++) id = prefix + suffix;
-            apply([.. ports, new() { id = id, type = new() { id = "float" }, required = inputs }]);
+            apply([.. ports, new() { id = id, type = new() { id = "float" }, required = false }]);
         }
         RepairPorts(node);
     }

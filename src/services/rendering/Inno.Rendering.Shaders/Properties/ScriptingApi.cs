@@ -39,6 +39,8 @@ using Inno.Scripting.Api;
 [assembly: ScriptingApiExport(typeof(ShaderGraphInputSettings), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphOutput), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphNodeKind), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(ShaderGraphNodeEffect), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(ShaderGraphNodeSettings), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphNodePortDefinition), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphNodeInputSettings), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphNodeOutputSettings), ScriptingApiScope.Editor)]

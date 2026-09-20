@@ -10,6 +10,16 @@ namespace Inno.Editor.Panel.FileBrowser;
 
 public sealed partial class AssetEditorModule
 {
+    /// <summary>Selects a newly created source and starts its shared inline rename interaction.</summary>
+    /// <param name="entry">The newly indexed writable source.</param>
+    public void BeginCreatedSourceRename(AssetFileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        EditorInteraction interaction = m_interactions.For(FileBrowserInteractionIds.C_AREA, entry);
+        _ = interaction.Select();
+        _ = interaction.Execute(FileBrowserInteractionIds.C_RENAME);
+    }
+
     /// <summary>Creates a native or ordinary-text asset source as one recoverable shared-history operation.</summary>
     /// <param name="path">A new file in an existing writable asset directory.</param>
     /// <param name="bytes">Complete source bytes supplied by the feature's native writer.</param>

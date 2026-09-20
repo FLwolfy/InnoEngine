@@ -53,19 +53,18 @@ internal sealed partial class ShaderEditorCanvas
                 { technique.passes = technique.passes.Where((_, index) => index != j).ToArray(); changed = true; UI.PopID(); break; }
                 UI.PopID();
             }
-            if (UI.SmallButton("Add Role"))
+            if (CenteredAddButton("Add Role"))
             {
                 technique.passes = [.. technique.passes, new() { role = new("role-" + technique.passes.Length), passName = definition.passes.FirstOrDefault().name ?? "" }];
                 changed = true;
             }
             definition.techniques[i] = technique;
-            UI.SameLine();
             if (UI.SmallButton("Remove Technique"))
             { definition.techniques = definition.techniques.Where((_, index) => index != i).ToArray(); changed = true; UI.PopID(); break; }
             UI.Separator();
             UI.PopID();
         }
-        if (UI.Button("Add Technique"))
+        if (CenteredAddButton("Add Technique"))
         {
             definition.techniques = [.. definition.techniques, new() { id = new("technique-" + Guid.NewGuid().ToString("N")), contract = default, passes = [] }];
             changed = true;

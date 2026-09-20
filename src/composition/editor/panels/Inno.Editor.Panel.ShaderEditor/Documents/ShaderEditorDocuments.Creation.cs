@@ -136,6 +136,9 @@ internal sealed partial class ShaderEditorDocuments
         ShaderNodePort? input = CompatibleInput(draft, node);
         GraphDocument graph = Controller(draft).document.Clone();
         graph.AddNode(node);
+        if (node.definitionId is ShaderGraphNodes.inputDefinitionId or ShaderGraphNodes.outputDefinitionId
+            && !ShaderGraphNodes.IsNodeGraph(graph))
+            ShaderGraphNodes.WriteSettings(graph, new ShaderGraphNodeSettings(), serialization, context);
         if (node.definitionId == "inno.shader.stage-input")
             graph = ShaderGraphBindings.ChangeInput(graph, node.id,
                 ShaderGraphDocument.Read(node, "settings", new ShaderGraphInputSettings(), serialization, context), serialization, context);

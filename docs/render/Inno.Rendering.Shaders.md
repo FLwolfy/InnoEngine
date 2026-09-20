@@ -61,19 +61,22 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderSourceNodeCompiler` | `inno.shader.source`；使用已冻结模块生成 return/out/inout 与结构成员，显式拒绝聚合和成员同时连接 |
 | `ShaderRerouteNodeCompiler` | `inno.shader.reroute`；强类型 value 输入/输出透传，不添加指令或改变副作用顺序 |
 | `ShaderGraphDocument` | `Create/ReadDefinition` 保存和读取图的材质/Pass 契约；`Encode/Decode/Read<T>` 使用 owner SerializationRegistry/Context。`definitionKey/outputDefinitionId/stageKey/settingsKey` 为原生图协议键；不能传入临时拼接的引用上下文 |
-| `ShaderGraphStageSettings` | `pass/stage/outputs/threadsX/threadsY/threadsZ`；在 output node 中持久化完整阶段和 Compute 工作组配置 |
+| `ShaderGraphStageSettings` | `stage/outputs/threadsX/threadsY/threadsZ`；在 output node 中持久化完整阶段和 Compute 工作组配置，Pass 通过独立绑定引用可共享 Stage |
 | `ShaderGraphOutput` | `id/kind/semantic/location`；输出端口名、GPU 目标类别与显式位置，不保存 native 表达式 |
 | `ShaderGraphInputSettings` | `id/type/kind/semantic/location` 与 `CreateBinding()`；未完成设置可保存，创建不可变 binding 时严格校验 |
 | `ShaderGraphType` | `id/element/length/fieldNames/fieldTypes`；storage 的 `isStorage/isImage/storageElement/access/format/dimension/isArray`；`CreateType()` 拒绝矛盾描述并生成不可变类型 |
 | `ShaderGraphNodeKind` | `Function` 在 Target 与 typed lowering 前内联；`DomainOutput` 保留为领域 Target 消费的稳定边界 |
+| `ShaderGraphNodeEffect` | `Pure` 要求 Function 暴露至少一个输出；`SideEffect` 允许只有输入而没有返回值，用于存储写入、discard 或插件定义的有序效果 |
+| `ShaderGraphNodeSettings` | 图级节点身份：`displayName/createPath/createOrder/kind/effect/role`。元数据不属于任一方向的边界节点，因此 input-only 与 output-only 节点都可完整发现 |
 | `ShaderGraphNodePortDefinition` | 图节点公开端口的稳定 `id`、完整 `type` 与输入 `required`；端口次序只负责呈现，不作为连接身份 |
-| `ShaderGraphNodeInputSettings` / `ShaderGraphNodeOutputSettings` | `.ishader` 内的 Node Inputs / Node Outputs 设置；一个节点可声明多个输入和多个输出 |
-| `ShaderGraphNodeInterface` | 从节点图冻结的标题、创建目录、顺序、类型、领域 Role 和端口快照；调用图只保存中立快照与 Shader 资产引用 |
-| `ShaderGraphNodes.ReadInterface/Expand` | 校验节点图并递归展开引用；检测引用环、必填输入、输出缺值、属性冲突和重复端口，不保留 Asset/provider 实例 |
+| `ShaderGraphNodeInputSettings` / `ShaderGraphNodeOutputSettings` | `.ishader` 内可独立存在的 Function Inputs / Function Outputs 设置；每个方向最多一个记录，每个记录可声明多个强类型端口 |
+| `ShaderGraphNodeInterface` | 从节点图冻结的标题、创建目录、顺序、类型、效果、领域 Role 和端口快照；调用图只保存中立快照与 Shader 资产引用 |
+| `ShaderGraphNodes.IsNodeGraph/ReadSettings/WriteSettings` | 识别并读写图级节点身份；不再靠是否存在 Function Inputs 猜测节点资产 |
+| `ShaderGraphNodes.ReadInterface/Expand` | 校验节点图并递归展开引用；支持 input-only、output-only 与双向接口，检测引用环、陈旧端口、必填输入、输出缺值、属性冲突和重复端口，不保留 Asset/provider 实例 |
 | `ShaderGraphTemplates` | `CreateRaster(serialization, context)` 创建有效默认图，不新增第二种 Shader 资产格式 |
 | `ShaderGraphBindings` | `ChangeInput(graph, nodeId, settings, serialization, context)` 返回独立候选，原子调整输入节点与暴露参数契约，不修改传入图；未完成输入保留为可序列化内容，调用者将整个候选记录为一次 History 修改 |
 | `ShaderGraphBindings.RemoveNodes(graph, nodeIds, serialization, context)` | 返回删除候选，不修改原图；输出节点连同阶段内容删除，清理失去最后所有者的 Pass/绑定及已删除 Pass 的 Technique 映射；共享参数保留默认值并更新阶段可见性，其他未完成内容不做全图清洗 |
-| `ShaderGraphProgramCompiler` | `(ShaderNodeCompilerRegistry)` 与 `Lower(...)`；验证图级定义、阶段归属与接口，按 Pass 降低，不编译原生 GPU 程序 |
+| `ShaderGraphProgramCompiler` | `(ShaderNodeCompilerRegistry)` 与 `Lower(...)`；验证图级定义、阶段归属与接口，按 Pass 降低；Vertex 值直接连接到 Fragment 节点时自动生成确定性的 transient varying 接口，不把生成 plumbing 写回作者图 |
 | `ShaderGraphPass` | `(name, stages)`；保存有序阶段快照，公开只读 `name/stages` |
 | `ShaderGraphProgramResult` | 只读 `passes/diagnostics/succeeded`；成功降低不表示 Adapter 编译或 GPU 发布成功 |
 
@@ -82,14 +85,22 @@ Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身�
 ## 图定义的可复用节点
 
 普通 Shader 作者不再需要为了组合节点编写 `IShaderNodeCompiler` 和专用 Inspector。用 File Browser 的
-**Create / Shader / Reusable Node** 建立普通 `.ishader`，在图中保留且仅保留一个 **Node Inputs**，并可为
-`Function` 节点增加一个 **Node Outputs**。两者都可声明任意数量的强类型端口；端口 ID 是持久连接身份，改名不会按位置误接旧边。
+**Create / Shader / Reusable Node** 建立普通 `.ishader`。节点身份与目录位于图级 `ShaderGraphNodeSettings`；
+**Function Inputs** 和 **Function Outputs** 各自可选、每个方向最多一个，但两者至少存在一个且总端口数不能为零。
+因此常量生成器可以只有 Outputs，存储写入或 discard 包装可以声明为 `SideEffect` 并只有 Inputs，普通计算节点可同时拥有两者。
+端口 ID 是持久连接身份，改名不会按位置误接旧边。
 保存后，该资产自动出现在其他 Shader 的 **Create / Graph Nodes** 菜单，目录和顺序由节点图自身的
 `createPath` / `createOrder` 决定。
 
 `Function` 节点在导入候选中递归内联，调用方默认值、子图属性声明、源码函数依赖和调用阶段一起进入同一
 authoring artifact。运行时只消费已编译程序，不加载、遍历或解释节点图。循环引用、缺少必填输入、无值输出、
-冲突资源声明会使当前导入/Check 明确失败，原始图仍保留用于修复。
+冲突资源声明或调用方残留的旧端口会使当前导入/Check 明确失败，原始图仍保留用于修复。
+
+作者可以直接把 Vertex 节点输出连到 Fragment 节点输入。降低阶段按完整类型推导桥接值，生成 Vertex varying
+输出与对应 Fragment varying 输入，并为同一来源的多路消费复用一条桥；作者图、Undo 和语义 hash 不保存这些
+实现 plumbing。资源句柄不能跨阶段传递，Compute 与 Raster 之间以及 Fragment 反向到 Vertex 的连接明确拒绝。
+Editor 的 **Organize / Collapse to Subgraph** 会从同一 Stage 的选择推导外部边界，创建新的 `.ishader` 节点资产，
+并在原图中以一个调用节点替换选择；输入、输出、属性声明和多路连接均按稳定端口身份保留。
 
 `DomainOutput` 用来定义领域终点，例如某插件的 Surface Output。它声明输入和稳定 `role`，没有通用引擎领域分支；
 插件 Target 只按 Role 识别该边界并把它展开成公共 Stage/IR。这样普通组合逻辑留在 `.ishader`，只有真正安排

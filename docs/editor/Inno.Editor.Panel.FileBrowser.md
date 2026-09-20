@@ -30,6 +30,7 @@ Project `Assets` 中名称以 `~` 开头的目录显示为 `ISAMPLE`，但仍按
 | `AssetFileEntry` | EditorScript 可检查的源文件身份、路径、扩展名和只读状态。 |
 | `AssetIconAttribute` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标；glyph 使用 `InnoEditor.ImGui.ImGuiIcon`。 |
 | `AssetEditorModule.GetIcon` | 为其他 Editor presentation 解析完全相同的 Asset 图标。 |
+| `AssetEditorModule.CreateSource` / `BeginCreatedSourceRename` | 让其他 Editor feature 复用原子 source 创建，并在用户发起创建时接入统一选择与 inline Rename。 |
 
 ## 为新 Asset 添加双击与右键行为
 
@@ -57,7 +58,7 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetPipeline` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Import Sample、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 与 Sample Import 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetPipeline.Delete` 或恢复同一 Sample 快照。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
+Create Asset、Create Folder、Import Sample、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。每个 Asset 创建模板以及 Shader Editor 的创建、复制、折叠为 Subgraph 流程都必须通过 `AssetEditorModule.CreateSource`，并记录一个 `Create Asset` 历史项。该历史项保存完整 source 与 `.imeta`；Undo 删除已创建资产，Redo 恢复同一 persistent ID，而不是创建新的对象身份。Rename/Move 只记录 source/target path；Delete 与 Sample Import 同样把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
 
 ## 文件与目录移动
 
@@ -99,7 +100,7 @@ public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 
 文件条目的右键菜单由两个同 area 的 interaction 组合：包含目录提供 `Create` 命令，条目本身提供 Rename、Delete 等对象命令；两组之间只绘制一个语义分隔线。因此右键文件也能在其父目录创建资产，右键目录则在该目录创建。统一 Create 菜单包含 Folder、插件贡献的 Shader 图模板，以及所有从 `AssetCreationTemplate` 派生并带源元数据的资产模板。Registry 根据 `menuPath` 自动建立多层分类，只在 top-level domain 边界应用声明的 separator；不会给每个叶子画横线。
 
-Material 与 Render Pipeline 已分别由自己的 feature 贡献模板；Rendering2D 插件同样贡献 Sprite Atlas、Sprite Animation、Tile Set、Tilemap、Particle Effect、Post Process Profile 与已配置的 2D Pipeline。新 `AssetObject` 不进入 File Browser switch，只需在所属 Editor feature 中添加创建模板。原生结构化资产直接使用泛型模板；自定义文本或二进制源 override `Encode`。详细协议见 [Inno.Editor.Assets](Inno.Editor.Assets.md)。创建完成后统一经过原子文件创建、导入、选择和 Inspector 流程；只读 mount 的创建命令保持禁用。
+Material 与 Render Pipeline 已分别由自己的 feature 贡献模板；Rendering2D 插件同样贡献 Sprite Atlas、Sprite Animation、Tile Set、Tilemap、Particle Effect、Post Process Profile 与已配置的 2D Pipeline。新 `AssetObject` 不进入 File Browser switch，只需在所属 Editor feature 中添加创建模板。原生结构化资产直接使用泛型模板；自定义文本或二进制源 override `Encode`。详细协议见 [Inno.Editor.Assets](Inno.Editor.Assets.md)。用户通过 Create 菜单建立资产后统一完成原子文件创建、导入和选择，并立即进入共享 inline Rename；Folder 和 Shader 模板遵循同一交互。只读 mount 的创建命令保持禁用。
 
 ## 为 Asset 类型声明图标
 

@@ -68,6 +68,8 @@ TextAsset value = assets.Load<TextAsset>(AssetPath.Project("Config/value.txt"));
 
 所有 mutation 必须在构造线程执行。Save、Import、ImportSample、Move、Delete、CreateDirectory 和 source candidate commit 各自发布一个 revision；后台 `ExportRuntimeArtifactsAsync` 使用 owner thread 捕获的 immutable Serialization generation，并在 worker 完成、失败或取消之前持续持有严格的 generation read lease。不能在提交 Task 后提前释放租约；Pending/Faulted generation 不允许开始导出。
 
+`Save(path, detachedAsset)` 替换已有 source 内容时以目标 `.imeta` / Catalog 的 persistent ID 为权威，并原位更新已加载的 canonical asset；草稿对象自身的临时 identity 不会把同一路径保存成一个新资产。因此 Scene、Camera、Material 等现有引用在 Inspector 保存后仍指向同一个资产。只有目标路径尚未拥有 identity 时，保存才采用待保存对象的 identity 或创建新的 identity。
+
 运行时导出同时校验创作依赖：沿 Artifact 依赖递归检查当前导入状态和源指纹（包括 include/Source 输入）。Editor 可以继续使用 last-good，但失败、缺失或过期的必需创作输入不能认证 Player 构建。导出不在中途重导入，以免已编译的目标产物与新资产混用 generation；拒绝时报告完整依赖路径，需重导入后重新构建。
 
 ### Source Mount 候选与共同 Recovery
