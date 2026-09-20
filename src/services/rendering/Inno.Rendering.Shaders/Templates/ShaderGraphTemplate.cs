@@ -45,7 +45,38 @@ internal sealed class RasterShaderGraphTemplate : ShaderGraphTemplate
         => ShaderGraphTemplates.CreateRaster(serialization, context);
 }
 
+[ShaderGraphTemplate(ShaderBuiltInIds.nodeTemplate, "Reusable Node")]
+internal sealed class ReusableShaderGraphNodeTemplate : ShaderGraphTemplate
+{
+    /// <inheritdoc />
+    public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
+    {
+        GraphDocument graph = ShaderGraphDocument.Create(new("Graph Node", [], [], []), serialization, context);
+        var input = new GraphNodeRecord(new("node-inputs"), ShaderGraphNodes.inputDefinitionId)
+        {
+            position = new(40, 120)
+        };
+        input.SetValue(ShaderGraphDocument.settingsKey, ShaderGraphDocument.Encode(new ShaderGraphNodeInputSettings
+        {
+            ports = [new() { id = "value", type = new() { id = "float" } }]
+        }, serialization, context));
+        var output = new GraphNodeRecord(new("node-outputs"), ShaderGraphNodes.outputDefinitionId)
+        {
+            position = new(620, 120)
+        };
+        output.SetValue(ShaderGraphDocument.settingsKey, ShaderGraphDocument.Encode(new ShaderGraphNodeOutputSettings
+        {
+            ports = [new() { id = "value", type = new() { id = "float" } }]
+        }, serialization, context));
+        graph.AddNode(input);
+        graph.AddNode(output);
+        graph.AddEdge(new(new("node-value"), new(input.id, new("value")), new(output.id, new("value"))));
+        return graph;
+    }
+}
+
 internal static class ShaderBuiltInIds
 {
     internal const string rasterTemplate = "inno.shader.raster";
+    internal const string nodeTemplate = "inno.shader.node";
 }

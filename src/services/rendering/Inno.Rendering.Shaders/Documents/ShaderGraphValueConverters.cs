@@ -57,6 +57,88 @@ internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter
     };
 }
 
+internal sealed class ShaderGraphNodePortDefinitionConverter : SerializationConverter<ShaderGraphNodePortDefinition>
+{
+    /// <inheritdoc />
+    public override void Write(SerializationWriter writer, ShaderGraphNodePortDefinition value)
+    {
+        writer.Write("id", value.id);
+        writer.Write("type", value.type);
+        writer.Write("required", value.required);
+    }
+
+    /// <inheritdoc />
+    public override ShaderGraphNodePortDefinition Read(SerializationReader reader) => new()
+    {
+        id = reader.Read<string>("id"),
+        type = reader.Read<ShaderGraphType>("type"),
+        required = reader.Read<bool>("required")
+    };
+}
+
+internal sealed class ShaderGraphNodeInputSettingsConverter : SerializationConverter<ShaderGraphNodeInputSettings>
+{
+    /// <inheritdoc />
+    public override void Write(SerializationWriter writer, ShaderGraphNodeInputSettings value)
+    {
+        writer.Write("displayName", value.displayName);
+        writer.Write("createPath", value.createPath);
+        writer.Write("createOrder", value.createOrder);
+        writer.Write("kind", value.kind);
+        writer.Write("role", value.role);
+        writer.Write("ports", value.ports);
+    }
+
+    /// <inheritdoc />
+    public override ShaderGraphNodeInputSettings Read(SerializationReader reader) => new()
+    {
+        displayName = reader.Read<string>("displayName"),
+        createPath = reader.Read<string>("createPath"),
+        createOrder = reader.Read<int>("createOrder"),
+        kind = reader.Read<ShaderGraphNodeKind>("kind"),
+        role = reader.Read<string>("role"),
+        ports = reader.Read<ShaderGraphNodePortDefinition[]>("ports")
+    };
+}
+
+internal sealed class ShaderGraphNodeOutputSettingsConverter : SerializationConverter<ShaderGraphNodeOutputSettings>
+{
+    /// <inheritdoc />
+    public override void Write(SerializationWriter writer, ShaderGraphNodeOutputSettings value)
+        => writer.Write("ports", value.ports);
+
+    /// <inheritdoc />
+    public override ShaderGraphNodeOutputSettings Read(SerializationReader reader)
+        => new() { ports = reader.Read<ShaderGraphNodePortDefinition[]>("ports") };
+}
+
+internal sealed class ShaderGraphNodeInterfaceConverter : SerializationConverter<ShaderGraphNodeInterface>
+{
+    /// <inheritdoc />
+    public override void Write(SerializationWriter writer, ShaderGraphNodeInterface value)
+    {
+        writer.Write("displayName", value.displayName);
+        writer.Write("createPath", value.createPath);
+        writer.Write("createOrder", value.createOrder);
+        writer.Write("kind", value.kind);
+        writer.Write("role", value.role);
+        writer.Write("inputs", value.inputs);
+        writer.Write("outputs", value.outputs);
+    }
+
+    /// <inheritdoc />
+    public override ShaderGraphNodeInterface Read(SerializationReader reader) => new()
+    {
+        displayName = reader.Read<string>("displayName"),
+        createPath = reader.Read<string>("createPath"),
+        createOrder = reader.Read<int>("createOrder"),
+        kind = reader.Read<ShaderGraphNodeKind>("kind"),
+        role = reader.Read<string>("role"),
+        inputs = reader.Read<ShaderGraphNodePortDefinition[]>("inputs"),
+        outputs = reader.Read<ShaderGraphNodePortDefinition[]>("outputs")
+    };
+}
+
 internal sealed class ShaderGraphTypeConverter : SerializationConverter<ShaderGraphType>
 {
     /// <inheritdoc />

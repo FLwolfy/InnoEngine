@@ -45,7 +45,13 @@ public sealed partial class EditorRenderTargetArtifactProvider
                                 throw new InvalidDataException($"Shader function '{id}' has no current successful import. Preview cannot hide its source error with an old bundle.");
                             using ArtifactLease lease = m_assets.AcquireArtifact(id, ShaderSourceBundle.outputName);
                             return File.ReadAllBytes(lease.info.absolutePath);
-                        }, m_lifetime.Token);
+                        }, m_lifetime.Token,
+                        (id, _) =>
+                        {
+                            if (!m_assets.TryLoad(id, out ShaderAsset? node) || node is null || node.isMissing)
+                                throw new InvalidDataException($"Shader graph node '{id}' has no current successful import.");
+                            return ShaderGraphArtifact.ReadDocument(ShaderGraphArtifact.Read(node, m_assets), m_serialization);
+                        });
                     string hash = ShaderGraphArtifact.GetSemanticHash(captured, m_serialization);
                     if (environmentChanged || entry.semanticHash != hash)
                     {

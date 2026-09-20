@@ -88,6 +88,15 @@ public sealed class ShaderGraphProgramCompiler
                     .ToDictionary(static node => node.id, node =>
                         (ShaderGraphDocument.Read<ShaderGraphInputSettings?>(node, ShaderGraphDocument.settingsKey, null, serialization, context)
                          ?? throw new InvalidOperationException("A stage input requires its interface settings.")).CreateBinding());
+                IGrouping<string, KeyValuePair<GraphNodeId, ShaderIrStageInput>>? duplicateInput = inputs
+                    .GroupBy(static pair => pair.Value.id, StringComparer.Ordinal)
+                    .FirstOrDefault(static group => group.Count() > 1);
+                if (duplicateInput is not null)
+                {
+                    string nodes = string.Join(", ", duplicateInput.Select(static pair => $"'{pair.Key.value}'"));
+                    throw new InvalidOperationException(
+                        $"Stage '{output.id.value}' contains duplicate input '{duplicateInput.Key}' from graph nodes {nodes}.");
+                }
                 ShaderGraphLoweringResult lowered = m_nodes.Lower(new(region, endpoints, implementationId,
                     sources.Where(pair => members.Contains(pair.Key)).ToDictionary(), inputs), serialization, context, cancellationToken);
                 diagnostics.AddRange(lowered.diagnostics);

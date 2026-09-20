@@ -71,6 +71,8 @@ Pass/Variant、Technique/Role、自定义混合和能力要求在 Output Inspect
 
 `.ishadersource` 是显式函数库：Import Settings 中列出的每个函数名都是独立公开 API，未列出的函数是私有 helper；一个文件可以导出多个函数，右键 Create / Functions 按“插件目录 / 文件 / 函数”创建节点，不存在默认 Source 或隐式 `main`。节点的 Show in File Browser 只在引擎 File Browser 中定位资产，不启动操作系统或外部 IDE。顶部 Check 对当前草稿进行隔离编译，不保存、不发布；它使用与脚本/插件重载相同的默认固定宽度、居中位置、遮罩、淡入淡出和阻塞生命周期，不显示进度条。编译完成后无论成功或失败都自动关闭，结构化结果及源码位置统一发布到 Console，不在 Modal 内建立第二套诊断浏览器。
 
+可复用节点本身也是 `.ishader`。Reusable Node 模板提供 Node Inputs 与 Node Outputs；Inspector 可增删并配置多组强类型端口、显示名、创建目录和排序。保存后，Shader Editor 从资产接口快照自动生成 **Create / Graph Nodes** 菜单项和调用节点，不要求插件再贡献同名 Drawer/Compiler。普通 Function 子图在导入时内联；Domain Output 子图按 Role 留给插件 Target。节点引用使用资产 persistent ID，路径只是可修复诊断信息；引用环和接口不完整在 Check/Console 中明确报告。
+
 Shader 与节点 Inspector 不重复画布 Header 的 Save / Revert / Format / Check。Shader Inspector 始终显示草稿专用 Preview（无开关），所有 Target、参数、节点设置和输入默认值复用通用 Inspector 的“左侧 label、右侧控件”Property Row；草稿预览仍不会修改资产或 Scene/Game。
 节点本体不再绘制“Select to edit in Inspector”占位尾部；Stage Input 节点使用主题统一的橙色 Header，Output 使用紫色 Header。选中节点时 Inspector 顶部仍显示所属 `.ishader` 文件名，第二行显示 `Node: <节点名>` 或多选数量。端口描述阶段发现的节点错误保留画布红点和 tooltip，同时作为带稳定节点 semantic ID 的结构化诊断发布到 Console，修复节点后对应诊断自动清除。
 

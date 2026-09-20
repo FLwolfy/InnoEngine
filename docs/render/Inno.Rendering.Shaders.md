@@ -65,6 +65,11 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderGraphOutput` | `id/kind/semantic/location`；输出端口名、GPU 目标类别与显式位置，不保存 native 表达式 |
 | `ShaderGraphInputSettings` | `id/type/kind/semantic/location` 与 `CreateBinding()`；未完成设置可保存，创建不可变 binding 时严格校验 |
 | `ShaderGraphType` | `id/element/length/fieldNames/fieldTypes`；storage 的 `isStorage/isImage/storageElement/access/format/dimension/isArray`；`CreateType()` 拒绝矛盾描述并生成不可变类型 |
+| `ShaderGraphNodeKind` | `Function` 在 Target 与 typed lowering 前内联；`DomainOutput` 保留为领域 Target 消费的稳定边界 |
+| `ShaderGraphNodePortDefinition` | 图节点公开端口的稳定 `id`、完整 `type` 与输入 `required`；端口次序只负责呈现，不作为连接身份 |
+| `ShaderGraphNodeInputSettings` / `ShaderGraphNodeOutputSettings` | `.ishader` 内的 Node Inputs / Node Outputs 设置；一个节点可声明多个输入和多个输出 |
+| `ShaderGraphNodeInterface` | 从节点图冻结的标题、创建目录、顺序、类型、领域 Role 和端口快照；调用图只保存中立快照与 Shader 资产引用 |
+| `ShaderGraphNodes.ReadInterface/Expand` | 校验节点图并递归展开引用；检测引用环、必填输入、输出缺值、属性冲突和重复端口，不保留 Asset/provider 实例 |
 | `ShaderGraphTemplates` | `CreateRaster(serialization, context)` 创建有效默认图，不新增第二种 Shader 资产格式 |
 | `ShaderGraphBindings` | `ChangeInput(graph, nodeId, settings, serialization, context)` 返回独立候选，原子调整输入节点与暴露参数契约，不修改传入图；未完成输入保留为可序列化内容，调用者将整个候选记录为一次 History 修改 |
 | `ShaderGraphBindings.RemoveNodes(graph, nodeIds, serialization, context)` | 返回删除候选，不修改原图；输出节点连同阶段内容删除，清理失去最后所有者的 Pass/绑定及已删除 Pass 的 Technique 映射；共享参数保留默认值并更新阶段可见性，其他未完成内容不做全图清洗 |
@@ -73,6 +78,23 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderGraphProgramResult` | 只读 `passes/diagnostics/succeeded`；成功降低不表示 Adapter 编译或 GPU 发布成功 |
 
 Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身封闭，语言和节点编译器直接通过各自接口发现，不要求重复的空 marker Attribute；端口呈现仍属于 Editor。
+
+## 图定义的可复用节点
+
+普通 Shader 作者不再需要为了组合节点编写 `IShaderNodeCompiler` 和专用 Inspector。用 File Browser 的
+**Create / Shader / Reusable Node** 建立普通 `.ishader`，在图中保留且仅保留一个 **Node Inputs**，并可为
+`Function` 节点增加一个 **Node Outputs**。两者都可声明任意数量的强类型端口；端口 ID 是持久连接身份，改名不会按位置误接旧边。
+保存后，该资产自动出现在其他 Shader 的 **Create / Graph Nodes** 菜单，目录和顺序由节点图自身的
+`createPath` / `createOrder` 决定。
+
+`Function` 节点在导入候选中递归内联，调用方默认值、子图属性声明、源码函数依赖和调用阶段一起进入同一
+authoring artifact。运行时只消费已编译程序，不加载、遍历或解释节点图。循环引用、缺少必填输入、无值输出、
+冲突资源声明会使当前导入/Check 明确失败，原始图仍保留用于修复。
+
+`DomainOutput` 用来定义领域终点，例如某插件的 Surface Output。它声明输入和稳定 `role`，没有通用引擎领域分支；
+插件 Target 只按 Role 识别该边界并把它展开成公共 Stage/IR。这样普通组合逻辑留在 `.ishader`，只有真正安排
+阶段接口、资源语义和领域 Contract 的部分需要 Target 代码。`IShaderNodeCompiler` 仍保留给无法由既有图与公共 IR
+表达的新原语，而不是每个便利节点的默认扩展方式。
 
 ## 脚本扩展边界
 

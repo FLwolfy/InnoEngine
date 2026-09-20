@@ -24,7 +24,12 @@ internal sealed class ShaderSourceDrawer(IInspectionIconProvider<AssetFileEntry>
     protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents))
-            new ShaderEditorCanvas(documents!, documents!.Open(target)).DrawInspector(context, []);
+        {
+            if (documents!.TryOpen(target, out ShaderEditorDocuments.Draft draft))
+                new ShaderEditorCanvas(documents, draft).DrawInspector(context, []);
+            else
+                UI.TextDisabled("Waiting for Shader asset import…");
+        }
     }
 }
 
@@ -52,7 +57,11 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
             Widget.ColoredText(EditorPalette.assetBreadcrumbText, "Node selection unavailable");
             return;
         }
-        ShaderEditorDocuments.Draft draft = documents.Open(entry);
+        if (!documents.TryOpen(entry, out ShaderEditorDocuments.Draft draft))
+        {
+            Widget.ColoredText(EditorPalette.assetBreadcrumbText, "Waiting for Shader asset import…");
+            return;
+        }
         if (target.nodes.Count == 1 && documents.Controller(draft).document.FindNode(target.nodes[0]) is GraphNodeRecord node)
             Widget.ColoredText(EditorPalette.assetBreadcrumbText, "Node: " + new ShaderEditorCanvas(documents, draft).Title(node));
         else
@@ -64,7 +73,10 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
         if (!documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) || info is null
             || !documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry))
         { UI.TextWrapped("Shader source unavailable. Selection identities are retained."); return; }
-        new ShaderEditorCanvas(documents, documents.Open(entry)).DrawInspector(context, target.nodes);
+        if (documents.TryOpen(entry, out ShaderEditorDocuments.Draft draft))
+            new ShaderEditorCanvas(documents, draft).DrawInspector(context, target.nodes);
+        else
+            UI.TextDisabled("Waiting for Shader asset import…");
     }
 }
 
@@ -80,6 +92,9 @@ internal sealed class ShaderAssetDrawer(IInspectionIconProvider<AssetFileEntry> 
     {
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null) return;
         if (!documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry)) return;
-        new ShaderEditorCanvas(documents, documents.Open(entry)).DrawInspector(context, []);
+        if (documents.TryOpen(entry, out ShaderEditorDocuments.Draft draft))
+            new ShaderEditorCanvas(documents, draft).DrawInspector(context, []);
+        else
+            UI.TextDisabled("Waiting for Shader asset import…");
     }
 }

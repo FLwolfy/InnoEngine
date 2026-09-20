@@ -113,29 +113,49 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private void DrawInspectorContents(IReadOnlyList<GraphNodeId> selected)
     {
         RefreshPorts();
-        Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views.");
+        bool graphNode = Controller.document.nodes.Any(static node => node.definitionId == ShaderGraphNodes.inputDefinitionId);
+        if (!graphNode)
         {
-            var preview = owner.Preview(draft);
-            if (preview is null)
+            Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views.");
             {
-                Widget.Hint("Run Check to build a preview for the current draft.");
+                var preview = owner.Preview(draft);
+                if (preview is null)
+                {
+                    Widget.Hint("Run Check to build a preview for the current draft.");
+                }
+                else if (preview.state == EditorShaderCompilationState.Failed)
+                {
+                    Widget.Hint("Shader check failed. See Console.");
+                }
+                else if (preview.state == EditorShaderCompilationState.Succeeded && preview.artifact is not null
+                    && owner.interactions.TryGetModule<Inno.Editor.Shaders.ShaderPreviews>(out var images) && images is not null)
+                {
+                    var shader = owner.assets.Load<Inno.Rendering.ShaderAsset>(draft.path);
+                    images.Draw(draft.id, new Inno.Rendering.MaterialAsset { shader = shader }, preview,
+                        MathF.Max(1f, MathF.Min(256f, UI.GetContentRegionAvail().X)));
+                }
             }
-            else if (preview.state == EditorShaderCompilationState.Failed)
+        }
+        else
+        {
+            Widget.SectionHeader("Graph Node", "Node Inputs and Node Outputs define the reusable typed interface. Check validates the interface; callers validate the inlined computation.");
+            try
             {
-                Widget.Hint("Shader check failed. See Console.");
+                ShaderGraphNodeInterface nodeInterface = ShaderGraphNodes.ReadInterface(Controller.document, owner.serialization, owner.context);
+                InspectorRow("graph-node.summary", "Interface", () => UI.TextDisabled(
+                    $"{nodeInterface.inputs.Length} input(s) · {nodeInterface.outputs.Length} output(s) · {nodeInterface.kind}"));
             }
-            else if (preview.state == EditorShaderCompilationState.Succeeded && preview.artifact is not null
-                && owner.interactions.TryGetModule<Inno.Editor.Shaders.ShaderPreviews>(out var images) && images is not null)
+            catch (Exception failure) when (failure is InvalidOperationException or ArgumentException or FormatException or NotSupportedException)
             {
-                var shader = owner.assets.Load<Inno.Rendering.ShaderAsset>(draft.path);
-                images.Draw(draft.id, new Inno.Rendering.MaterialAsset { shader = shader }, preview,
-                    MathF.Max(1f, MathF.Min(256f, UI.GetContentRegionAvail().X)));
+                Widget.Hint(failure.Message);
             }
         }
         if (selected.Count == 0)
         {
-            Widget.SectionHeader("Shader", "Target and public interface belong to this Shader, not to any Material override.");
-            DrawTarget();
+            Widget.SectionHeader(graphNode ? "Node Definition" : "Shader",
+                graphNode ? "Select Node Inputs or Node Outputs to edit this reusable node's public interface."
+                    : "Target and public interface belong to this Shader, not to any Material override.");
+            if (!graphNode) DrawTarget();
             if (Controller.document.metadata.ContainsKey(ShaderGraphDocument.definitionKey))
             {
                 var definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
@@ -419,7 +439,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         Vector4 headerColor = node.definitionId switch
         {
             ShaderGraphDocument.outputDefinitionId => EditorPalette.shaderOutputNodeHeader,
-            "inno.shader.stage-input" or "inno.shader.constant" => EditorPalette.shaderInputNodeHeader,
+            "inno.shader.stage-input" or "inno.shader.constant" or ShaderGraphNodes.inputDefinitionId => EditorPalette.shaderInputNodeHeader,
             _ => EditorPalette.shaderNodeHeader
         };
         draw.AddRectFilled(rect.min, new(rect.max.X, rect.min.Y + C_HEADER * zoom),
@@ -437,6 +457,13 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             if (Vector2.DistanceSquared(point, UI.GetMousePos()) <= 64)
                 Widget.DrawTooltip(port.type.id + (missing ? " · missing port; reconnect explicitly" : ""));
         }
+        if (draft.ports[node.id].Length == 0 && node.definitionId == ShaderGraphNodes.inputDefinitionId)
+            draw.AddText(
+                UI.GetFont(),
+                UI.GetFontSize() * zoom,
+                rect.min + new Vector2(12, C_HEADER + 8) * zoom,
+                UI.GetColorU32(ImGuiCol.TextDisabled),
+                "No caller inputs");
         if (draft.nodeErrors.TryGetValue(node.id, out string? error))
         {
             draw.AddCircleFilled(rect.min + new Vector2(C_WIDTH - 14, 16) * zoom, 4 * zoom, Color(1, 0.4f, 0.35f));
@@ -537,7 +564,13 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         return (min, min + new Vector2(C_WIDTH, C_HEADER + Rows(node) * C_ROW + ControlHeight(node) + 20) * Canvas.zoom);
     }
     private static float ControlHeight(GraphNodeRecord node) => 0f;
-    private int Rows(GraphNodeRecord node) => Math.Max(draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Input), draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
+    private int Rows(GraphNodeRecord node)
+    {
+        int rows = Math.Max(
+            draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Input),
+            draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
+        return rows == 0 && node.definitionId == ShaderGraphNodes.inputDefinitionId ? 1 : rows;
+    }
     private GraphNodeRecord? HitNode(Vector2 point) => Controller.document.nodes.Reverse().FirstOrDefault(node => Contains(Rect(node), point));
     private GraphEndpoint? HitPort(Vector2 point, Dictionary<GraphEndpoint, Vector2> ports)
     {
@@ -607,6 +640,13 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             string function = Read(node, "function", "");
             return function.Length == 0 ? "Source Function" : function;
         }
+        if (node.definitionId == ShaderGraphNodes.callDefinitionId)
+            return Read(node, ShaderGraphNodes.interfaceKey, new ShaderGraphNodeInterface()).displayName;
+        if (node.definitionId == ShaderGraphNodes.inputDefinitionId)
+            return Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings()).kind == ShaderGraphNodeKind.DomainOutput
+                ? "Domain Inputs"
+                : "Function Inputs";
+        if (node.definitionId == ShaderGraphNodes.outputDefinitionId) return "Function Outputs";
         return Widget.NicifyName(node.definitionId.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' '));
     }
 }

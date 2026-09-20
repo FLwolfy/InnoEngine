@@ -31,7 +31,8 @@ internal static class ShaderGraphAutoLayout
             .OrderBy(node => ShaderGraphDocument.Read(node, "settings", new ShaderGraphStageSettings(), serialization, context).stage)
             .ThenBy(static node => node.id.value, StringComparer.Ordinal).ToArray();
         if (outputs.Length == 0)
-            outputs = graph.nodes.Where(static node => node.definitionId.EndsWith("-output", StringComparison.Ordinal))
+            outputs = graph.nodes.Where(static node => node.definitionId == ShaderGraphNodes.outputDefinitionId
+                    || node.definitionId.EndsWith("-output", StringComparison.Ordinal))
                 .OrderBy(static node => node.id.value, StringComparer.Ordinal).ToArray();
         foreach (GraphNodeRecord output in outputs)
         {

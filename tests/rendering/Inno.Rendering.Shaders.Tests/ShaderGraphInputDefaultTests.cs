@@ -76,6 +76,63 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => value.Emit(new(), type));
     }
 
+    [Fact]
+    public void OptionalGraphNodeInputExpandsToTheRerouteInputDefault()
+    {
+        Guid sourceId = Guid.NewGuid();
+        GraphDocument child = ShaderGraphDocument.Create(
+            new ShaderDefinition("Optional Node", [], [], []),
+            m_serialization,
+            SerializationContext.empty);
+        var boundaryInput = new GraphNodeRecord(new("node-inputs"), ShaderGraphNodes.inputDefinitionId);
+        var boundaryOutput = new GraphNodeRecord(new("node-outputs"), ShaderGraphNodes.outputDefinitionId);
+        child.AddNode(boundaryInput);
+        child.AddNode(boundaryOutput);
+        var optional = new ShaderGraphNodePortDefinition
+        {
+            id = "offset",
+            type = new() { id = "float3" },
+            required = false
+        };
+        Set(boundaryInput, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings
+        {
+            displayName = "Optional Node",
+            kind = ShaderGraphNodeKind.Function,
+            ports = [optional]
+        });
+        Set(boundaryOutput, ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings
+        {
+            ports = [new() { id = "value", type = new() { id = "float3" } }]
+        });
+        child.AddEdge(new(
+            new("return"),
+            new(boundaryInput.id, new("offset")),
+            new(boundaryOutput.id, new("value"))));
+
+        GraphDocument parent = ShaderGraphDocument.Create(
+            new ShaderDefinition("Parent", [], [], []),
+            m_serialization,
+            SerializationContext.empty);
+        var call = new GraphNodeRecord(new("call"), ShaderGraphNodes.callDefinitionId);
+        parent.AddNode(call);
+        Set(call, "sourceId", sourceId);
+        Set(call, "sourcePath", "Optional.ishader");
+        Set(call, ShaderGraphNodes.interfaceKey, ShaderGraphNodes.ReadInterface(
+            child,
+            m_serialization,
+            SerializationContext.empty));
+
+        GraphDocument expanded = ShaderGraphNodes.Expand(
+            parent,
+            (id, _) => id == sourceId ? child : throw new InvalidOperationException(),
+            m_serialization,
+            SerializationContext.empty);
+        GraphNodeRecord value = Assert.Single(expanded.nodes);
+        Assert.Equal("inno.shader.reroute", value.definitionId);
+        Assert.True(value.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "input", out _));
+        Assert.False(value.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "value", out _));
+    }
+
     private ShaderGraphLoweringResult Lower(GraphDocument graph, ShaderNodeCompilerCatalog catalog)
         => catalog.Lower(new(graph, new Dictionary<string, GraphEndpoint> { ["value"] = new(new("multiply"), new("value")) }, "test.defaults"), m_serialization, SerializationContext.empty);
 

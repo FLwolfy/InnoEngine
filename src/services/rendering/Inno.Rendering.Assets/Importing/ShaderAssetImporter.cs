@@ -27,16 +27,27 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         byte[] captured;
         try
         {
-            captured = ShaderGraphArtifact.Capture(graph, context.types, context.serialization, owner, (id, path) =>
-            {
-                context.DependsOnArtifact(id);
-                AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderFunctionAsset>(),
-                    path, typeof(ShaderFunctionAsset), $"shader.sources[{id}]");
-                if (resolved is not ShaderFunctionAsset { isMissing: false } source)
-                    throw new InvalidDataException($"Shader function '{id}' is unavailable. Its graph reference is preserved.");
-                using ArtifactLease sourceLease = context.AcquireArtifact(source.identity.persistentId, ShaderSourceBundle.outputName);
-                return File.ReadAllBytes(sourceLease.info.absolutePath);
-            }, cancellationToken);
+            captured = ShaderGraphArtifact.Capture(graph, context.types, context.serialization, owner,
+                (id, path) =>
+                {
+                    context.DependsOnArtifact(id);
+                    AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderFunctionAsset>(),
+                        path, typeof(ShaderFunctionAsset), $"shader.sources[{id}]");
+                    if (resolved is not ShaderFunctionAsset { isMissing: false } source)
+                        throw new InvalidDataException($"Shader function '{id}' is unavailable. Its graph reference is preserved.");
+                    using ArtifactLease sourceLease = context.AcquireArtifact(source.identity.persistentId, ShaderSourceBundle.outputName);
+                    return File.ReadAllBytes(sourceLease.info.absolutePath);
+                }, cancellationToken,
+                (id, path) =>
+                {
+                    context.DependsOnArtifact(id);
+                    AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderAsset>(),
+                        path, typeof(ShaderAsset), $"shader.graphNodes[{id}]");
+                    if (resolved is not ShaderAsset { isMissing: false } node)
+                        throw new InvalidDataException($"Shader graph node '{id}' is unavailable. Its graph reference is preserved.");
+                    using ArtifactLease graphLease = context.AcquireArtifact(node.identity.persistentId, ShaderGraphArtifact.outputName);
+                    return ShaderGraphArtifact.ReadDocument(File.ReadAllBytes(graphLease.info.absolutePath), context.serialization);
+                });
         }
         catch (ShaderTargetUnavailableException exception)
         {

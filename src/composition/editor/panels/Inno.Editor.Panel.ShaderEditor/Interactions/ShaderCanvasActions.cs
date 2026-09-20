@@ -20,6 +20,7 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
     {
         if (context.target is not AssetFileEntry entry || !documents.TryGet(entry, out var draft)) return;
         builder.AddGroup("Create/Functions", order: 500, separatorBefore: true);
+        builder.AddGroup("Create/Graph Nodes", order: 550, separatorBefore: true);
         builder.AddGroup("Create/Domain Outputs", order: 800, separatorBefore: true);
         bool explicitStages = ShaderGraphDocument.ReadTarget(documents.Controller(draft).document, documents.serialization, documents.context).Length == 0;
         if (draft.createFromPort is null && explicitStages)
@@ -29,7 +30,8 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
             builder.Add("Create/Outputs/Compute Output", "shader/create-output", order: 20, argument: "Compute");
         }
         foreach (string definition in documents.nodes.definitionIds)
-            if (definition != "inno.shader.source" && documents.CanCreate(draft, new(definition)))
+            if (definition is not ("inno.shader.source" or ShaderGraphNodes.callDefinitionId)
+                && documents.CanCreate(draft, new(definition)))
             {
                 string category = Category(definition);
                 int order = CategoryOrder(category);
@@ -68,6 +70,27 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
                             order: 500 + library.catalogOrder,
                             argument: new ShaderNodeCreation("inno.shader.source", info.persistentId, function));
                     }
+        foreach (AssetFileEntry source in documents.assets.GetFileSystemEntries(includeDirectories: false)
+                     .Where(static entry => entry.extension == ".ishader")
+                     .OrderBy(static entry => entry.assetPath.ToString(), StringComparer.Ordinal))
+        {
+            if (!documents.assets.TryGetInfo(source.assetPath, out AssetInfo? info) || info is null
+                || info.persistentId == draft.id || info.status != AssetImportStatus.Imported)
+                continue;
+            ShaderGraphNodeInterface nodeInterface;
+            try { nodeInterface = documents.LoadGraphNodeInterface(info.persistentId); }
+            catch (Exception failure) when ((failure is InvalidOperationException or ArgumentException or FormatException)
+                && Inno.Core.Execution.RetirementPendingException.Find(failure) is null) { continue; }
+            var creation = new ShaderNodeCreation(ShaderGraphNodes.callDefinitionId, info.persistentId);
+            if (!documents.CanCreate(draft, creation)) continue;
+            string catalog = NormalizeCatalog(nodeInterface.createPath);
+            string root = nodeInterface.kind == ShaderGraphNodeKind.DomainOutput ? "Domain Outputs" : "Graph Nodes";
+            string group = "Create/" + root + (catalog.Length == 0 ? "" : "/" + catalog);
+            builder.AddGroup(group, order: nodeInterface.createOrder,
+                separatorBefore: nodeInterface.kind == ShaderGraphNodeKind.DomainOutput);
+            builder.Add(group + "/" + nodeInterface.displayName, "shader/create-node",
+                order: nodeInterface.createOrder, argument: creation);
+        }
         builder.Add("View/Focus Selection", "shader/focus", order: 900);
         builder.Add("Edit/Copy", "shader/copy", order: 1000);
         builder.Add("Edit/Cut", "shader/cut", order: 110);
@@ -85,6 +108,7 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
         static string Category(string definition) => definition switch
         {
             "inno.shader.constant" or "inno.shader.stage-input" => "Inputs",
+            ShaderGraphNodes.inputDefinitionId or ShaderGraphNodes.outputDefinitionId => "Interface",
             "inno.shader.sample" => "Textures",
             "inno.shader.binary" or "inno.shader.construct" or "inno.shader.extract" or "inno.shader.select" => "Math",
             "inno.shader.storage-load" or "inno.shader.storage-store" or "inno.shader.storage-atomic-add" => "Resources",
@@ -97,6 +121,7 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
         static int CategoryOrder(string category) => category switch
         {
             "Outputs" => 0,
+            "Interface" => 50,
             "Inputs" => 100,
             "Textures" => 200,
             "Math" => 300,

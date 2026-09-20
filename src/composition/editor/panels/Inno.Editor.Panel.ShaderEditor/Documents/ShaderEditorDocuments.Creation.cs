@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Inno.Assets;
 using Inno.Core.Graphs;
+using Inno.Rendering;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Shaders;
 
@@ -30,6 +31,12 @@ internal sealed partial class ShaderEditorDocuments
             node.SetValue("settings", ShaderGraphDocument.Encode(new ShaderGraphInputSettings
             { id = name, kind = ShaderIrInputKind.Uniform, type = new() { id = "float4" }, semantic = "" }, serialization, context));
         }
+        else if (creation.definitionId == ShaderGraphNodes.inputDefinitionId)
+            node.SetValue(ShaderGraphDocument.settingsKey,
+                ShaderGraphDocument.Encode(new ShaderGraphNodeInputSettings(), serialization, context));
+        else if (creation.definitionId == ShaderGraphNodes.outputDefinitionId)
+            node.SetValue(ShaderGraphDocument.settingsKey,
+                ShaderGraphDocument.Encode(new ShaderGraphNodeOutputSettings(), serialization, context));
         if (draft.createFromPort is GraphEndpoint source)
         {
             ShaderNodePort port = draft.ports[source.nodeId].Single(value => value.id == source.portId.value);
@@ -39,11 +46,18 @@ internal sealed partial class ShaderEditorDocuments
         }
         if (creation.sourceId != Guid.Empty)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(creation.function);
-            if (!assets.TryGetInfo(creation.sourceId, out AssetInfo? info) || info is null) throw new IOException("Source function is unavailable.");
+            if (!assets.TryGetInfo(creation.sourceId, out AssetInfo? info) || info is null)
+                throw new IOException("Referenced Shader authoring asset is unavailable.");
             node.SetValue("sourceId", ShaderGraphDocument.Encode(creation.sourceId, serialization, context));
             node.SetValue("sourcePath", ShaderGraphDocument.Encode(info.assetPath.ToString(), serialization, context));
-            node.SetValue("function", ShaderGraphDocument.Encode(creation.function, serialization, context));
+            if (creation.definitionId == "inno.shader.source")
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(creation.function);
+                node.SetValue("function", ShaderGraphDocument.Encode(creation.function, serialization, context));
+            }
+            else if (creation.definitionId == ShaderGraphNodes.callDefinitionId)
+                node.SetValue(ShaderGraphNodes.interfaceKey,
+                    ShaderGraphDocument.Encode(LoadGraphNodeInterface(creation.sourceId), serialization, context));
         }
         return node;
     }
@@ -66,7 +80,37 @@ internal sealed partial class ShaderEditorDocuments
                 implementation = function.implementationId;
             }
         }
-        return nodes.DescribePorts(node, serialization, context, module, implementation, input);
+        GraphNodeRecord described = node;
+        if (node.definitionId == ShaderGraphNodes.callDefinitionId)
+        {
+            Guid id = ShaderGraphDocument.Read(node, "sourceId", Guid.Empty, serialization, context);
+            if (id != Guid.Empty && TryLoadGraphNodeInterface(id, out ShaderGraphNodeInterface? nodeInterface))
+            {
+                described = new GraphNodeRecord(node.id, node.definitionId) { position = node.position };
+                foreach ((string key, GraphSerializedValue value) in node.values) described.SetValue(key, value);
+                described.SetValue(ShaderGraphNodes.interfaceKey,
+                    ShaderGraphDocument.Encode(nodeInterface!, serialization, context));
+            }
+        }
+        return nodes.DescribePorts(described, serialization, context, module, implementation, input);
+    }
+
+    internal ShaderGraphNodeInterface LoadGraphNodeInterface(Guid id)
+    {
+        return TryLoadGraphNodeInterface(id, out ShaderGraphNodeInterface? nodeInterface)
+            ? nodeInterface!
+            : throw new InvalidOperationException("Graph node Shader is unavailable or has import diagnostics.");
+    }
+
+    private bool TryLoadGraphNodeInterface(Guid id, out ShaderGraphNodeInterface? nodeInterface)
+    {
+        nodeInterface = null;
+        if (!assets.TryGetInfo(id, out AssetInfo? info) || info is null || info.status != AssetImportStatus.Imported
+            || !assets.TryLoad(id, out ShaderAsset? shader) || shader is null || shader.isMissing)
+            return false;
+        GraphDocument graph = ShaderGraphArtifact.ReadDocument(ShaderGraphArtifact.Read(shader, assets), serialization);
+        nodeInterface = ShaderGraphNodes.ReadInterface(graph, serialization, context);
+        return true;
     }
 
     internal ShaderNodePort? CompatibleInput(Draft draft, GraphNodeRecord node)
@@ -79,6 +123,8 @@ internal sealed partial class ShaderEditorDocuments
     internal bool CanCreate(Draft draft, ShaderNodeCreation creation)
     {
         if (draft.readOnly) return false;
+        if (creation.definitionId is ShaderGraphNodes.inputDefinitionId or ShaderGraphNodes.outputDefinitionId
+            && Controller(draft).document.nodes.Any(node => node.definitionId == creation.definitionId)) return false;
         if (draft.createFromPort is null) return true;
         try { return CompatibleInput(draft, PrepareNode(draft, creation)) is not null; }
         catch (Exception failure) when ((failure is InvalidOperationException or ArgumentException or IOException or FormatException) && Inno.Core.Execution.RetirementPendingException.Find(failure) is null) { return false; }

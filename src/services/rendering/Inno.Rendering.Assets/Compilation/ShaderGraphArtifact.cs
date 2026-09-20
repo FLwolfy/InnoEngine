@@ -22,15 +22,18 @@ public static class ShaderGraphArtifact
     /// <param name="serialization">Owner converters.</param>
     /// <param name="context">Complete owner reference and dependency context.</param>
     /// <param name="readSource">Reads an immutable function bundle by stable identity and diagnostic last-known path.</param>
-    /// <param name="cancellationToken">Cancellation before target expansion and dependency reads.</param>
+    /// <param name="cancellationToken">Cancellation before node expansion, target expansion and dependency reads.</param>
+    /// <param name="readGraph">Reads an authored Shader graph used as a reusable node, when the graph contains one.</param>
     /// <returns>Native immutable authoring artifact bytes usable by import or isolated preview compilation.</returns>
     public static byte[] Capture(GraphDocument graph, TypeCatalog types, SerializationRegistry serialization,
-        SerializationContext context, Func<Guid, string, byte[]> readSource, CancellationToken cancellationToken = default)
+        SerializationContext context, Func<Guid, string, byte[]> readSource,
+        CancellationToken cancellationToken = default, Func<Guid, string, GraphDocument>? readGraph = null)
     {
         ArgumentNullException.ThrowIfNull(readSource);
         using IDisposable operation = types.AcquireOperation("Capture shader authoring candidate");
         using var targets = new ShaderTargetRegistry(types);
-        GraphDocument program = targets.Expand(graph, serialization, context, cancellationToken);
+        GraphDocument expanded = ShaderGraphNodes.Expand(graph, readGraph ?? MissingGraphResolver, serialization, context);
+        GraphDocument program = targets.Expand(expanded, serialization, context, cancellationToken);
         var sources = new Dictionary<GraphNodeId, byte[]>();
         foreach (GraphNodeRecord node in program.nodes)
         {
@@ -43,6 +46,10 @@ public static class ShaderGraphArtifact
         }
         return Encode(graph, sources, serialization, program);
     }
+
+    private static GraphDocument MissingGraphResolver(Guid id, string path)
+        => throw new InvalidOperationException(
+            $"Shader graph node '{id}' at '{path}' requires a graph resolver during artifact capture.");
 
     /// <summary>Reads the target-expanded runtime interface from the same frozen candidate as its computations.</summary>
     /// <param name="bytes">Immutable captured authoring artifact.</param>

@@ -59,6 +59,15 @@ internal sealed partial class ShaderEditorCanvas
             case "inno.shader.source":
                 Source(node);
                 break;
+            case ShaderGraphNodes.callDefinitionId:
+                GraphCall(node);
+                break;
+            case ShaderGraphNodes.inputDefinitionId:
+                GraphInputs(node);
+                break;
+            case ShaderGraphNodes.outputDefinitionId:
+                GraphOutputs(node);
+                break;
             case ShaderGraphDocument.outputDefinitionId:
                 Output(node);
                 break;
@@ -81,6 +90,173 @@ internal sealed partial class ShaderEditorCanvas
                 UI.TextDisabled("Extension node");
                 break;
         }
+    }
+
+    private void GraphCall(GraphNodeRecord node)
+    {
+        Guid selected = Read(node, "sourceId", Guid.Empty);
+        string path = Read(node, "sourcePath", "");
+        ShaderGraphNodeInterface nodeInterface = Read(node, ShaderGraphNodes.interfaceKey, new ShaderGraphNodeInterface());
+        InspectorRow("graph-node.asset", "Node Graph", () =>
+        {
+            if (!Widget.BeginBoundedCombo("##graph-node", selected == Guid.Empty ? "Choose Shader node…" : System.IO.Path.GetFileName(path))) return;
+            try
+            {
+                foreach (AssetFileEntry entry in owner.assets.GetFileSystemEntries(includeDirectories: false)
+                             .Where(static entry => entry.extension == ".ishader")
+                             .OrderBy(static entry => entry.assetPath.ToString(), StringComparer.Ordinal))
+                {
+                    Guid id = owner.AssetId(entry);
+                    if (id == draft.id) continue;
+                    ShaderGraphNodeInterface candidate;
+                    try { candidate = owner.LoadGraphNodeInterface(id); }
+                    catch (Exception failure) when ((failure is InvalidOperationException or ArgumentException or FormatException)
+                        && Inno.Core.Execution.RetirementPendingException.Find(failure) is null) { continue; }
+                    if (!UI.Selectable(candidate.displayName + "  ·  " + entry.assetPath.localPath, id == selected)) continue;
+                    using var transaction = owner.interactions.history.BeginTransaction("Assign Graph Node");
+                    Set(node, "sourceId", id);
+                    Set(node, "sourcePath", entry.assetPath.ToString());
+                    Set(node, ShaderGraphNodes.interfaceKey, candidate);
+                    transaction.Commit();
+                    selected = id;
+                    path = entry.assetPath.ToString();
+                    nodeInterface = candidate;
+                }
+            }
+            finally { UI.EndCombo(); }
+        });
+        Widget.DrawItemTooltip(path);
+        InspectorRow("graph-node.kind", "Kind", () => UI.TextDisabled(nodeInterface.kind.ToString()));
+        if (nodeInterface.kind == ShaderGraphNodeKind.DomainOutput)
+            InspectorRow("graph-node.role", "Target Role", () => UI.TextDisabled(nodeInterface.role));
+        RepairPorts(node);
+    }
+
+    private void GraphInputs(GraphNodeRecord node)
+    {
+        ShaderGraphNodeInputSettings settings = Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings());
+        string displayName = settings.displayName;
+        InspectorRow("node-interface.name", "Node Name", () =>
+        {
+            bool changed = UI.InputText("##name", ref displayName, 256);
+            Gesture();
+            if (changed) { settings.displayName = displayName; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
+        });
+        string createPath = settings.createPath;
+        InspectorRow("node-interface.catalog", "Catalog", () =>
+        {
+            bool changed = UI.InputText("##catalog", ref createPath, 256);
+            Gesture();
+            if (changed) { settings.createPath = createPath; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
+        });
+        int createOrder = settings.createOrder;
+        InspectorRow("node-interface.order", "Order", () =>
+        {
+            bool changed = UI.InputInt("##order", ref createOrder);
+            Gesture();
+            if (changed) { settings.createOrder = createOrder; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
+        });
+        InspectorRow("node-interface.kind", "Kind", () =>
+        {
+            if (!Widget.BeginBoundedCombo("##kind", settings.kind.ToString())) return;
+            try
+            {
+                foreach (ShaderGraphNodeKind kind in Enum.GetValues<ShaderGraphNodeKind>())
+                    if (UI.Selectable(kind.ToString(), settings.kind == kind))
+                    { settings.kind = kind; Set(node, ShaderGraphDocument.settingsKey, settings); }
+            }
+            finally { UI.EndCombo(); }
+        });
+        if (settings.kind == ShaderGraphNodeKind.DomainOutput)
+        {
+            string role = settings.role;
+            InspectorRow("node-interface.role", "Target Role", () =>
+            {
+                bool changed = UI.InputText("##role", ref role, 256);
+                Gesture();
+                if (changed) { settings.role = role; Set(node, ShaderGraphDocument.settingsKey, settings, true); }
+            });
+        }
+        GraphPorts(node, settings.ports, inputs: true, ports =>
+        {
+            settings.ports = ports;
+            Set(node, ShaderGraphDocument.settingsKey, settings);
+        });
+    }
+
+    private void GraphOutputs(GraphNodeRecord node)
+    {
+        ShaderGraphNodeOutputSettings settings = Read(node, ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings());
+        GraphPorts(node, settings.ports, inputs: false, ports =>
+        {
+            settings.ports = ports;
+            Set(node, ShaderGraphDocument.settingsKey, settings);
+        });
+    }
+
+    private void GraphPorts(GraphNodeRecord node, ShaderGraphNodePortDefinition[] ports, bool inputs,
+        Action<ShaderGraphNodePortDefinition[]> apply)
+    {
+        UI.SeparatorText(inputs ? "Inputs" : "Outputs");
+        for (int index = 0; index < ports.Length; index++)
+        {
+            UI.PushID(index);
+            try
+            {
+                ShaderGraphNodePortDefinition port = ports[index];
+                string id = port.id;
+                InspectorRow("node-port.id", "Port " + (index + 1), () =>
+                {
+                    bool changed = UI.InputText("##id", ref id, 128);
+                    Gesture();
+                    if (changed)
+                    {
+                        ShaderGraphNodePortDefinition[] changedPorts = ports.ToArray();
+                        changedPorts[index] = new() { id = id, type = port.type, required = port.required };
+                        apply(changedPorts);
+                    }
+                });
+                InspectorRow("node-port.type", "Type", () =>
+                {
+                    if (!Widget.BeginBoundedCombo("##type", port.type.id)) return;
+                    try
+                    {
+                        foreach (string type in new[] { "float", "float2", "float3", "float4", "int", "int2", "int3", "int4", "uint", "uint2", "uint3", "uint4", "bool", "float3x3", "float4x4", "sampled-texture2d", "sampled-texture2d-array", "sampled-texture3d", "sampled-texture-cube" })
+                            if (UI.Selectable(type, port.type.id == type))
+                            {
+                                ShaderGraphNodePortDefinition[] changedPorts = ports.ToArray();
+                                changedPorts[index] = new() { id = port.id, type = new() { id = type }, required = port.required };
+                                apply(changedPorts);
+                            }
+                    }
+                    finally { UI.EndCombo(); }
+                });
+                if (inputs)
+                {
+                    bool required = port.required;
+                    InspectorRow("node-port.required", "Required", () =>
+                    {
+                        if (!UI.Checkbox("##required", ref required)) return;
+                        ShaderGraphNodePortDefinition[] changedPorts = ports.ToArray();
+                        changedPorts[index] = new() { id = port.id, type = port.type, required = required };
+                        apply(changedPorts);
+                    });
+                }
+                InspectorRow("node-port.remove", "", () =>
+                {
+                    if (UI.SmallButton("Remove")) apply(ports.Where((_, item) => item != index).ToArray());
+                });
+            }
+            finally { UI.PopID(); }
+        }
+        if (UI.Button(inputs ? "Add Input" : "Add Output"))
+        {
+            string prefix = inputs ? "input" : "output";
+            string id = prefix;
+            for (int suffix = 2; ports.Any(port => port.id == id); suffix++) id = prefix + suffix;
+            apply([.. ports, new() { id = id, type = new() { id = "float" }, required = inputs }]);
+        }
+        RepairPorts(node);
     }
 
     private void Scalar(GraphNodeRecord node)

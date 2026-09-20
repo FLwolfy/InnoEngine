@@ -137,7 +137,11 @@ public sealed class ShaderNodeCompilerCatalog
                         Error("SHADER_GRAPH_DEFAULT_TYPE", "The input default has an obsolete type; reset it explicitly.", endpoint.nodeId, port.id);
                     else inputDefaults.Add(endpoint, value);
                 }
-                else if (port.required) Error("SHADER_GRAPH_INPUT_REQUIRED", "A required input is not connected and has no explicit default.", endpoint.nodeId, endpoint.portId.value);
+                else if (port.required) Error(
+                    "SHADER_GRAPH_INPUT_REQUIRED",
+                    $"Required input '{endpoint.portId.value}' on node '{endpoint.nodeId.value}' is not connected and has no explicit default.",
+                    endpoint.nodeId,
+                    endpoint.portId.value);
             }
             activeNode = null;
             foreach ((string name, GraphEndpoint endpoint) in request.outputs)

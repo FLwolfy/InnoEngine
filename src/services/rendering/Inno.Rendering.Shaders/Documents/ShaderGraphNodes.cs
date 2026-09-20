@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Inno.Core.Graphs;
+using Inno.Core.Serialization;
+
+namespace Inno.Rendering.Shaders;
+
+/// <summary>Chooses whether a graph-authored node is inlined or consumed by a domain Target.</summary>
+public enum ShaderGraphNodeKind
+{
+    /// <summary>Inlines the node graph into the caller before Target expansion and typed lowering.</summary>
+    Function,
+    /// <summary>Leaves the node as a typed domain boundary for the selected Shader Target.</summary>
+    DomainOutput
+}
+
+/// <summary>Declares one stable, typed port on a graph-authored node interface.</summary>
+public sealed class ShaderGraphNodePortDefinition : ISerializable
+{
+    /// <summary>Gets or sets the stable node-local port identity.</summary>
+    [SerializableProperty] public string id { get; set; } = "value";
+    /// <summary>Gets or sets the complete backend-neutral value type.</summary>
+    [SerializableProperty] public ShaderGraphType type { get; set; } = new() { id = "float" };
+    /// <summary>Gets or sets whether callers must connect the input instead of using an explicit/default zero.</summary>
+    [SerializableProperty] public bool required { get; set; } = true;
+
+    internal ShaderNodePort ToPort(GraphPortDirection direction)
+        => new(id, type.CreateType(), direction, direction == GraphPortDirection.Input && required);
+}
+
+/// <summary>Stores the public identity, catalog placement and input ports of a graph-authored node.</summary>
+public sealed class ShaderGraphNodeInputSettings : ISerializable
+{
+    /// <summary>Gets or sets the node title displayed to authors.</summary>
+    [SerializableProperty] public string displayName { get; set; } = "Graph Node";
+    /// <summary>Gets or sets the slash-separated creation catalog beneath Graph Nodes.</summary>
+    [SerializableProperty] public string createPath { get; set; } = "General";
+    /// <summary>Gets or sets the deterministic order within the creation catalog.</summary>
+    [SerializableProperty] public int createOrder { get; set; }
+    /// <summary>Gets or sets how a reference to this graph participates in compilation.</summary>
+    [SerializableProperty] public ShaderGraphNodeKind kind { get; set; }
+    /// <summary>Gets or sets the domain role consumed by a Target; empty for ordinary inline functions.</summary>
+    [SerializableProperty] public string role { get; set; } = "";
+    /// <summary>Gets or sets values supplied by callers and exposed as outputs inside the node graph.</summary>
+    [SerializableProperty] public ShaderGraphNodePortDefinition[] ports { get; set; } = [];
+}
+
+/// <summary>Stores values returned by a graph-authored function node.</summary>
+public sealed class ShaderGraphNodeOutputSettings : ISerializable
+{
+    /// <summary>Gets or sets values collected inside the node graph and exposed as outputs to callers.</summary>
+    [SerializableProperty] public ShaderGraphNodePortDefinition[] ports { get; set; } = [];
+}
+
+/// <summary>Freezes the complete public interface resolved from one graph-authored node asset.</summary>
+public sealed class ShaderGraphNodeInterface : ISerializable
+{
+    /// <summary>Gets or sets the node title displayed to authors.</summary>
+    [SerializableProperty] public string displayName { get; set; } = "Graph Node";
+    /// <summary>Gets or sets the slash-separated creation catalog beneath Graph Nodes.</summary>
+    [SerializableProperty] public string createPath { get; set; } = "General";
+    /// <summary>Gets or sets the deterministic order within the creation catalog.</summary>
+    [SerializableProperty] public int createOrder { get; set; }
+    /// <summary>Gets or sets whether the graph is inline computation or a Target-owned output boundary.</summary>
+    [SerializableProperty] public ShaderGraphNodeKind kind { get; set; }
+    /// <summary>Gets or sets the Target-owned role for a domain output.</summary>
+    [SerializableProperty] public string role { get; set; } = "";
+    /// <summary>Gets or sets externally supplied inputs.</summary>
+    [SerializableProperty] public ShaderGraphNodePortDefinition[] inputs { get; set; } = [];
+    /// <summary>Gets or sets externally visible results.</summary>
+    [SerializableProperty] public ShaderGraphNodePortDefinition[] outputs { get; set; } = [];
+
+    /// <summary>Gets detached typed ports in deterministic input-then-output order.</summary>
+    /// <returns>A provider-free port snapshot suitable for Editor presentation and validation.</returns>
+    public IReadOnlyList<ShaderNodePort> GetPorts()
+        => inputs.Select(static value => value.ToPort(GraphPortDirection.Input))
+            .Concat(outputs.Select(static value => value.ToPort(GraphPortDirection.Output)))
+            .ToArray();
+}
+
+/// <summary>Reads and expands reusable node graphs without retaining assets or provider instances.</summary>
+public static class ShaderGraphNodes
+{
+    /// <summary>Identifies the single multi-port node-input interface record.</summary>
+    public const string inputDefinitionId = "inno.shader.node-inputs";
+    /// <summary>Identifies the optional multi-port node-output interface record.</summary>
+    public const string outputDefinitionId = "inno.shader.node-outputs";
+    /// <summary>Identifies a reference to another Shader graph used as a node.</summary>
+    public const string callDefinitionId = "inno.shader.graph-node";
+    /// <summary>Identifies the serialized interface snapshot retained by a graph-node reference.</summary>
+    public const string interfaceKey = "interface";
+
+    /// <summary>Reads and validates the public node interface declared by a Shader graph.</summary>
+    /// <param name="graph">Detached graph asset source.</param>
+    /// <param name="serialization">Owner converter registry.</param>
+    /// <param name="context">Complete owner reference context.</param>
+    /// <returns>The detached graph-node interface.</returns>
+    public static ShaderGraphNodeInterface ReadInterface(GraphDocument graph, SerializationRegistry serialization,
+        SerializationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        if (ShaderGraphDocument.ReadTarget(graph, serialization, context).Length != 0)
+            throw new InvalidOperationException("A graph-authored node cannot select a Shader Target.");
+        if (graph.nodes.Any(static node => node.definitionId == ShaderGraphDocument.outputDefinitionId))
+            throw new InvalidOperationException("A graph-authored node cannot contain explicit GPU stage outputs.");
+        GraphNodeRecord[] inputs = graph.nodes.Where(static node => node.definitionId == inputDefinitionId).ToArray();
+        GraphNodeRecord[] outputs = graph.nodes.Where(static node => node.definitionId == outputDefinitionId).ToArray();
+        if (inputs.Length != 1) throw new InvalidOperationException("A graph-authored node requires exactly one Node Inputs record.");
+        ShaderGraphNodeInputSettings input = ShaderGraphDocument.Read(inputs[0], ShaderGraphDocument.settingsKey,
+            new ShaderGraphNodeInputSettings(), serialization, context);
+        ShaderGraphNodeOutputSettings output = outputs.Length switch
+        {
+            0 => new(),
+            1 => ShaderGraphDocument.Read(outputs[0], ShaderGraphDocument.settingsKey,
+                new ShaderGraphNodeOutputSettings(), serialization, context),
+            _ => throw new InvalidOperationException("A graph-authored node can contain at most one Node Outputs record.")
+        };
+        var result = new ShaderGraphNodeInterface
+        {
+            displayName = input.displayName,
+            createPath = input.createPath,
+            createOrder = input.createOrder,
+            kind = input.kind,
+            role = input.role,
+            inputs = input.ports,
+            outputs = output.ports
+        };
+        Validate(result, outputs.Length);
+        return result;
+    }
+
+    /// <summary>Reads the current interface snapshot stored on a graph-node reference.</summary>
+    /// <param name="node">Graph-node reference.</param>
+    /// <param name="serialization">Owner converter registry.</param>
+    /// <param name="context">Complete owner reference context.</param>
+    /// <returns>The detached stored interface.</returns>
+    public static ShaderGraphNodeInterface ReadCallInterface(GraphNodeRecord node, SerializationRegistry serialization,
+        SerializationContext context)
+    {
+        ShaderGraphNodeInterface result = ShaderGraphDocument.Read(
+            node, interfaceKey, new ShaderGraphNodeInterface(), serialization, context);
+        Validate(result, result.kind == ShaderGraphNodeKind.Function ? 1 : 0);
+        return result;
+    }
+
+    /// <summary>Expands every inline graph-node reference and refreshes domain-output interfaces.</summary>
+    /// <param name="graph">Authored parent graph.</param>
+    /// <param name="resolve">Resolves a referenced Shader graph by persistent identity and diagnostic path.</param>
+    /// <param name="serialization">Owner converter registry.</param>
+    /// <param name="context">Complete owner reference context.</param>
+    /// <returns>A detached graph containing no inline graph-node references.</returns>
+    public static GraphDocument Expand(GraphDocument graph, Func<Guid, string, GraphDocument> resolve,
+        SerializationRegistry serialization, SerializationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(resolve);
+        GraphDocument expanded = graph.Clone();
+        Expand(expanded, resolve, serialization, context, []);
+        return expanded;
+    }
+
+    private static void Expand(GraphDocument graph, Func<Guid, string, GraphDocument> resolve,
+        SerializationRegistry serialization, SerializationContext context, HashSet<Guid> stack)
+    {
+        var retainedDomainOutputs = new HashSet<GraphNodeId>();
+        while (graph.nodes.FirstOrDefault(node => node.definitionId == callDefinitionId
+                   && !retainedDomainOutputs.Contains(node.id)) is { } call)
+        {
+            Guid sourceId = ShaderGraphDocument.Read(call, "sourceId", Guid.Empty, serialization, context);
+            string sourcePath = ShaderGraphDocument.Read(call, "sourcePath", "", serialization, context);
+            if (sourceId == Guid.Empty) throw new InvalidOperationException("A graph-node reference has no Shader asset identity.");
+            if (!stack.Add(sourceId)) throw new InvalidOperationException($"Graph-node references contain a cycle at '{sourcePath}'.");
+            GraphDocument child = resolve(sourceId, sourcePath).Clone();
+            ShaderGraphNodeInterface nodeInterface = ReadInterface(child, serialization, context);
+            if (nodeInterface.kind == ShaderGraphNodeKind.DomainOutput)
+            {
+                call.SetValue(interfaceKey, ShaderGraphDocument.Encode(nodeInterface, serialization, context));
+                retainedDomainOutputs.Add(call.id);
+                stack.Remove(sourceId);
+                continue;
+            }
+            Expand(child, resolve, serialization, context, stack);
+            stack.Remove(sourceId);
+            Inline(graph, call, child, nodeInterface, serialization, context);
+        }
+    }
+
+    private static void Inline(GraphDocument parent, GraphNodeRecord call, GraphDocument child,
+        ShaderGraphNodeInterface nodeInterface, SerializationRegistry serialization, SerializationContext context)
+    {
+        GraphNodeRecord inputNode = child.nodes.Single(static node => node.definitionId == inputDefinitionId);
+        GraphNodeRecord outputNode = child.nodes.Single(static node => node.definitionId == outputDefinitionId);
+        string stage = ShaderGraphDocument.Read(call, ShaderGraphDocument.stageKey, "", serialization, context);
+        MergeDefinition(parent, child, stage, serialization, context);
+        var map = new Dictionary<GraphNodeId, GraphNodeId>();
+        foreach (GraphNodeRecord node in child.nodes.Where(node => node.id != inputNode.id && node.id != outputNode.id))
+        {
+            var mapped = new GraphNodeId(call.id.value + "/" + node.id.value);
+            if (parent.FindNode(mapped) is not null) throw new InvalidOperationException($"Inlining '{nodeInterface.displayName}' produced duplicate node identity '{mapped.value}'.");
+            var copy = new GraphNodeRecord(mapped, node.definitionId) { position = new(call.position.x + node.position.x, call.position.y + node.position.y) };
+            foreach ((string key, GraphSerializedValue value) in node.values) copy.SetValue(key, value);
+            if (stage.Length != 0) copy.SetValue(ShaderGraphDocument.stageKey, ShaderGraphDocument.Encode(stage, serialization, context));
+            parent.AddNode(copy);
+            map.Add(node.id, mapped);
+        }
+
+        var incoming = parent.edges.Where(edge => edge.input.nodeId == call.id)
+            .GroupBy(static edge => edge.input.portId.value, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var outgoing = parent.edges.Where(edge => edge.output.nodeId == call.id)
+            .GroupBy(static edge => edge.output.portId.value, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        foreach (GraphEdgeRecord[] values in incoming.Values)
+            if (values.Length != 1) throw new InvalidOperationException("A graph-node input has multiple incoming connections.");
+
+        var resolvedInputs = new Dictionary<string, GraphEndpoint>(StringComparer.Ordinal);
+        foreach (ShaderGraphNodePortDefinition port in nodeInterface.inputs)
+        {
+            if (incoming.TryGetValue(port.id, out GraphEdgeRecord[]? edges))
+                resolvedInputs.Add(port.id, edges[0].output);
+            else if (call.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + port.id, out GraphSerializedValue? value))
+                resolvedInputs.Add(port.id, AddDefault(parent, call, port, value!, stage, serialization, context));
+            else if (!port.required)
+                resolvedInputs.Add(port.id, AddDefault(parent, call, port,
+                    ShaderGraphDocument.Encode(ShaderGraphLiteral.Zero(port.type.CreateType()), serialization, context),
+                    stage, serialization, context));
+            else
+                throw new InvalidOperationException(
+                    $"Required graph-node input '{port.id}' is not connected on '{nodeInterface.displayName}'.");
+        }
+
+        var resolvedOutputs = new Dictionary<string, GraphEndpoint>(StringComparer.Ordinal);
+        foreach (GraphEdgeRecord edge in child.edges)
+        {
+            bool fromInput = edge.output.nodeId == inputNode.id;
+            bool toOutput = edge.input.nodeId == outputNode.id;
+            GraphEndpoint mappedSource;
+            if (fromInput)
+            {
+                if (!resolvedInputs.TryGetValue(edge.output.portId.value, out GraphEndpoint source)) continue;
+                mappedSource = source;
+            }
+            else
+            {
+                if (!map.TryGetValue(edge.output.nodeId, out GraphNodeId sourceNode)) continue;
+                mappedSource = new(sourceNode, edge.output.portId);
+            }
+            if (toOutput)
+            {
+                if (!resolvedOutputs.TryAdd(edge.input.portId.value, mappedSource))
+                    throw new InvalidOperationException($"Graph-node output '{edge.input.portId.value}' is connected more than once.");
+            }
+            else if (map.TryGetValue(edge.input.nodeId, out GraphNodeId targetNode))
+                parent.AddEdge(new(new(call.id.value + "/" + edge.id.value), mappedSource, new(targetNode, edge.input.portId)));
+        }
+        foreach (ShaderGraphNodePortDefinition port in nodeInterface.outputs)
+        {
+            if (!resolvedOutputs.TryGetValue(port.id, out GraphEndpoint source))
+                throw new InvalidOperationException($"Graph-node output '{port.id}' has no value inside '{nodeInterface.displayName}'.");
+            if (!outgoing.TryGetValue(port.id, out GraphEdgeRecord[]? edges)) continue;
+            foreach (GraphEdgeRecord edge in edges)
+                parent.AddEdge(new(new(call.id.value + "/return/" + edge.id.value), source, edge.input));
+        }
+        parent.RemoveNode(call.id);
+    }
+
+    private static void MergeDefinition(GraphDocument parent, GraphDocument child, string stageId,
+        SerializationRegistry serialization, SerializationContext context)
+    {
+        ShaderDefinition parentDefinition = ShaderGraphDocument.ReadDefinition(parent, serialization, context);
+        ShaderDefinition childDefinition = ShaderGraphDocument.ReadDefinition(child, serialization, context);
+        ShaderStage callerStage = ShaderStage.None;
+        if (stageId.Length != 0 && parent.FindNode(new(stageId)) is { definitionId: ShaderGraphDocument.outputDefinitionId } stageNode)
+            callerStage = ShaderGraphDocument.Read(stageNode, ShaderGraphDocument.settingsKey,
+                new ShaderGraphStageSettings(), serialization, context).stage;
+        var properties = parentDefinition.properties.ToList();
+        foreach (ShaderPropertyDefinition childPropertyValue in childDefinition.properties)
+        {
+            ShaderPropertyDefinition childProperty = childPropertyValue;
+            if (callerStage != ShaderStage.None) childProperty.stages |= callerStage;
+            int index = properties.FindIndex(value => value.id.value == childProperty.id.value);
+            if (index < 0)
+            {
+                properties.Add(childProperty);
+                continue;
+            }
+            ShaderPropertyDefinition existing = properties[index];
+            if (existing.type != childProperty.type || existing.bindingKind != childProperty.bindingKind
+                || existing.storageAccess != childProperty.storageAccess || existing.bindingOwner != childProperty.bindingOwner)
+                throw new InvalidOperationException($"Graph node property '{childProperty.id.value}' conflicts with its caller.");
+            existing.stages |= childProperty.stages;
+            properties[index] = existing;
+        }
+        parentDefinition.properties = properties.ToArray();
+        parent.SetMetadata(ShaderGraphDocument.definitionKey,
+            ShaderGraphDocument.Encode(serialization.Serialize(parentDefinition, context), serialization, context));
+    }
+
+    private static GraphEndpoint AddDefault(GraphDocument graph, GraphNodeRecord call,
+        ShaderGraphNodePortDefinition port, GraphSerializedValue value, string stage,
+        SerializationRegistry serialization, SerializationContext context)
+    {
+        var id = new GraphNodeId(call.id.value + "/default/" + port.id);
+        var node = new GraphNodeRecord(id, "inno.shader.reroute") { position = call.position };
+        node.SetValue("valueType", ShaderGraphDocument.Encode(port.type, serialization, context));
+        node.SetValue(ShaderGraphDocument.inputDefaultPrefix + "input", value);
+        if (stage.Length != 0) node.SetValue(ShaderGraphDocument.stageKey, ShaderGraphDocument.Encode(stage, serialization, context));
+        graph.AddNode(node);
+        return new(id, new("value"));
+    }
+
+    private static void Validate(ShaderGraphNodeInterface value, int outputRecords)
+    {
+        if (string.IsNullOrWhiteSpace(value.displayName)) throw new InvalidOperationException("A graph-authored node requires a display name.");
+        if (!Enum.IsDefined(value.kind)) throw new InvalidOperationException("The graph-authored node kind is invalid.");
+        if (value.kind == ShaderGraphNodeKind.Function && outputRecords != 1)
+            throw new InvalidOperationException("An inline graph-authored node requires exactly one Node Outputs record.");
+        if (value.kind == ShaderGraphNodeKind.DomainOutput && outputRecords != 0)
+            throw new InvalidOperationException("A domain output graph node cannot declare returned values.");
+        if (value.kind == ShaderGraphNodeKind.DomainOutput && string.IsNullOrWhiteSpace(value.role))
+            throw new InvalidOperationException("A domain output graph node requires a stable Target role.");
+        ValidatePorts(value.inputs, "input");
+        ValidatePorts(value.outputs, "output");
+    }
+
+    private static void ValidatePorts(IEnumerable<ShaderGraphNodePortDefinition> ports, string direction)
+    {
+        if (ports is null) throw new InvalidOperationException($"The graph-node {direction} port list is missing.");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ShaderGraphNodePortDefinition port in ports)
+        {
+            if (port is null || string.IsNullOrWhiteSpace(port.id) || port.type is null || port.type.CreateType().id == "void")
+                throw new InvalidOperationException($"A graph-node {direction} port is invalid.");
+            if (!ids.Add(port.id)) throw new InvalidOperationException($"A graph-node {direction} port repeats '{port.id}'.");
+        }
+    }
+}
+
+/// <summary>Describes graph-authored node references before they are expanded or consumed by a Target.</summary>
+public sealed class ShaderGraphCallNodeCompiler : IShaderNodeCompiler
+{
+    /// <inheritdoc />
+    public string definitionId => ShaderGraphNodes.callDefinitionId;
+    /// <inheritdoc />
+    public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
+        => context.Read(ShaderGraphNodes.interfaceKey, new ShaderGraphNodeInterface()).GetPorts();
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
+        => throw new InvalidOperationException("A graph-authored node must be expanded or consumed by its Shader Target before lowering.");
+}
+
+/// <summary>Describes the multi-port external inputs while editing a graph-authored node asset.</summary>
+public sealed class ShaderGraphNodeInputsCompiler : IShaderNodeCompiler
+{
+    /// <inheritdoc />
+    public string definitionId => ShaderGraphNodes.inputDefinitionId;
+    /// <inheritdoc />
+    public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
+        => context.Read(ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings()).ports
+            .Select(static value => value.ToPort(GraphPortDirection.Output)).ToArray();
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
+        => throw new InvalidOperationException("Node Inputs exist only inside a graph-authored node definition.");
+}
+
+/// <summary>Describes the multi-port returned values while editing a graph-authored function node asset.</summary>
+public sealed class ShaderGraphNodeOutputsCompiler : IShaderNodeCompiler
+{
+    /// <inheritdoc />
+    public string definitionId => ShaderGraphNodes.outputDefinitionId;
+    /// <inheritdoc />
+    public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
+        => context.Read(ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings()).ports
+            .Select(static value => value.ToPort(GraphPortDirection.Input)).ToArray();
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
+        => throw new InvalidOperationException("Node Outputs exist only inside a graph-authored node definition.");
+}

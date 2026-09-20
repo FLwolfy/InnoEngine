@@ -99,8 +99,12 @@ internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, Asse
     {
         if (!base.Query(context).isEnabled) return EditorActionState.disabled;
         var draft = documents.Open(context.target);
-        return draft.canvas.selectedNodes.Count == 1 && documents.Controller(draft).document.FindNode(draft.canvas.selectedNodes.First())?.definitionId == "inno.shader.source"
-            ? EditorActionState.enabled : EditorActionState.disabled;
+        string? definition = draft.canvas.selectedNodes.Count == 1
+            ? documents.Controller(draft).document.FindNode(draft.canvas.selectedNodes.First())?.definitionId
+            : null;
+        return definition is "inno.shader.source" or ShaderGraphNodes.callDefinitionId
+            ? EditorActionState.enabled
+            : EditorActionState.disabled;
     }
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
@@ -110,9 +114,9 @@ internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, Asse
     }
     internal static void Reveal(ShaderEditorDocuments documents, AssetEditorModule browser, Guid sourceId)
     {
-        if (!documents.assets.TryGetInfo(sourceId, out AssetInfo? info) || info is null) throw new IOException("Source function is missing. Select a replacement in the node.");
+        if (!documents.assets.TryGetInfo(sourceId, out AssetInfo? info) || info is null) throw new IOException("Referenced Shader authoring asset is missing. Select a replacement in the node.");
         if (!documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry))
-            throw new FileNotFoundException("Source function is missing from the Asset Browser.", info.assetPath.ToString());
+            throw new FileNotFoundException("Referenced Shader authoring asset is missing from the Asset Browser.", info.assetPath.ToString());
         string parent = Path.GetDirectoryName(info.assetPath.localPath)?.Replace('\\', '/') ?? string.Empty;
         browser.browser.SetCurrentDirectory(new AssetPath(info.assetPath.source, parent).ToString());
         documents.interactions.SetSelection(entry);

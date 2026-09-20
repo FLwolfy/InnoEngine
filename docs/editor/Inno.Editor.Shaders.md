@@ -6,6 +6,8 @@
 
 可复用的 Shader/Material 创作功能。节点编译属于 Rendering.Shaders；呈现协议独立于具体 Panel。节点配置在统一 Inspector 编辑，画布保留摘要与连接。
 
+优先用 `.ishader` 的 Node Inputs / Node Outputs 定义组合型多输入、多输出节点；宿主会自动提供创建菜单、端口 Inspector、依赖、内联和循环诊断。只有新增公共 IR 无法表达的原语时才实现 `IShaderNodeCompiler`，只有节点确实需要专用交互时才增加 `ShaderNodeDrawer`。
+
 ## 初始化与生命周期
 
 宿主在 TypeCatalog 与预览服务建立后创建 ShaderNodeDrawerRegistry，在 Editor feature 停止时 Dispose。
