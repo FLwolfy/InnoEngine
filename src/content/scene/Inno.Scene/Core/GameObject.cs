@@ -312,7 +312,7 @@ public sealed class GameObject : EngineObject, ISerializable
 
     /// <summary>
     /// Moves an attached component to a requested attachment index.
-    /// The mandatory Transform always remains at index zero.
+    /// The mandatory Transform participates in ordering but remains non-removable.
     /// </summary>
     /// <param name="component">
     /// Attached component to move.

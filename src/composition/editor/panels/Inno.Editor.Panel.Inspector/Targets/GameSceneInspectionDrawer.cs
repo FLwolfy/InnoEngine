@@ -140,9 +140,13 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 : Array.Empty<SerializedProperty>();
             string systemId = system.identity.persistentId.ToString("N");
             var editorTarget = new SystemEditorTarget(scene, system);
+            string title = missing?.missingTypeName ?? system.GetType().Name;
+            bool dimmed = !system.enabled;
+            Vector2 cardMinimum = default;
+            Vector2 headerMaximum = default;
             bool open = EditorWidget.CollapsingCard(
                 systemId,
-                missing?.missingTypeName ?? system.GetType().Name,
+                title,
                 missing is null ? () =>
                 {
                     bool enabled = system.enabled;
@@ -160,55 +164,67 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                     m_edits,
                     scene,
                     system,
-                    i,
-                    systems.Count,
                     () => context.interactions
                         .For(
                             InspectorInteractionIds.C_SYSTEM_AREA,
                             editorTarget)
                         .Enqueue(InspectorInteractionIds.C_REMOVE_SYSTEM)),
-                dimmed: !system.enabled,
-                trailingControlWidth: m_cardControls.width,
-                drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
-                    $"##system_menu_{systemId}",
-                    context.interactions.For(InspectorInteractionIds.C_SYSTEM_AREA, editorTarget)));
-            if (!open)
+                dimmed: dimmed,
+                trailingControlWidth: m_cardControls.GetWidth(canRemove: true),
+                drawContextMenu: () =>
+                {
+                    cardMinimum = NativeImGui.GetItemRectMin();
+                    headerMaximum = NativeImGui.GetItemRectMax();
+                    _ = EditorMenuRenderer.ContextMenu(
+                        $"##system_menu_{systemId}",
+                        context.interactions.For(InspectorInteractionIds.C_SYSTEM_AREA, editorTarget));
+                    m_cardControls.DrawSystemDragSource(system, title, dimmed);
+                });
+            Vector2 cardMaximum = headerMaximum;
+            if (open)
             {
-                NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
-                continue;
+                NativeImGui.Unindent();
+                EditorWidget.CardBody(
+                    systemId,
+                    () => EditorWidget.SectionLayout(() =>
+                    {
+                        if (missing is not null)
+                        {
+                            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                            ImGuiWidget.WrappedText(
+                                $"Missing system script ({missing.missingType.stableId:D}). " +
+                                "Its serialized state is preserved and will recover automatically when the type returns.");
+                            NativeImGui.PopStyleColor();
+                            return;
+                        }
+                        if (properties.Count == 0)
+                        {
+                            InspectorTypeOrigin.Draw(system.GetType());
+                            return;
+                        }
+                        for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
+                        {
+                            context.properties.Draw(
+                                context.editorContext,
+                                system,
+                                $"scene.{scene.identity.persistentId:N}.{systemId}",
+                                properties[propertyIndex]);
+                        }
+                    }),
+                    dimmed: dimmed);
+                cardMaximum = NativeImGui.GetItemRectMax();
+                NativeImGui.Indent();
+                NativeImGui.TreePop();
             }
 
-            NativeImGui.Unindent();
-            EditorWidget.CardBody(
-                systemId,
-                () =>
-                {
-                    if (missing is not null)
-                    {
-                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
-                        ImGuiWidget.WrappedText(
-                            $"Missing system script ({missing.missingType.stableId:D}). " +
-                            "Its serialized state is preserved and will recover automatically when the type returns.");
-                        NativeImGui.PopStyleColor();
-                        return;
-                    }
-                    if (properties.Count == 0)
-                    {
-                        InspectorTypeOrigin.Draw(system.GetType());
-                        return;
-                    }
-                    for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
-                    {
-                        context.properties.Draw(
-                            context.editorContext,
-                            system,
-                            $"scene.{scene.identity.persistentId:N}.{systemId}",
-                            properties[propertyIndex]);
-                    }
-                },
-                dimmed: !system.enabled);
-            NativeImGui.Indent();
-            NativeImGui.TreePop();
+            m_cardControls.DrawSystemDropTarget(
+                context.interactions,
+                m_edits,
+                scene,
+                system,
+                i,
+                cardMinimum,
+                cardMaximum);
             NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
         }
 

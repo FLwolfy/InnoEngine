@@ -2,10 +2,9 @@
 
 ## Transform 坐标空间
 
-Transform 使用专用的 Editor InspectionDrawer，复用 SectionHeader 与属性 tooltip 样式。`World` 是 Editor 视图开关，不是 Transform 的序列化字段；关闭显示 Local Space，开启显示 World Space。位置、欧拉角（度）与比例仍用 XYZ 控件。
+Transform 使用专用的 Editor InspectionDrawer，复用 fieldset `SectionHeader` 与属性 tooltip 样式。标题上嵌入的 checkbox 直接切换 `Local Space` / `World Space`；它是 Editor 视图开关，不是 Transform 的序列化字段。位置、欧拉角（度）与比例仍用 XYZ 控件。
 
-正文排列固定为：Local Space / World Space 分组标题 → `World` 开关 → Position → Rotation → Scale。
-开关位于分组标题下方，与其他布尔属性共用 PropertyRow；标题说明仍通过 hover tooltip 展示。
+正文排列固定为：带 checkbox 的 Local Space / World Space fieldset → Position → Rotation → Scale。开关属于 fieldset legend，不再额外占用一个 `World` PropertyRow；标题说明仍通过 hover tooltip 展示。
 
 世界空间编辑通过 Transform 既有 world API 转换成本地值，并通过 SceneEdits 记录实际变化的属性 delta。Undo/Redo 因而恢复真实数据及渲染 revision。父级零缩放导致矩阵不可逆时，禁用世界空间输入并显示 Warning HelpBox；切回 Local 仍可修复父级。
 
@@ -79,7 +78,7 @@ public sealed class AnimationCurveDrawer : IPropertyDrawer
 
 Component、System、EngineObject reference 和 Asset reference 分别使用 `panel/scene.inspector/component`、`panel/scene.inspector/system`、`panel/scene.inspector/engine-object-reference` 与 `panel/scene.inspector/asset-reference`。Add/Reset/Remove action 同样在 Attribute 和调用点直接使用 `inspector/...` 字符串 ID，不导出 `InspectorAreas` 或 `InspectorActions` facade。Add 菜单是动态 `EditorMenuSource`，每次从当前 TypeCache 发现可用类型；无需在 Inspector 主类中增加分支。
 
-Component card 的上/下按钮改变附加顺序，Transform 保持置顶且不可移除。Project Script 以及 Plugin 提供的 Renderer、Camera、Light 都直接继承唯一的 `GameBehavior`，并在 card header 使用同一个 enabled checkbox；继承的隐藏序列化属性不会再次出现在 body。GameSystem 也可以上下移动和删除，但运行顺序仍由显式 `order` 决定。`enabled=false` 时 header 与 body 使用统一 dimmed 样式，body 保持可辨识但不可编辑。
+Component/System card 的右侧操作固定为 Reset 与 Remove；Transform 不可移除，因此只显示 Reset，但它与其他 Component 使用同一拖拽排序契约。Project Script 以及 Plugin 提供的 Renderer、Camera、Light 都直接继承唯一的 `GameBehavior`，并在 card header 使用同一个 enabled checkbox；继承的隐藏序列化属性不会再次出现在 body。Component/GameSystem 通过拖动完整 header 调整显示顺序，展开 body 与 header 作为同一个目标块参与落点计算；GameSystem 的运行顺序仍由显式 `order` 决定。这两类 Inspector payload 都禁止 Dear ImGui 的 drag-hold auto-open，所以悬停在其他 header 上不会更改对方的展开状态。`enabled=false` 时 header 与 body 使用统一 dimmed 样式，body 保持可辨识但不可编辑。
 
 GameBehavior/GameSystem 始终使用同一种可展开 card：Header、disclosure、enabled 与右侧操作不会因为属性数量变化而跳动。Missing 类型在 body 中显示保留状态；有可序列化属性时绘制属性；没有属性时显示淡色 `Source: <domain>/<scope> · <assembly>`，颜色与 File Browser 底部 breadcrumb 一致。这样无字段系统仍能说明其真实来源，而不是留下无法解释的空黑区域。
 

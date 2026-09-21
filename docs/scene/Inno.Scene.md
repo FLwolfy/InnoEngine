@@ -92,10 +92,10 @@ gameObject.SetComponentIndex(components[2], 1);
 int index = gameObject.GetComponentIndex(components[2]);
 ```
 
-- `Transform` 永远保持 index `0`，不能移动。
+- `Transform` 仍是每个 GameObject 唯一且不可删除的必需组件，但可以和其他 Component 一样调整显示/序列化顺序。
 - 顺序由 Scene/Prefab serialization 保存。
 - `GetComponents()` 与 Inspector 使用相同顺序。
-- Inspector 通过 header 右侧的上下箭头逐位移动 Component；到达边界的箭头会禁用。
+- Inspector 通过拖动完整 header 调整 Component 顺序；Transform 与其他 Component 使用同一拖拽契约。
 - 手动顺序不改变 GameBehavior Update 优先级；需要确定性调度时使用专门 scheduler，而不是依赖 Inspector 位置。
 
 ## GameSystem 顺序
@@ -114,7 +114,7 @@ public sealed class PhysicsSystem : GameSystem
 }
 ```
 
-Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。移动按钮只改变显示与序列化顺序，不会修改代码声明的 `order`；相同 `order` 时显示顺序作为稳定 tie-breaker。
+Inspector header 提供 Reset 和 Remove，并通过拖拽调整显示与序列化顺序。该顺序不会修改代码声明的 `order`；相同 `order` 时显示顺序作为稳定 tie-breaker。
 
 ## GameSystem 定位
 

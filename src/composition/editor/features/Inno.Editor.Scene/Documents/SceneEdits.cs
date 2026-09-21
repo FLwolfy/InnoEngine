@@ -395,7 +395,7 @@ public sealed class SceneEdits : EditorModule
     /// Moves an attached component and records only its two attachment indices.
     /// </summary>
     /// <param name="component">
-    /// The attached non-Transform component to move.
+    /// The attached component to move, including the mandatory Transform.
     /// </param>
     /// <param name="componentIndex">
     /// The requested attachment index.

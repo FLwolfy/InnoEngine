@@ -169,6 +169,7 @@ public sealed class SceneSerializationTests : IDisposable
         _ = gameObject.AddComponent<OrderComponentA>();
         OrderComponentB componentB = gameObject.AddComponent<OrderComponentB>();
         gameObject.SetComponentIndex(componentB, 1);
+        gameObject.SetComponentIndex(gameObject.transform, 2);
         _ = source.AddSystem<OrderSerializationSystemA>();
         OrderSerializationSystemB systemB = source.AddSystem<OrderSerializationSystemB>();
         source.SetSystemIndex(systemB, 0);
@@ -179,7 +180,7 @@ public sealed class SceneSerializationTests : IDisposable
         GameScene restored = m_serialization.Deserialize<GameScene>(bytes, m_serializationContext);
 
         Assert.Equal(
-            [typeof(Transform), typeof(OrderComponentB), typeof(OrderComponentA)],
+            [typeof(OrderComponentB), typeof(OrderComponentA), typeof(Transform)],
             Assert.Single(restored.GetObjects()).GetComponents().Select(static component => component.GetType()));
         Assert.Equal(
             [typeof(OrderSerializationSystemB), typeof(OrderSerializationSystemA)],

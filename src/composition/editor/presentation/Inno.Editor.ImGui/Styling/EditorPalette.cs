@@ -260,6 +260,11 @@ public static class EditorPalette
     public static Vector4 inspectorCardBodyBorder { get; } = new(0.28f, 0.27f, 0.32f, 1f);
 
     /// <summary>
+    /// Gets the outline color of framed Inspector sections.
+    /// </summary>
+    public static Vector4 inspectorSectionBorder { get; } = new(0.34f, 0.33f, 0.39f, 1f);
+
+    /// <summary>
     /// Gets disabled inspector card text.
     /// </summary>
     public static Vector4 inspectorCardDisabledText { get; } = new(0.52f, 0.52f, 0.54f, 1f);

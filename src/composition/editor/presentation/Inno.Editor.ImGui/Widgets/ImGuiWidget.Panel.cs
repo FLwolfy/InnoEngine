@@ -51,12 +51,16 @@ public static partial class ImGuiWidget
                 NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
                 pushedPadding = true;
             }
+            // Dock tabs need their own vertical breathing room. Applying the metric only while
+            // Begin builds the window decorations keeps normal inputs compact without clipping
+            // the first tab row against the main-menu work rect.
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.panelTabFramePadding);
             // Native title separators use FrameBorderSize, which is intended for inputs in the
             // editor theme. Suppress that extra strip only while window decorations are built.
             NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
             bool visible;
             try { visible = NativeImGui.Begin(title, flags); }
-            finally { NativeImGui.PopStyleVar(); }
+            finally { NativeImGui.PopStyleVar(2); }
             beganWindow = true;
             if (pushedPadding)
             {
@@ -146,12 +150,19 @@ public static partial class ImGuiWidget
         try
         {
             ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
-            float iconSlotSize = GetCompactIconSize().X;
+            ImGuiTabBarPtr tabBar = dockNode.TabBar;
+            if (tabBar == ImGuiTabBarPtr.Null)
+                return false;
+            float tabBarHeight = MathF.Max(
+                1f,
+                NativeImGui.GetTextLineHeight() + tabBar.FramePadding.Y * 2f);
+            float iconSlotSize = MathF.Min(GetCompactIconSize().X, tabBarHeight);
             Vector2 iconSize = NativeImGui.CalcTextSize(ImGuiIcon.Xmark);
             float iconCenteringInset = MathF.Max(0f, (iconSlotSize - iconSize.X) * 0.5f);
+            float centerY = dockNode.Pos.Y + tabBarHeight * 0.5f;
             Vector2 itemMaximum = new(
                 dockNode.Pos.X + dockNode.Size.X - nativeStyle.WindowBorderSize - nativeStyle.FramePadding.X + iconCenteringInset,
-                dockNode.Pos.Y + nativeStyle.FramePadding.Y + iconSlotSize);
+                centerY + iconSlotSize * 0.5f);
             Vector2 itemMinimum = itemMaximum - new Vector2(iconSlotSize);
             ImRect itemBounds = new()
             {

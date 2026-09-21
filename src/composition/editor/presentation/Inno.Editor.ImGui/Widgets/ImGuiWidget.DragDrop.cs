@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -25,17 +26,27 @@ public static partial class ImGuiWidget
     /// <param name="drawPreview">
     /// Optional preview drawing callback.
     /// </param>
+    /// <param name="allowHoldToOpenOthers">
+    /// Whether hovering over another openable control may open it after the native drag-hold delay.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> while the item is an active drag source.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="payloadType"/> is empty or whitespace.
+    /// </exception>
     public static bool DragDropSource<TPayload>(
         string payloadType,
         in TPayload payload,
-        Action? drawPreview = null)
+        Action? drawPreview = null,
+        bool allowHoldToOpenOthers = true)
         where TPayload : unmanaged
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(payloadType);
-        if (!NativeImGui.BeginDragDropSource())
+        ImGuiDragDropFlags sourceFlags = allowHoldToOpenOthers
+            ? ImGuiDragDropFlags.None
+            : ImGuiDragDropFlags.SourceNoHoldToOpenOthers;
+        if (!NativeImGui.BeginDragDropSource(sourceFlags))
         {
             return false;
         }
@@ -61,18 +72,31 @@ public static partial class ImGuiWidget
     /// <param name="drawPreview">
     /// Optional preview drawing callback.
     /// </param>
+    /// <param name="allowHoldToOpenOthers">
+    /// Whether hovering over another openable control may open it after the native drag-hold delay.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> while the item is an active drag source.
     /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="payloadType"/> is empty or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="payloadFactory"/> is <see langword="null"/>.
+    /// </exception>
     public static bool DragDropSource<TPayload>(
         string payloadType,
         Func<TPayload> payloadFactory,
-        Action? drawPreview = null)
+        Action? drawPreview = null,
+        bool allowHoldToOpenOthers = true)
         where TPayload : unmanaged
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(payloadType);
         ArgumentNullException.ThrowIfNull(payloadFactory);
-        if (!NativeImGui.BeginDragDropSource())
+        ImGuiDragDropFlags sourceFlags = allowHoldToOpenOthers
+            ? ImGuiDragDropFlags.None
+            : ImGuiDragDropFlags.SourceNoHoldToOpenOthers;
+        if (!NativeImGui.BeginDragDropSource(sourceFlags))
         {
             return false;
         }
@@ -179,6 +203,56 @@ public static partial class ImGuiWidget
         bool delivered = compatible && nativePayload.Delivery;
         NativeImGui.EndDragDropTarget();
         return delivered;
+    }
+
+    /// <summary>
+    /// Accepts an unmanaged payload on an explicit screen-space rectangle.
+    /// </summary>
+    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
+    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
+    /// <param name="minimum">Minimum screen coordinate of the complete target.</param>
+    /// <param name="maximum">Maximum screen coordinate of the complete target.</param>
+    /// <param name="targetId">ImGui identifier unique within the current window.</param>
+    /// <param name="payload">Previewed or delivered payload value.</param>
+    /// <param name="isPreviewing">Whether a compatible payload is hovering over the target.</param>
+    /// <param name="drawDefaultHighlight">Whether ImGui draws its default target rectangle.</param>
+    /// <returns><see langword="true"/> only when a compatible payload is delivered.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="payloadType"/> is empty or whitespace.
+    /// </exception>
+    public static bool DragDropTarget<TPayload>(
+        string payloadType,
+        Vector2 minimum,
+        Vector2 maximum,
+        uint targetId,
+        out TPayload payload,
+        out bool isPreviewing,
+        bool drawDefaultHighlight = true)
+        where TPayload : unmanaged
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(payloadType);
+        payload = default;
+        isPreviewing = false;
+        if (maximum.X <= minimum.X || maximum.Y <= minimum.Y)
+            return false;
+        ImRect bounds = new() { Min = minimum, Max = maximum };
+        if (!ImGuiP.BeginDragDropTargetCustom(bounds, targetId))
+            return false;
+        try
+        {
+            ImGuiDragDropFlags flags = ImGuiDragDropFlags.AcceptBeforeDelivery;
+            if (!drawDefaultHighlight)
+                flags |= ImGuiDragDropFlags.AcceptNoDrawDefaultRect;
+            ImGuiPayloadPtr nativePayload = NativeImGui.AcceptDragDropPayload(payloadType, flags);
+            bool compatible = TryReadDragDropPayload(nativePayload, out payload);
+            if (compatible)
+                isPreviewing = nativePayload.Preview;
+            return compatible && nativePayload.Delivery;
+        }
+        finally
+        {
+            NativeImGui.EndDragDropTarget();
+        }
     }
 
     private static unsafe void SetDragDropPayload<TPayload>(string payloadType, in TPayload payload)

@@ -128,7 +128,7 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
-    public void ComponentsCanBeReorderedWhileTransformRemainsFirst()
+    public void ComponentsCanBeReorderedIncludingTransform()
     {
         var scene = new GameScene("Components");
         GameObject gameObject = scene.CreateObject("Object");
@@ -141,8 +141,13 @@ public sealed class SceneFacadeTests : IDisposable
             [typeof(Transform), typeof(OrderComponentB), typeof(OrderComponentA)],
             gameObject.GetComponents().Select(static component => component.GetType()));
         Assert.Equal(1, gameObject.GetComponentIndex(second));
-        Assert.Throws<InvalidOperationException>(() =>
-            gameObject.SetComponentIndex(gameObject.transform, 1));
+
+        gameObject.SetComponentIndex(gameObject.transform, 2);
+
+        Assert.Equal(
+            [typeof(OrderComponentB), typeof(OrderComponentA), typeof(Transform)],
+            gameObject.GetComponents().Select(static component => component.GetType()));
+        Assert.Equal(2, gameObject.GetComponentIndex(gameObject.transform));
     }
 
     [Fact]

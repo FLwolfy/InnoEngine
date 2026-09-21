@@ -2,7 +2,7 @@
 
 ## 共享 Inspector 与窗口呈现
 
-`ImGuiWidget.SectionHeader(string title, string? description = null)` 绘制分组及仅悬停说明；`HelpBox(string text, string icon, Vector4 color)` 绘制有边框、状态图标与侧边语义色的提示卡片。`DrawItemTooltip` 使用父 viewport work area、真实内宽和缩放 padding 测量，靠边自动翻向并约束位置。File Browser 与 Hierarchy 共用暗色 collectionRow/collectionRowAlternate，交替条纹、hover、选择仍保持区分。
+`ImGuiWidget.SectionLayout(Action drawContent)` 为一段内容建立可复用的 fieldset scope；scope 内连续调用 `SectionHeader(string title, string? description = null, Action? drawLeadingControl = null)` 时，标题嵌入上边框，直到下一个标题或 scope 结束的内容都被同一边框完整包裹。可选 leading control 用于 Local/World 这类属于分组语义本身的开关；scope 外的 `SectionHeader` 仍保持普通分隔标题，Shader Editor 等非 Inspector 表面不会被隐式改型。`HelpBox(string text, string icon, Vector4 color)` 绘制有边框、状态图标与侧边语义色的提示卡片。`DrawItemTooltip` 使用父 viewport work area、真实内宽和缩放 padding 测量，靠边自动翻向并约束位置。File Browser 与 Hierarchy 共用暗色 collectionRow/collectionRowAlternate，交替条纹、hover、选择仍保持区分。
 
 浮动 Panel 在标题右侧显示统一关闭按钮；docked Panel 保持每个 dock node 一个关闭入口。窗口标题不继承输入控件的 FrameBorderSize，避免额外分隔线；这与透明接缝是两个不同的问题。透明接缝由 [ImGui toolchain](../build/Inno.Build.Toolchains.ImGui.md) 的连续窗口背景修正：先铺完整圆角背景，再叠加标题色，保留外沿抗锯齿，不使用一像素遮盖线。所有按钮仍走现有 Panel close/dirty 确认生命周期。
 
@@ -48,7 +48,7 @@ Palette 与 Style Metrics 并列位于 `Styling`，runtime host 与三个表现�
 
 所有主题颜色集中在 `EditorPalette`：原生 ImGui col、Inspector、Hierarchy、Asset Browser、Logging、轴颜色与 drag target 都不在 Panel 中声明。换主题只需替换这一个 palette surface。
 
-所有跨 Panel 的像素布局、padding、spacing、rounding、列比例和最小尺寸集中在 `ImGuiWidget.style`（`EditorStyleMetrics`）。Panel 可以读取语义名，例如 `assetListNameSeparatorPosition`、`inspectorCardSpacing`、`hierarchyItemSpacing`、`hierarchyRenameMinimumWidth` 与 `settingsFieldPadding`，不应新增散落的固定像素。
+所有跨 Panel 的像素布局、padding、spacing、rounding、列比例和最小尺寸集中在 `ImGuiWidget.style`（`EditorStyleMetrics`）。Panel 可以读取语义名，例如 `panelTabFramePadding`、`inspectorSectionPadding`、`assetListNameSeparatorPosition`、`inspectorCardSpacing`、`hierarchyItemSpacing`、`hierarchyRenameMinimumWidth` 与 `settingsFieldPadding`，不应新增散落的固定像素。Inspector fieldset 的 outline 同样来自 `EditorPalette.inspectorSectionBorder`。
 
 `ImGuiWidget.SetupStyle()` 把 layout metrics 和 `EditorPalette` 应用到原生 ImGui style；运行期间 zoom 改变时，runtime 只在倍率发生变化后重新应用一次 native style。普通窗口绘制时，`ResizeGrip`、`ResizeGripHovered` 与 `ResizeGripActive` 使用透明色，因此可缩放窗口仍保留边缘/角落命中能力，但不会显示右下角三角形。Dear ImGui 在更新 Dock tree splitter 时会把 separator hover/active 临时映射到 resize-grip hover/active；`ImGuiEditorRuntime` 只在 `DockSpaceOverViewport` 调用范围内恢复这两个 accent color，保证 Panel 间连接线的 hover/drag feedback 可见，同时不恢复窗口三角形。
 
@@ -80,7 +80,7 @@ Editor ImGui context 默认启用 Inno overlay scrollbar 扩展。纵横滚动�
 
 `EditorMenuRenderer` 是唯一调用原生 `BeginMenu/MenuItem` 的业务渲染桥。它递归绘制任意层级的 `EditorMenuModel`，从 Action Attribute 自动读取快捷键标签，并把点击排入 Action queue。Panel 只提供 `EditorMenuContext(surface, target)`。
 
-主菜单由同一模型生成，并包含 `File`、`Edit`、`View`、`Panel` 等顶层节点。全局缩放属于 `View`；当前 `EditorPanelRegistry` 中的窗口开关统一生成到 `Panel`，显示 checked 状态并调用内建 Toggle Panel Action。脚本代际新增或移除 Panel 时不需要修改菜单代码。标准 Panel window 不向原生 ImGui 提交 `p_open`，因此普通 Tab 完全不包含关闭按钮。当前可见 Panel 根据所属 Dock Node 的实际位置和尺寸，在 Dock Header 最右侧的原生 close slot 位置绘制一个独立关闭控件。控件会补偿图标在字体 slot 中的水平居中 inset，使 X 的可见右边缘与第一个 Tab 的可见左边缘使用相同的 `WindowBorderSize + FramePadding.X` 外边距。它不参与 Tab 排列、不绘制 Tab 背景，并与 Inspector card 删除按钮共用 `ImGuiIcon.Xmark`、文本颜色及 hover 颜色。点击只关闭当前选中的 Panel，不会关闭同一 Dock Node 内的其他 Tab。该实现不修改 cimgui 或 Dear ImGui 源码。
+主菜单由同一模型生成，并包含 `File`、`Edit`、`View`、`Panel` 等顶层节点。全局缩放属于 `View`；当前 `EditorPanelRegistry` 中的窗口开关统一生成到 `Panel`，显示 checked 状态并调用内建 Toggle Panel Action。脚本代际新增或移除 Panel 时不需要修改菜单代码。标准 Panel window 不向原生 ImGui 提交 `p_open`，因此普通 Tab 完全不包含关闭按钮。`PanelWindow` 只在原生 `Begin` 建立窗口装饰时应用 `panelTabFramePadding`，避免紧凑输入控件的 padding 把紧贴 Main Menu 的第一行 Dock Tab 压扁。当前可见 Panel 根据所属 Dock Node 的实际位置和尺寸，在 Dock Header 最右侧的原生 close slot 位置绘制一个独立关闭控件；其纵向中心使用当前字体高度与该 `ImGuiTabBar` 已保存的 `FramePadding` 计算，不读取 amend pass 中正在变化的临时矩形。控件会补偿图标在字体 slot 中的水平居中 inset，使 X 的可见右边缘与第一个 Tab 的可见左边缘使用相同的 `WindowBorderSize + FramePadding.X` 外边距。它不参与 Tab 排列、不绘制 Tab 背景，并与 Inspector card 删除按钮共用 `ImGuiIcon.Xmark`、文本颜色及 hover 颜色。点击只关闭当前选中的 Panel，不会关闭同一 Dock Node 内的其他 Tab。该实现不修改 cimgui 或 Dear ImGui 源码。
 
 同一个 MainMenu pass 还读取 `EditorToolbarModel`，按 MenuBar window 的实际宽度把紧凑 icon 组放到几何中心。Renderer 只负责把 `EditorToolbarIcon` 映射到 `ImGuiIcon`、绘制 checked/hover/disabled 状态、tooltip 与快捷键，然后把点击排回 Action queue；Play Mode ID、状态机与命令语义不进入 ImGui 项目。左侧菜单宽度异常接近中心时，toolbar 会向右避让而不覆盖菜单 item。
 
@@ -106,9 +106,13 @@ bool open = ImGuiWidget.CollapsingCard(
 
 Header 的 disclosure triangle 由 `DrawDisclosureIndicator` 统一绘制：保留 `▶ / ▼` glyph，并根据实际 header bounds 居中。卡片、disabled text 与 disclosure hover 颜色都来自 `EditorPalette`，便于主题统一替换。底层 TreeNode 仍负责 open state 和点击命中，因此没有第二套折叠状态。
 
-`trailingControlWidth` 可以为多个右侧按钮预留固定宽度。Component 与 System Inspector 使用它放置 Move Up、Move Down 与 Remove。
+`trailingControlWidth` 可以为多个右侧按钮预留固定宽度。Component 与 System Inspector 使用它放置 Reset 与 Remove；Transform 不可移除，因此只显示 Reset。
 
 `drawContextMenu` 在完整 Header TreeNode 仍是当前 ImGui item 时执行，因此右键命中覆盖整个 Header，而不会错误绑定到 enabled checkbox、标题或末尾按钮。Component、Transform 与 System 都使用相同入口。
+
+Component（包含 Transform）与 GameSystem 的排序拖拽也绑定在这个完整 Header item 上。拖动时 tooltip 使用相同 header surface、drag grip、标题和 dimmed text，明确表现被提起的是整张卡片。Drop target 使用 header 到展开 body 底部的完整矩形；目标展开时，“插入到后面”的黄色 insertion line 位于整个 body 下方，而不是 header 下方。Inspector 调用 `DragDropSource(..., allowHoldToOpenOthers: false)`，由 ImGui 实现内部映射为 `SourceNoHoldToOpenOthers`，禁止 TreeNode 在 drag-hover 超时后自动展开，也不向上层暴露 native flag。payload 只携带 generation-safe `RuntimeIdentity`，preview 和 delivery 都重新解析 live object，最后仍调用 `SceneEdits.SetComponentIndex` / `SetSystemIndex`，所以排序继续进入同一 Undo/Redo 历史。
+
+`DragDropTarget<TPayload>(string payloadType, Vector2 minimum, Vector2 maximum, uint targetId, out TPayload payload, out bool isPreviewing, bool drawDefaultHighlight = true)` 是可复用的显式矩形 drop target：它允许调用方把 header 与展开 body 合并成一个命中区，并在关闭默认 highlight 后绘制统一 insertion line。
 
 `CenteredWrappedText` 在调用方提供的完整区域内按水平/垂直 padding 计算换行宽度，将整个文本块居中，并以同一 padded rectangle 裁剪。Scene View 与 Game View 的 Provider 缺失、隔离失败和 GPU target 准备提示统一使用该 primitive，因此长诊断不会贴边、越界或只停留在左上角。
 

@@ -198,9 +198,14 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             string componentId = component.identity.persistentId.ToString("N");
             GameBehavior? behavior = component as GameBehavior;
             var editorTarget = new ComponentEditorTarget(gameObject, component);
+            string title = missing?.missingTypeName ?? componentType.Name;
+            bool canRemove = componentType != typeof(Transform);
+            bool dimmed = behavior is { enabled: false };
+            Vector2 cardMinimum = default;
+            Vector2 headerMaximum = default;
             bool open = EditorWidget.CollapsingCard(
                 componentId,
-                missing?.missingTypeName ?? componentType.Name,
+                title,
                 behavior is not null
                     ? () =>
                     {
@@ -216,66 +221,73 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         }
                     }
                     : null,
-                (Action?)(componentType == typeof(Transform)
-                    ? null
-                    : () => m_cardControls.DrawComponent(
-                        m_edits,
-                        component,
-                        i,
-                        components.Count,
-                        () => context.interactions
-                            .For(
-                                InspectorInteractionIds.C_COMPONENT_AREA,
-                                editorTarget)
-                            .Enqueue(InspectorInteractionIds.C_REMOVE_COMPONENT))),
-                dimmed: behavior is { enabled: false },
-                trailingControlWidth: componentType == typeof(Transform)
-                    ? 0f
-                    : m_cardControls.width,
-                drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
-                    $"##component_menu_{componentId}",
-                    context.interactions.For(InspectorInteractionIds.C_COMPONENT_AREA, editorTarget)));
+                () => m_cardControls.DrawComponent(
+                    m_edits,
+                    component,
+                    canRemove,
+                    () => context.interactions
+                        .For(
+                            InspectorInteractionIds.C_COMPONENT_AREA,
+                            editorTarget)
+                        .Enqueue(InspectorInteractionIds.C_REMOVE_COMPONENT)),
+                dimmed: dimmed,
+                trailingControlWidth: m_cardControls.GetWidth(canRemove),
+                drawContextMenu: () =>
+                {
+                    cardMinimum = NativeImGui.GetItemRectMin();
+                    headerMaximum = NativeImGui.GetItemRectMax();
+                    _ = EditorMenuRenderer.ContextMenu(
+                        $"##component_menu_{componentId}",
+                        context.interactions.For(InspectorInteractionIds.C_COMPONENT_AREA, editorTarget));
+                    m_cardControls.DrawComponentDragSource(component, title, dimmed);
+                });
 
-            if (!open)
+            Vector2 cardMaximum = headerMaximum;
+            if (open)
             {
-                NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
-                continue;
+                NativeImGui.Unindent();
+                EditorWidget.CardBody(
+                    componentId,
+                    () => EditorWidget.SectionLayout(() =>
+                    {
+                        if (missing is not null)
+                        {
+                            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                            ImGuiWidget.WrappedText(
+                                $"Missing component script ({missing.missingType.stableId:D}). " +
+                                "Its serialized state is preserved and will recover automatically when the type returns.");
+                            NativeImGui.PopStyleColor();
+                            return;
+                        }
+                        if (context.TryDrawInline(component))
+                            return;
+                        if (properties.Count == 0)
+                        {
+                            InspectorTypeOrigin.Draw(componentType);
+                            return;
+                        }
+                        for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
+                        {
+                            context.properties.Draw(
+                                context.editorContext,
+                                component,
+                                $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
+                                properties[propertyIndex]);
+                        }
+                    }),
+                    dimmed: dimmed);
+                cardMaximum = NativeImGui.GetItemRectMax();
+                NativeImGui.Indent();
+                NativeImGui.TreePop();
             }
 
-            NativeImGui.Unindent();
-            EditorWidget.CardBody(
-                componentId,
-                () =>
-                {
-                    if (missing is not null)
-                    {
-                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
-                        ImGuiWidget.WrappedText(
-                            $"Missing component script ({missing.missingType.stableId:D}). " +
-                            "Its serialized state is preserved and will recover automatically when the type returns.");
-                        NativeImGui.PopStyleColor();
-                        return;
-                    }
-                    if (context.TryDrawInline(component))
-                        return;
-                    if (properties.Count == 0)
-                    {
-                        InspectorTypeOrigin.Draw(componentType);
-                        return;
-                    }
-                    for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
-                    {
-                        context.properties.Draw(
-                            context.editorContext,
-                            component,
-                            $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
-                            properties[propertyIndex]);
-                    }
-                },
-                dimmed: behavior is { enabled: false });
-
-            NativeImGui.Indent();
-            NativeImGui.TreePop();
+            m_cardControls.DrawComponentDropTarget(
+                context.interactions,
+                m_edits,
+                component,
+                i,
+                cardMinimum,
+                cardMaximum);
             NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
         }
 

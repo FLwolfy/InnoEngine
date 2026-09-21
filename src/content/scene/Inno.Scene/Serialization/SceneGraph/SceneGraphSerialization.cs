@@ -200,13 +200,17 @@ internal static class SceneGraphSerialization
             Guid sourceObjectId = objectReader.Read<Guid>(C_OBJECT_ID_KEY);
             GameObject gameObject = gameObjectBySourceId[sourceObjectId];
             IReadOnlyList<SerializationReader> componentReaders = objectReader.ReadObjectArray(C_COMPONENTS_KEY);
+            int transformIndex = -1;
             for (int componentIndex = 0; componentIndex < componentReaders.Count; componentIndex++)
             {
                 SerializationReader componentReader = componentReaders[componentIndex];
                 Guid stableTypeId = componentReader.Read<Guid>(C_STABLE_TYPE_ID_KEY);
                 if (TryResolveComponentType(stableTypeId, componentReader.context, out Type? componentType) &&
                     componentType == typeof(Transform))
+                {
+                    transformIndex = componentIndex;
                     continue;
+                }
 
                 Guid sourceComponentId = componentReader.Read<Guid>(C_COMPONENT_ID_KEY);
                 byte[] state = componentReader.Read<byte[]>(C_STATE_KEY);
@@ -234,6 +238,12 @@ internal static class SceneGraphSerialization
                 }
                 componentBySourceId.Add(sourceComponentId, component);
             }
+            if (transformIndex < 0)
+            {
+                throw new InvalidDataException(
+                    $"Scene graph object '{sourceObjectId}' does not contain its validated Transform component.");
+            }
+            gameObject.SetComponentIndex(gameObject.transform, transformIndex);
         }
 
         foreach ((Guid sourceId, GameObject gameObject) in gameObjectBySourceId)

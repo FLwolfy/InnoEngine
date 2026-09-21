@@ -111,7 +111,7 @@ internal sealed class InspectorPanel : EditorPanel
         m_targetHeader.Draw(drawer, drawContext);
         try
         {
-            drawer.Draw(drawContext);
+            EditorWidget.SectionLayout(() => drawer.Draw(drawContext));
             m_failureState = string.Empty;
         }
         catch (Exception exception)

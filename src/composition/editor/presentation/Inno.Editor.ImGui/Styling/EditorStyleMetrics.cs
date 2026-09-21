@@ -136,6 +136,11 @@ public sealed class EditorStyleMetrics
     public Vector2 framePadding => ScaleVector(m_compactMode ? new(4f, 1f) : new(7f, 3f));
 
     /// <summary>
+    /// Gets the frame padding used while docked panel tabs are laid out.
+    /// </summary>
+    public Vector2 panelTabFramePadding => ScaleVector(m_compactMode ? new(4f, 3f) : new(7f, 4f));
+
+    /// <summary>
     /// Gets the uniform content padding of editor context menus.
     /// </summary>
     public Vector2 menuWindowPadding => ScaleVector(new(8f, 6f));
@@ -334,6 +339,21 @@ public sealed class EditorStyleMetrics
     /// Gets inspector card header padding.
     /// </summary>
     public Vector2 inspectorCardHeaderPadding => ScaleVector(new(4f, 1f));
+
+    /// <summary>
+    /// Gets the inner padding of a framed Inspector section.
+    /// </summary>
+    public Vector2 inspectorSectionPadding => ScaleVector(new(7f, 5f));
+
+    /// <summary>
+    /// Gets the gap between an Inspector section legend and its interrupted top border.
+    /// </summary>
+    public float inspectorSectionLegendGap => Scale(4f);
+
+    /// <summary>
+    /// Gets the vertical distance after a framed Inspector section.
+    /// </summary>
+    public float inspectorSectionSpacing => Scale(4f);
 
     /// <summary>
     /// Gets inspector disclosure inset.
