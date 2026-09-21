@@ -1,5 +1,5 @@
-using System;
 using System.Linq;
+
 using Inno.Core.Graphs;
 using Inno.Rendering.Shaders;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -16,102 +16,60 @@ internal sealed partial class ShaderEditorCanvas
         UI.PushID(port.id);
         try
         {
-            string portLabel = port.id + " · " + port.type.id;
             if (edge is not null)
             {
-                InspectorRow("port." + port.id, portLabel, () =>
-                    UI.TextDisabled("From " + edge.output.nodeId.value + "." + edge.output.portId.value));
+                InspectorPortStatusRow(
+                    "port." + port.id,
+                    port,
+                    null,
+                    "From " + edge.output.nodeId.value + "." + edge.output.portId.value);
                 return;
             }
             if (node.definitionId == ShaderGraphDocument.outputDefinitionId || draft.missingPorts.Contains(endpoint))
             {
-                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Connect an available output"));
+                InspectorPortStatusRow("port." + port.id, port, null, "Connect an available output");
                 return;
             }
-            if (m_inspectionNodes is { Length: > 1 } selected && selected.Any(value => !draft.ports[value.id].Any(candidate =>
-                candidate.id == port.id && candidate.type.IsEquivalentTo(port.type)) || Controller.document.edges.Any(connection => connection.input == new GraphEndpoint(value.id, new(port.id)))))
+            if (m_inspectionNodes is { Length: > 1 } selected && selected.Any(value =>
+                    !draft.ports[value.id].Any(candidate =>
+                        candidate.id == port.id && candidate.type.IsEquivalentTo(port.type)) ||
+                    Controller.document.edges.Any(connection =>
+                        connection.input == new GraphEndpoint(value.id, new(port.id)))))
             {
-                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Mixed connections or types"));
+                InspectorPortStatusRow("port." + port.id, port, null, "Mixed connections or types");
                 return;
             }
-            ShaderGraphLiteral zero;
-            try { zero = ShaderGraphLiteral.Zero(port.type); }
-            catch (NotSupportedException)
-            {
-                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Explicit connection required"));
-                return;
-            }
-            string key = ShaderGraphDocument.inputDefaultPrefix + port.id;
-            if (!node.TryGetValue(key, out var encoded))
-            {
-                InspectorRow("port." + port.id, portLabel, () =>
-                {
-                    if (UI.SmallButton(port.required ? "Use Zero Default" : "Override with Zero")) Set(node, key, zero);
-                });
-                return;
-            }
-            ShaderGraphLiteral literal;
-            System.Collections.Generic.IReadOnlyList<string> scalarTypes;
-            try
-            {
-                literal = ShaderGraphDocument.Decode<ShaderGraphLiteral>(encoded!, owner.serialization, owner.context);
-                scalarTypes = literal.GetScalarTypes();
-                if (!literal.type.CreateType().IsEquivalentTo(port.type))
-                    throw new InvalidOperationException("The port type changed. Its previous default remains preserved.");
-            }
-            catch (Exception error) when ((error is InvalidOperationException or ArgumentException or FormatException or NotSupportedException)
-                && Inno.Core.Execution.RetirementPendingException.Find(error) is null)
-            {
-                Widget.Hint(error.Message);
-                if (UI.SmallButton("Reset Default to Current Type")) Set(node, key, zero);
-                return;
-            }
-            for (int index = 0; index < scalarTypes.Count; index++)
-            {
-                UI.PushID(index);
-                string label = scalarTypes.Count == 1 ? "Value" : scalarTypes.Count <= 4 && port.type.fields.Count == 0 && port.type.elementType is null
-                    ? new[] { "X", "Y", "Z", "W" }[index] : "Component " + index;
-                uint bits = literal.scalarBits[index];
-                bool changed = false;
-                InspectorRow("port." + port.id + "." + index,
-                    scalarTypes.Count == 1 ? portLabel : port.id + " " + label,
-                    () =>
-                {
-                    switch (scalarTypes[index])
-                    {
-                        case "float":
-                            float number = BitConverter.UInt32BitsToSingle(bits);
-                            changed = Widget.CompactDragFloat("##value", ref number, 0.01f);
-                            bits = BitConverter.SingleToUInt32Bits(number);
-                            break;
-                        case "int":
-                            int signed = unchecked((int)bits);
-                            changed = UI.InputInt("##value", ref signed); bits = unchecked((uint)signed);
-                            break;
-                        case "uint":
-                            string text = bits.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                            changed = UI.InputText("##value", ref text, 32) && uint.TryParse(text, out bits);
-                            break;
-                        default:
-                            bool boolean = bits != 0;
-                            changed = UI.Checkbox("##value", ref boolean); bits = boolean ? 1u : 0u;
-                            break;
-                    }
-                });
-                Gesture();
-                if (changed) { literal.scalarBits[index] = bits; Set(node, key, literal, true); }
-                UI.PopID();
-            }
-            InspectorRow("port." + port.id + ".reset", "Default", () =>
-            {
-                if (UI.SmallButton(port.required ? "Require Connection" : "Use Node / Target Default"))
-                {
-                    using var transaction = owner.interactions.history.BeginTransaction("Remove Input Default");
-                    foreach (GraphNodeRecord target in m_inspectionNodes ?? [node]) Controller.RemoveNodeValue(target.id, key);
-                    transaction.Commit(); owner.Changed(draft);
-                }
-            });
+
+            InspectorPortStatusRow(
+                "port." + port.id,
+                port,
+                null,
+                port.required
+                    ? "Required · Connect a Constant or compatible output"
+                    : "Optional · Zero when unconnected");
         }
-        finally { UI.PopID(); }
+        finally
+        {
+            UI.PopID();
+        }
     }
+
+    private static void InspectorPortStatusRow(
+        string id,
+        ShaderNodePort port,
+        string? component,
+        string status)
+        => Widget.PropertyRow(
+            "shader." + id,
+            PortLabel(port, component),
+            () => Widget.MetadataValue(
+                DisplayType(port.type.id),
+                status,
+                "Shader value type · " + port.type.id));
+
+    private static string PortLabel(ShaderNodePort port, string? component)
+        => component is null ? port.id : port.id + " " + component;
+
+    private static string DisplayType(string typeId)
+        => Widget.NicifyName(typeId);
 }

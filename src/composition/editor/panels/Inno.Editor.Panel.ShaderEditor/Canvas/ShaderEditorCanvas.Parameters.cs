@@ -72,35 +72,45 @@ internal sealed partial class ShaderEditorCanvas
         int index = Array.FindIndex(definition.properties, value => value.id.value == input.id);
         if (index < 0) { Widget.Hint("Enter a binding name and supported type to declare this parameter."); return; }
         ShaderPropertyDefinition property = definition.properties[index];
-        Widget.SectionHeader("Parameter", "The stable binding ID identifies overrides. Shader defaults and Material overrides are edited independently.");
-        string displayName = property.displayName;
-        bool changed = false;
-        InspectorRow("parameter.display-name", "Display Name", () => changed = UI.InputText("##display-name", ref displayName, 256));
-        Gesture();
-        if (changed) { property.displayName = displayName; Save(property, true); }
-        ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
-        if (EnumControl("Bound By", ref bindingOwner)) { property.bindingOwner = bindingOwner; Save(property, false); }
-        if (property.type is ShaderPropertyType.Vector4 or ShaderPropertyType.Color)
+        bool parameterOpen = Widget.SectionHeader("Parameter", "The stable binding ID identifies overrides. Shader defaults and Material overrides are edited independently.");
+        if (parameterOpen)
         {
-            bool color = property.type == ShaderPropertyType.Color;
-            InspectorRow("parameter.color", "Color", () =>
+            string displayName = property.displayName;
+            bool changed = false;
+            InspectorRow("parameter.display-name", "Display Name", () => changed = UI.InputText("##display-name", ref displayName, 256));
+            Gesture();
+            if (changed) { property.displayName = displayName; Save(property, true); }
+            ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
+            if (EnumControl("Bound By", ref bindingOwner)) { property.bindingOwner = bindingOwner; Save(property, false); }
+            if (property.type is ShaderPropertyType.Vector4 or ShaderPropertyType.Color)
             {
-                if (UI.Checkbox("##color", ref color))
+                bool color = property.type == ShaderPropertyType.Color;
+                InspectorRow("parameter.color", "Color", () =>
                 {
-                    property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
-                    MaterialValue converted = property.defaultValue;
-                    converted.kind = color ? MaterialValueKind.Color : MaterialValueKind.Vector;
-                    property.defaultValue = converted;
-                    Save(property, false);
-                }
-            });
+                    if (UI.Checkbox("##color", ref color))
+                    {
+                        property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
+                        MaterialValue converted = property.defaultValue;
+                        converted.kind = color ? MaterialValueKind.Color : MaterialValueKind.Vector;
+                        property.defaultValue = converted;
+                        Save(property, false);
+                    }
+                });
+            }
         }
         if (property.bindingOwner != ShaderPropertyBindingOwner.Material)
-        { Widget.Hint("Supplied by the Render Pass. This binding is read-only in Material Inspectors."); return; }
+        {
+            if (parameterOpen) Widget.Hint("Supplied by the Render Pass. This binding is read-only in Material Inspectors.");
+            return;
+        }
         if (property.bindingKind is not (ShaderPropertyBindingKind.Uniform or ShaderPropertyBindingKind.SampledTexture))
-        { Widget.Hint("Storage resources require a Render Pass owner."); return; }
+        {
+            if (parameterOpen) Widget.Hint("Storage resources require a Render Pass owner.");
+            return;
+        }
         ShaderParameterPresentation presentation = ShaderParameterPresentation.Read(Controller.document, property.id, owner.serialization, owner.context);
-        Widget.SectionHeader("Material Inspector", "Presentation belongs only to this Shader's authoring graph. It does not modify existing Material values or enter the Player.");
+        if (!Widget.SectionHeader("Material Inspector", "Presentation belongs only to this Shader's authoring graph. It does not modify existing Material values or enter the Player."))
+            return;
         string group = presentation.group;
         bool groupChanged = false;
         InspectorRow("parameter.group", "Group", () => groupChanged = UI.InputText("##group", ref group, 256));

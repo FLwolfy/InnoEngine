@@ -137,6 +137,80 @@ public static partial class ImGuiWidget
         }
     }
 
+    /// <summary>
+    /// Draws a square-cornered editor header surface using the shared target-header palette,
+    /// border, and padding.
+    /// </summary>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the header region.
+    /// </param>
+    /// <param name="drawContent">
+    /// Callback that draws the complete header content.
+    /// </param>
+    /// <param name="spanWindowPadding">
+    /// Whether the header should extend through the current parent window padding to both edges.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="drawContent"/> is <see langword="null"/>.
+    /// </exception>
+    public static void HeaderSurface(
+        string id,
+        Action drawContent,
+        bool spanWindowPadding = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(drawContent);
+
+        ImGuiWindowPtr parentWindow = ImGuiP.GetCurrentWindow();
+        Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
+        Vector2 parentPadding = spanWindowPadding
+            ? parentWindow.WindowPadding
+            : Vector2.Zero;
+        Vector2 headerOrigin = contentCursor - parentPadding;
+        float width = MathF.Max(
+            1f,
+            NativeImGui.GetContentRegionAvail().X + parentPadding.X * 2f);
+        NativeImGui.SetCursorScreenPos(headerOrigin);
+
+        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorTargetHeader);
+        NativeImGui.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorTargetHeaderBorder);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.inspectorTargetHeaderPadding);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, style.borderSize);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 0f);
+        try
+        {
+            ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
+            ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
+                                           ImGuiWindowFlags.NoScrollWithMouse |
+                                           ImGuiWindowFlags.NoSavedSettings;
+            bool visible = NativeImGui.BeginChild(id, new Vector2(width, 0f), childFlags, windowFlags);
+            // FrameStyle consumed the square outer-container rounding in BeginChild. Restore the
+            // normal editor rounding before drawing controls inside the header.
+            NativeImGui.PopStyleVar();
+            try
+            {
+                if (visible)
+                    drawContent();
+            }
+            finally
+            {
+                NativeImGui.EndChild();
+            }
+        }
+        finally
+        {
+            NativeImGui.PopStyleVar(2);
+            NativeImGui.PopStyleColor(2);
+        }
+
+        NativeImGui.SetCursorScreenPos(new Vector2(
+            contentCursor.X,
+            NativeImGui.GetCursorScreenPos().Y));
+    }
+
     private static bool DrawPanelCloseButton(string title)
     {
         if (!NativeImGui.IsWindowDocked())
@@ -157,13 +231,12 @@ public static partial class ImGuiWidget
                 1f,
                 NativeImGui.GetTextLineHeight() + tabBar.FramePadding.Y * 2f);
             float iconSlotSize = MathF.Min(GetCompactIconSize().X, tabBarHeight);
-            Vector2 iconSize = NativeImGui.CalcTextSize(ImGuiIcon.Xmark);
-            float iconCenteringInset = MathF.Max(0f, (iconSlotSize - iconSize.X) * 0.5f);
-            float centerY = dockNode.Pos.Y + tabBarHeight * 0.5f;
-            Vector2 itemMaximum = new(
-                dockNode.Pos.X + dockNode.Size.X - nativeStyle.WindowBorderSize - nativeStyle.FramePadding.X + iconCenteringInset,
-                centerY + iconSlotSize * 0.5f);
-            Vector2 itemMinimum = itemMaximum - new Vector2(iconSlotSize);
+            Vector2 itemCenter = new(
+                dockNode.Pos.X + dockNode.Size.X - nativeStyle.WindowBorderSize -
+                nativeStyle.FramePadding.X - iconSlotSize * 0.5f,
+                dockNode.Pos.Y + tabBarHeight * 0.5f);
+            Vector2 itemMinimum = itemCenter - new Vector2(iconSlotSize * 0.5f);
+            Vector2 itemMaximum = itemCenter + new Vector2(iconSlotSize * 0.5f);
             ImRect itemBounds = new()
             {
                 Min = itemMinimum,
@@ -182,14 +255,16 @@ public static partial class ImGuiWidget
             hovered |= mouseHovered;
             pressed |= mouseHovered && NativeImGui.IsMouseClicked(ImGuiMouseButton.Left);
 
-            DrawClickableTextPresentation(
+            uint iconColor = hovered || held
+                ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
+                : NativeImGui.GetColorU32(ImGuiCol.Text);
+            AddGlyphCentered(
                 NativeImGui.GetWindowDrawList(),
-                itemMinimum,
-                itemMaximum - itemMinimum,
+                NativeImGui.GetFont(),
+                NativeImGui.GetFontSize(),
                 ImGuiIcon.Xmark,
-                iconSize,
-                hovered,
-                held);
+                itemCenter,
+                iconColor);
 
             if (hovered && BeginMenuTooltip())
             {
@@ -241,17 +316,30 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws a disabled hint text line.
+    /// Draws disabled hint text that wraps to the current content width.
     /// </summary>
     /// <param name="text">
     /// Hint text.
     /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
     public static void Hint(string text)
     {
+        ArgumentNullException.ThrowIfNull(text);
         NativeImGui.BeginDisabled(true);
         try
         {
-            NativeImGui.TextUnformatted(text);
+            NativeImGui.PushTextWrapPos(
+                NativeImGui.GetCursorPosX() + MathF.Max(1f, NativeImGui.GetContentRegionAvail().X));
+            try
+            {
+                NativeImGui.TextUnformatted(text);
+            }
+            finally
+            {
+                NativeImGui.PopTextWrapPos();
+            }
         }
         finally
         {

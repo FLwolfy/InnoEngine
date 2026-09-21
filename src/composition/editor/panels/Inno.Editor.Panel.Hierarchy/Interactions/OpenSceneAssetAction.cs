@@ -7,6 +7,11 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyInteractionIds.C_OPEN, priority: 200)]
 internal sealed class OpenSceneAssetAction(IEditorSceneWorkspace workspace) : EditorAction<SceneAsset, string>
 {
+    protected override EditorActionState Query(EditorActionContext<SceneAsset, string> context)
+        => workspace.canPersist
+            ? EditorActionState.enabled
+            : EditorActionState.disabled;
+
     /// <summary>
     /// Executes the prepared operation and publishes only a completed result.
     /// </summary>

@@ -132,6 +132,70 @@ public sealed class SceneEdits : EditorModule
     }
 
     /// <summary>
+    /// Instantiates a prefab into a loaded scene and records the created subtree as one reversible edit.
+    /// </summary>
+    /// <param name="prefab">
+    /// The imported prefab asset to instantiate.
+    /// </param>
+    /// <param name="scene">
+    /// The loaded scene that will own the instance.
+    /// </param>
+    /// <param name="parent">
+    /// The optional parent transform for the instantiated root.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// The instantiated prefab root.
+    /// </returns>
+    public GameObject InstantiatePrefab(
+        PrefabAsset prefab,
+        GameScene scene,
+        Transform? parent = null,
+        string historyName = "Instantiate Prefab")
+    {
+        ArgumentNullException.ThrowIfNull(prefab);
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        if (!scene.isLoaded)
+            throw new InvalidOperationException("A prefab can only be instantiated into a loaded scene.");
+        if (parent is not null && !ReferenceEquals(parent.gameObject.scene, scene))
+            throw new ArgumentException("The parent belongs to another scene.", nameof(parent));
+
+        Guid? selectedBefore = GetSelectionId();
+        GameObject instance = prefab.Instantiate(
+            scene,
+            m_workspace.serialization,
+            m_workspace.assets,
+            parent);
+        RecordWithRollback(
+            () =>
+            {
+                byte[] subtree = SceneSubtreeSerialization.Capture(
+                    instance,
+                    m_workspace.serialization,
+                    m_workspace.assets);
+                RecordSubtree(
+                    historyName,
+                    instance,
+                    existsBefore: false,
+                    existsAfter: true,
+                    subtree,
+                    [],
+                    selectedBefore,
+                    instance.identity.persistentId);
+            },
+            () =>
+            {
+                if (instance.isRuntimeValid && !scene.DestroyObject(instance))
+                    throw new InvalidOperationException("The unrecorded prefab instance could not be removed.");
+            });
+        return instance;
+    }
+
+    /// <summary>
     /// Deletes a GameObject subtree and records only that subtree plus incoming serialized references.
     /// </summary>
     /// <param name="gameObject">

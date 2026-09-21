@@ -280,8 +280,8 @@ static ShaderIrBlock BuildBrightness()
 
 `ShaderGraphLiteral.Zero(type)` 为支持的标量、向量、浮点矩阵、结构体和固定数组创建精确位模式默认值。
 `type` 保存完整类型，`scalarBits` 以声明/矩阵列顺序保存 IEEE float、int、uint、bool 的原始位；`GetScalarTypes()` 校验形状，`Emit(builder, expectedType)` 发出同一公共 IR。
-`ShaderGraphDocument.inputDefaultPrefix + portId` 绑定到稳定输入名，而非端口位置。连线优先、旧默认值保留但不求值；未连接类型不匹配返回定位到端口的 `SHADER_GRAPH_DEFAULT_TYPE`。
-不能给 storage、opaque texture 或效果顺序令牌生成数值默认值。类型变更要显式修复，不做隐式转换。该类型仅导出给 Editor 创作脚本。
+函数节点的 required 输入必须由图内连线提供；常量同样是图节点，不能由 Inspector 在节点外覆写。optional 输入未连接时由编译器自动生成该端口类型的零值，Editor 只显示这一事实，不提供第二套默认值编辑入口。历史文档中的 `input-default.<portId>` 数据不会参与求值。
+不能给 storage、opaque texture 或效果顺序令牌生成零值；这类端口不能声明为 optional。类型变更要显式修复，不做隐式转换。`ShaderGraphLiteral` 仅导出给 Editor 创作脚本。
 
 ## 端口与生命周期
 

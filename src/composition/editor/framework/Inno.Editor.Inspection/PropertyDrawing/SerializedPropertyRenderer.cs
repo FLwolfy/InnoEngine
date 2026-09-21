@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Inno.Core.Logging;
 using Inno.Scripting.Api;
 using Inno.Core.Serialization;
+using Inno.Editor.Annotations;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -168,6 +169,7 @@ public sealed class SerializedPropertyRenderer
         string displayLabel = EditorWidget.NicifyName(label);
         bool isReadOnly = (visibility & PropertyVisibility.RuntimeSet) == 0;
         Attribute[] attributes = member is null ? [] : InspectorMemberMetadata.GetAttributes(member);
+        bool beginsSection = Array.Exists(attributes, static attribute => attribute is HeaderAttribute);
         InspectorAttributeDrawContext? attributeContext = null;
         if (member is not null && attributes.Length > 0)
         {
@@ -183,8 +185,19 @@ public sealed class SerializedPropertyRenderer
                 return;
             displayLabel = attributeContext.label;
             isReadOnly = attributeContext.isReadOnly;
+            if (!beginsSection && !EditorWidget.isSectionContentVisible)
+                return;
             m_attributes.DrawBefore(attributeContext, attributes);
+            if (!EditorWidget.isSectionContentVisible)
+                return;
         }
+        else if (!EditorWidget.isSectionContentVisible)
+        {
+            return;
+        }
+
+        if (!beginsSection && !EditorWidget.EnsureSection())
+            return;
 
         var context = new PropertyDrawContext(
             editorContext,
@@ -199,6 +212,7 @@ public sealed class SerializedPropertyRenderer
             isReadOnly,
             attributeContext?.minimum ?? minimum,
             attributeContext?.maximum ?? maximum,
+            attributeContext?.tooltip ?? tooltip,
             getter,
             setter,
             this, hdrColor);
@@ -237,6 +251,7 @@ public sealed class SerializedPropertyRenderer
             propertyType,
             visibility,
             (visibility & PropertyVisibility.RuntimeSet) == 0,
+            null,
             null,
             null,
             getter,

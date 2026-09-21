@@ -1374,6 +1374,47 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void CatalogRestart_PrefersCurrentSourceIdentityOverHistoricalPathRecord()
+    {
+        using TestWorkspace workspace = new();
+        const string path = "Text/identity.txt";
+        workspace.WriteText(path, "value");
+        Guid historicalId;
+        using (AssetLoader first = workspace.CreateLoader(
+                   m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+        {
+            first.Rescan();
+            Assert.True(first.TryGetPersistentId(AssetPath.Project(path), out historicalId));
+        }
+
+        string sidecarPath = workspace.SourcePath(path + ".imeta");
+        MountedSourceMetadata metadata = m_serialization.Deserialize<MountedSourceMetadata>(
+            System.IO.File.ReadAllBytes(sidecarPath));
+        Guid currentId = Guid.NewGuid();
+        metadata.persistentId = currentId;
+        System.IO.File.WriteAllBytes(sidecarPath, m_serialization.Serialize(metadata));
+
+        using (AssetLoader recovered = workspace.CreateLoader(
+                   m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+        {
+            recovered.Rescan();
+            Assert.True(recovered.TryGetPersistentId(AssetPath.Project(path), out Guid indexedId));
+            Assert.Equal(currentId, indexedId);
+            Assert.True(recovered.TryGetInfo(historicalId, out AssetInfo? historical));
+            Assert.Equal(AssetImportStatus.Missing, historical!.status);
+        }
+
+        using AssetLoader restarted = workspace.CreateLoader(
+            m_types, m_serialization, m_identities, m_diagnostics, m_logs);
+        restarted.Rescan();
+        Assert.True(restarted.TryGetPersistentId(AssetPath.Project(path), out Guid stableId));
+        Assert.Equal(currentId, stableId);
+        MountedSourceMetadata stableMetadata = m_serialization.Deserialize<MountedSourceMetadata>(
+            System.IO.File.ReadAllBytes(sidecarPath));
+        Assert.Equal(currentId, stableMetadata.persistentId);
+    }
+
+    [Fact]
     public void CatalogRestart_DoesNotPromoteHistoricalTombstonesToMissingReferences()
     {
         using TestWorkspace workspace = new();

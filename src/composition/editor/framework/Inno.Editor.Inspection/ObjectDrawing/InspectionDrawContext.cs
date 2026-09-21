@@ -117,6 +117,31 @@ public sealed class InspectionDrawContext
             property);
     }
 
+    /// <summary>
+    /// Draws every runtime-visible serialized property through the shared attribute and property
+    /// drawer pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Properties without an explicit <c>Header</c> attribute are placed in the shared implicit
+    /// Properties section. Custom drawers may call this method before or after their own sections.
+    /// </remarks>
+    public void DrawProperties()
+    {
+        string ownerPath = string.Concat(
+            "inspection.",
+            target.GetType().FullName ?? target.GetType().Name,
+            ".",
+            RuntimeHelpers.GetHashCode(target).ToString("x8"));
+        for (int index = 0; index < m_serializedProperties.Count; index++)
+        {
+            properties.Draw(
+                editorContext,
+                target,
+                ownerPath,
+                m_serializedProperties[index]);
+        }
+    }
+
     private SerializedProperty RequireProperty(string propertyName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);

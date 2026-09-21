@@ -86,12 +86,20 @@ public static partial class ImGuiWidget
                 persistentHeaderMin,
                 persistentHeaderMax,
                 NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardHeader),
-                1f);
+                0f);
             open = NativeImGui.TreeNodeEx($"##card_{id}", flags);
             itemHeaderMin = NativeImGui.GetItemRectMin();
             headerMin = new Vector2(cardLeft, persistentHeaderMin.Y);
             headerMax = new Vector2(cardRight, persistentHeaderMax.Y);
             contentCursor = NativeImGui.GetCursorScreenPos();
+            contentCursor.Y = headerMax.Y;
+            NativeImGui.GetWindowDrawList().AddRect(
+                headerMin,
+                headerMax,
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardBodyBorder),
+                0f,
+                ImDrawFlags.RoundCornersNone,
+                style.borderSize);
         }
         finally
         {

@@ -4,7 +4,7 @@
 
 Transform 使用专用的 Editor InspectionDrawer，复用 fieldset `SectionHeader` 与属性 tooltip 样式。标题上嵌入的 checkbox 直接切换 `Local Space` / `World Space`；它是 Editor 视图开关，不是 Transform 的序列化字段。位置、欧拉角（度）与比例仍用 XYZ 控件。
 
-正文排列固定为：带 checkbox 的 Local Space / World Space fieldset → Position → Rotation → Scale。开关属于 fieldset legend，不再额外占用一个 `World` PropertyRow；标题说明仍通过 hover tooltip 展示。
+正文排列固定为：带 checkbox 的 Local Space / World Space fieldset → Position → Rotation → Scale。开关属于 fieldset legend，不再额外占用一个 `World` PropertyRow；标题说明仍通过 hover tooltip 展示。所有 fieldset legend 的标题文字都可直接点击：标题使用与 Stats 分组相同的共享缩进；展开态保留完整边框，折叠态收为带左右短侧边的中断式分隔线，不额外显示加减号或整行 hover 背景；`[Header]` 驱动的序列化属性会持续隐藏到下一个 section，不会只隐藏第一行。
 
 世界空间编辑通过 Transform 既有 world API 转换成本地值，并通过 SceneEdits 记录实际变化的属性 delta。Undo/Redo 因而恢复真实数据及渲染 revision。父级零缩放导致矩阵不可逆时，禁用世界空间输入并显示 Warning HelpBox；切回 Local 仍可修复父级。
 
@@ -27,6 +27,8 @@ Layer 页面以紧凑表格显示 slot、globally stable ID、name 与 remove ac
 Inspector Panel 关闭根 window padding，使外层纵向 scrollbar 贴紧 Dock body 边缘；所有 Target Header、卡片和 Drawer 正文统一放在 `ConstrainedContent` 中，由容器准确恢复一层标准 window padding，不再出现零间距或 Panel/child 双层空隙。该 auto-resize child 的显式 content width 始终等于 viewport 扣除左右 padding 后的宽度，并禁用自身 scrollbar/scroll input；因此 Inspector 在所有 target（包括 GameBehavior/GameSystem）下都不会产生横向 scroll range，也不需要逐帧重置 `scrollX`。长卡片标题会在右侧操作区之前裁剪，属性 label 和多轴数值字段会按真实可用宽度收缩，任何 Drawer 都不能把纵向滚动父级撑宽。
 
 `GameLayerCatalog` 仍保留对称 interaction matrix API 与 source 数据，因为自定义物理、感知或查询系统可以显式调用 `CanInteract`/`SetInteraction`；当前引擎没有内建系统自动消费这些规则。因此 Inspector 不再显示 `Layer Interactions` 区域，项目只需要 layer 分类时无需配置它。
+
+Default InspectionDrawer 直接调用 `InspectionDrawContext.DrawProperties()`。因此普通对象、GameBehavior/GameSystem body，以及只使用 `SerializableProperty` 与 `Header`/`Tooltip`/`Range` 等 presentation attribute 的目标共享同一套 framed、可折叠 section 和 property row；首个没有 `Header` 的属性组自动命名为 `Properties`。File Browser 的普通 source entry 也使用同一个 `Asset` fieldset，而 PostProcess2D/Particle2D 这类需要 draft/save 生命周期的专用 Drawer 只保留文档事务，section 外观仍复用 Widget，不另建样式。
 
 ## Registry 扩展
 
@@ -80,7 +82,7 @@ Component、System、EngineObject reference 和 Asset reference 分别使用 `pa
 
 Component/System card 的右侧操作固定为 Reset 与 Remove；Transform 不可移除，因此只显示 Reset，但它与其他 Component 使用同一拖拽排序契约。Project Script 以及 Plugin 提供的 Renderer、Camera、Light 都直接继承唯一的 `GameBehavior`，并在 card header 使用同一个 enabled checkbox；继承的隐藏序列化属性不会再次出现在 body。Component/GameSystem 通过拖动完整 header 调整显示顺序，展开 body 与 header 作为同一个目标块参与落点计算；GameSystem 的运行顺序仍由显式 `order` 决定。这两类 Inspector payload 都禁止 Dear ImGui 的 drag-hold auto-open，所以悬停在其他 header 上不会更改对方的展开状态。`enabled=false` 时 header 与 body 使用统一 dimmed 样式，body 保持可辨识但不可编辑。
 
-GameBehavior/GameSystem 始终使用同一种可展开 card：Header、disclosure、enabled 与右侧操作不会因为属性数量变化而跳动。Missing 类型在 body 中显示保留状态；有可序列化属性时绘制属性；没有属性时显示淡色 `Source: <domain>/<scope> · <assembly>`，颜色与 File Browser 底部 breadcrumb 一致。这样无字段系统仍能说明其真实来源，而不是留下无法解释的空黑区域。
+GameBehavior/GameSystem 始终使用同一种可展开 card：Header、disclosure、enabled 与右侧操作不会因为属性数量变化而跳动。Header 自身拥有与 body 一致的外框；展开时两者同宽、无空隙衔接，同时保留 body 的上边框作为内容分界，折叠时 header 保持完整独立轮廓。enabled checkbox 的说明由通用 `CompactCheckbox` tooltip 参数提供，不在 Component/System Drawer 中重复实现 hover。Missing 类型在 body 中显示保留状态；有可序列化属性时绘制属性；没有属性时显示淡色 `Source: <domain>/<scope> · <assembly>`，颜色与 File Browser 底部 breadcrumb 一致。这样无字段系统仍能说明其真实来源，而不是留下无法解释的空黑区域。
 
 Inspector 的可序列化属性、Component/System enabled、Add、Remove、Reset 与显示顺序全部通过 `SceneEdits` 记录中立历史。属性修改只编码对应 root property；元素操作保存 Stable Type ID、persistent ID、index 和该元素的属性数据。Undo 不会销毁并重建无关 Scene 对象，连续属性编辑才允许按 property merge key 合并。
 

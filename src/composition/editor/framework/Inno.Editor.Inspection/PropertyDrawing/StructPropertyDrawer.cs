@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Inno.Core.Serialization;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -36,25 +37,28 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
             return;
         }
 
-        for (int i = 0; i < members.Length; i++)
+        EditorWidget.SectionLayout(() =>
         {
-            MemberInfo member = members[i];
-            Type memberType = GetMemberType(member);
-            bool memberReadOnly = !CanWrite(member) ||
-                (GetVisibility(member) & PropertyVisibility.RuntimeSet) == 0;
-            context.DrawChildMember(
-                context.GetValue() ?? boxedValue,
-                member,
-                memberType,
-                () => GetMemberValue(member, context.GetValue() ?? boxedValue),
-                value =>
-                {
-                    object updated = context.GetValue() ?? Activator.CreateInstance(context.propertyType)!;
-                    SetMemberValue(member, updated, value);
-                    context.SetValue(updated);
-                },
-                memberReadOnly);
-        }
+            for (int i = 0; i < members.Length; i++)
+            {
+                MemberInfo member = members[i];
+                Type memberType = GetMemberType(member);
+                bool memberReadOnly = !CanWrite(member) ||
+                    (GetVisibility(member) & PropertyVisibility.RuntimeSet) == 0;
+                context.DrawChildMember(
+                    context.GetValue() ?? boxedValue,
+                    member,
+                    memberType,
+                    () => GetMemberValue(member, context.GetValue() ?? boxedValue),
+                    value =>
+                    {
+                        object updated = context.GetValue() ?? Activator.CreateInstance(context.propertyType)!;
+                        SetMemberValue(member, updated, value);
+                        context.SetValue(updated);
+                    },
+                    memberReadOnly);
+            }
+        });
 
         NativeImGui.TreePop();
     }

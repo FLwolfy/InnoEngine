@@ -12,7 +12,7 @@ public sealed class ShaderRerouteNodeCompiler : IShaderNodeCompiler
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
     {
         ShaderSourceType type = context.Read("valueType", new ShaderGraphType { id = "float" }).CreateType();
-        return [new("input", type, GraphPortDirection.Input), new("value", type, GraphPortDirection.Output)];
+        return [new("input", type, GraphPortDirection.Input, required: false), new("value", type, GraphPortDirection.Output)];
     }
     /// <inheritdoc />
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)

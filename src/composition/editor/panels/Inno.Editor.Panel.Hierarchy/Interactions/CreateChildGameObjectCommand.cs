@@ -5,7 +5,7 @@ using Inno.Scene;
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyInteractionIds.C_CREATE_CHILD)]
-[EditorMenu(HierarchyInteractionIds.C_AREA, "Create Empty Child", order: 100)]
+[EditorMenu(HierarchyInteractionIds.C_AREA, "Create/Empty Child", order: 100)]
 internal sealed class CreateChildGameObjectCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     /// <summary>

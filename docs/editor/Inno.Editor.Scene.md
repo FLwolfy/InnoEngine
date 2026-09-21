@@ -81,7 +81,7 @@ Scene Missing 是当前状态诊断，而不是 Scripting 编译诊断。Workspa
 | 分类 | 成员 |
 | --- | --- |
 | Scene 文档 | `CreateScene`、`CloseScene`、`SetSceneIndex` |
-| GameObject | `CreateGameObject`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`SetGameObjectTag`、`SetGameObjectLayer`、`ChangeHierarchy` |
+| GameObject | `CreateGameObject`、`InstantiatePrefab`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`SetGameObjectTag`、`SetGameObjectLayer`、`ChangeHierarchy` |
 | Component | `AddComponent`、`RemoveComponent`、`ResetComponent`、`SetComponentIndex` |
 | System | `AddSystem`、`RemoveSystem`、`ResetSystem`、`SetSystemIndex` |
 | 属性 | `ChangeProperty` |
@@ -101,7 +101,7 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 }
 ```
 
-扩展不需要知道 History protocol、序列化格式或 Handler。若未来 Animation Graph 有自己的数据模型，应由 Animation Editor Module 采用相同模式提供 `AnimationEdits`，而不是把 Animation 特例塞进 `SceneEdits`。
+`InstantiatePrefab` 使用当前 workspace 的 Serialization/Asset generation，在 active Scene（或显式 scene/parent）中创建实例，并把完整新 subtree 记录为一次可撤销编辑；失败会销毁尚未记录的实例。File Browser 的 Prefab 双击和右键 Instantiate 都调用这一个入口。扩展不需要知道 History protocol、序列化格式或 Handler。若未来 Animation Graph 有自己的数据模型，应由 Animation Editor Module 采用相同模式提供 `AnimationEdits`，而不是把 Animation 特例塞进 `SceneEdits`。
 
 ## 最小历史数据
 

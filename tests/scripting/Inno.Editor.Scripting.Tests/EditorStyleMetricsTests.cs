@@ -6,6 +6,7 @@ using System.Numerics;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using InlineRenameResult = Inno.Editor.ImGui.ImGuiWidget.InlineRenameResult;
 using TreeNodeOptions = Inno.Editor.ImGui.ImGuiWidget.TreeNodeOptions;
 using TreeNodeResult = Inno.Editor.ImGui.ImGuiWidget.TreeNodeResult;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -207,6 +208,59 @@ public sealed class EditorStyleMetricsTests
                 1f + EditorWidget.style.interactionOverlayThickness);
             NativeImGui.End();
             NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void InlineRenameReleasesFocusBeforeAContextMenuCanOpen()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            string value = "Untitled Scene";
+            bool requestFocus = true;
+            InlineRenameResult result = InlineRenameResult.None;
+            Vector2 center = default;
+
+            void Frame()
+            {
+                NativeImGui.NewFrame();
+                NativeImGui.SetNextWindowPos(new Vector2(30f, 30f), ImGuiCond.Always);
+                NativeImGui.SetNextWindowSize(new Vector2(320f, 180f), ImGuiCond.Always);
+                _ = NativeImGui.Begin("Inline Rename Context Test");
+                result = EditorWidget.InlineRename(
+                    "created_asset",
+                    ref value,
+                    ref requestFocus,
+                    NativeImGui.GetFrameHeight(),
+                    width: 220f);
+                center = (NativeImGui.GetItemRectMin() + NativeImGui.GetItemRectMax()) * 0.5f;
+                NativeImGui.End();
+                NativeImGui.Render();
+            }
+
+            Frame();
+            Frame();
+            Assert.False(requestFocus);
+            Assert.NotEqual(0u, ImGuiP.GetActiveID());
+
+            io.AddMousePosEvent(center.X, center.Y);
+            io.AddMouseButtonEvent((int)ImGuiMouseButton.Right, true);
+            Frame();
+            io.AddMouseButtonEvent((int)ImGuiMouseButton.Right, false);
+            Frame();
+
+            Assert.Equal(InlineRenameResult.FocusLost, result);
+            Assert.Equal(0u, ImGuiP.GetActiveID());
         }
         finally
         {

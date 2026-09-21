@@ -64,6 +64,11 @@ public sealed class PropertyDrawContext
     /// </summary>
     public double? maximum { get; }
 
+    /// <summary>
+    /// Gets optional hover help supplied by Inspector metadata.
+    /// </summary>
+    public string? tooltip { get; }
+
     /// <summary>Gets whether Color values are unclamped linear floating-point channels.</summary>
     public bool hdrColor { get; }
 
@@ -82,6 +87,7 @@ public sealed class PropertyDrawContext
         bool isReadOnly,
         double? minimum,
         double? maximum,
+        string? tooltip,
         Func<object?> getter,
         Action<object?> setter,
         SerializedPropertyRenderer renderer, bool hdrColor = false)
@@ -100,6 +106,7 @@ public sealed class PropertyDrawContext
         m_isReadOnly = isReadOnly;
         this.minimum = minimum;
         this.maximum = maximum;
+        this.tooltip = tooltip;
         m_getter = getter;
         m_setter = setter;
         m_renderer = renderer;

@@ -1,5 +1,6 @@
 using System;
 
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Inspection;
@@ -20,7 +21,10 @@ internal sealed class NullablePropertyDrawer : IPropertyDrawer
         object? value = context.GetValue();
         bool hasValue = value is not null;
         bool previousHasValue = hasValue;
-        _ = NativeImGui.Checkbox($"##{context.path}_has_value", ref hasValue);
+        _ = EditorWidget.Checkbox(
+            $"##{context.path}_has_value",
+            ref hasValue,
+            context.tooltip);
         if (hasValue != previousHasValue)
         {
             value = hasValue ? Activator.CreateInstance(underlyingType) : null;

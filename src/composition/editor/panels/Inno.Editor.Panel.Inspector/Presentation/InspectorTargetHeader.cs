@@ -49,49 +49,10 @@ internal sealed class InspectorTargetHeader
     {
         ArgumentNullException.ThrowIfNull(drawer);
         ArgumentNullException.ThrowIfNull(context);
-        ImGuiWindowPtr parentWindow = ImGuiP.GetCurrentWindow();
-        Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
-        Vector2 parentPadding = parentWindow.WindowPadding;
-        Vector2 headerOrigin = contentCursor - parentPadding;
-        float width = MathF.Max(
-            1f,
-            NativeImGui.GetContentRegionAvail().X + parentPadding.X * 2f);
-        NativeImGui.SetCursorScreenPos(headerOrigin);
-
-        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorTargetHeader);
-        NativeImGui.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorTargetHeaderBorder);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.inspectorTargetHeaderPadding);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, EditorWidget.style.frameRounding);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, EditorWidget.style.borderSize);
-        try
-        {
-            ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
-            ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
-                                           ImGuiWindowFlags.NoScrollWithMouse |
-                                           ImGuiWindowFlags.NoSavedSettings;
-            bool visible = NativeImGui.BeginChild(
-                "##inspector_target_header",
-                new Vector2(width, 0f),
-                childFlags,
-                windowFlags);
-            try
-            {
-                if (visible)
-                    DrawContent(drawer, context);
-            }
-            finally
-            {
-                NativeImGui.EndChild();
-            }
-        }
-        finally
-        {
-            NativeImGui.PopStyleVar(3);
-            NativeImGui.PopStyleColor(2);
-        }
-        NativeImGui.SetCursorScreenPos(new Vector2(
-            contentCursor.X,
-            NativeImGui.GetCursorScreenPos().Y));
+        EditorWidget.HeaderSurface(
+            "##inspector_target_header",
+            () => DrawContent(drawer, context),
+            spanWindowPadding: true);
     }
 
     private void DrawContent(IInspectionDrawer drawer, InspectionDrawContext context)

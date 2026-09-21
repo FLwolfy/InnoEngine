@@ -265,6 +265,31 @@ public static class EditorPalette
     public static Vector4 inspectorSectionBorder { get; } = new(0.34f, 0.33f, 0.39f, 1f);
 
     /// <summary>
+    /// Gets the accent used by numeric Shader type badges.
+    /// </summary>
+    public static Vector4 shaderTypeNumeric { get; } = new(0.53f, 0.72f, 0.96f, 1f);
+
+    /// <summary>
+    /// Gets the accent used by integer Shader type badges.
+    /// </summary>
+    public static Vector4 shaderTypeInteger { get; } = new(0.58f, 0.82f, 0.72f, 1f);
+
+    /// <summary>
+    /// Gets the accent used by Boolean Shader type badges.
+    /// </summary>
+    public static Vector4 shaderTypeBoolean { get; } = new(0.91f, 0.69f, 0.38f, 1f);
+
+    /// <summary>
+    /// Gets the accent used by Shader resource type badges.
+    /// </summary>
+    public static Vector4 shaderTypeResource { get; } = new(0.58f, 0.78f, 0.86f, 1f);
+
+    /// <summary>
+    /// Gets the accent used by unclassified Shader type badges.
+    /// </summary>
+    public static Vector4 shaderTypeOther { get; } = new(0.72f, 0.66f, 0.84f, 1f);
+
+    /// <summary>
     /// Gets disabled inspector card text.
     /// </summary>
     public static Vector4 inspectorCardDisabledText { get; } = new(0.52f, 0.52f, 0.54f, 1f);

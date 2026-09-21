@@ -52,7 +52,7 @@ public static partial class ImGuiWidget
         nativeStyle.WindowMenuButtonPosition = ImGuiDir.None;
         nativeStyle.ChildRounding = style.windowRounding;
         nativeStyle.ChildBorderSize = style.borderSize;
-        nativeStyle.PopupRounding = style.windowRounding;
+        nativeStyle.PopupRounding = style.menuRounding;
         nativeStyle.PopupBorderSize = 0f;
         nativeStyle.FramePadding = style.framePadding;
         nativeStyle.FrameRounding = style.frameRounding;
@@ -61,13 +61,15 @@ public static partial class ImGuiWidget
         nativeStyle.ItemInnerSpacing = style.itemInnerSpacing;
         nativeStyle.CellPadding = style.cellPadding;
         nativeStyle.IndentSpacing = style.indentSpacing;
+        nativeStyle.SeparatorTextPadding = style.sectionHeaderPadding;
+        nativeStyle.SeparatorTextBorderSize = style.borderSize;
         nativeStyle.ColumnsMinSpacing = style.columnMinimumSpacing;
         nativeStyle.ScrollbarSize = style.scrollbarSize;
         nativeStyle.ScrollbarPadding = style.scrollbarPadding;
         nativeStyle.ScrollbarRounding = style.frameRounding;
         nativeStyle.GrabMinSize = style.grabMinimumSize;
         nativeStyle.GrabRounding = style.frameRounding;
-        nativeStyle.TabRounding = style.frameRounding;
+        nativeStyle.TabRounding = style.windowRounding;
         nativeStyle.TabBorderSize = 0f;
         nativeStyle.TabBarOverlineSize = 0f;
         nativeStyle.ColorButtonPosition = ImGuiDir.Right;

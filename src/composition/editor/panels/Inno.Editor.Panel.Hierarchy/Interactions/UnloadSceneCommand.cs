@@ -5,10 +5,10 @@ using Inno.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction(HierarchyInteractionIds.C_DELETE_SCENE, priority: 100)]
-[EditorMenu(HierarchyInteractionIds.C_AREA, "Delete", order: 400, separatorBefore: true)]
+[EditorAction(HierarchyInteractionIds.C_UNLOAD_SCENE, priority: 100)]
+[EditorMenu(HierarchyInteractionIds.C_AREA, "Unload", order: 400, separatorBefore: true)]
 [EditorShortcut(HierarchyInteractionIds.C_AREA, KeyCode.Delete)]
-internal sealed class DeleteSceneCommand(SceneEdits edits) : EditorAction<GameScene>
+internal sealed class UnloadSceneCommand(SceneEdits edits) : EditorAction<GameScene>
 {
     /// <summary>
     /// Evaluates whether the requested change can be applied to the current generation.

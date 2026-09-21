@@ -150,7 +150,10 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 missing is null ? () =>
                 {
                     bool enabled = system.enabled;
-                    if (EditorWidget.CompactCheckbox($"enabled_{systemId}", ref enabled))
+                    if (EditorWidget.CompactCheckbox(
+                            $"enabled_{systemId}",
+                            ref enabled,
+                            tooltip: "Enable or disable this system."))
                     {
                         _ = m_edits.ChangeProperty(
                             system,

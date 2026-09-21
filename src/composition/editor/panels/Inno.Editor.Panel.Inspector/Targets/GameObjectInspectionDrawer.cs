@@ -114,7 +114,8 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         bool active = target.activeSelf;
         if (EditorWidget.CompactCheckbox(
                 $"target_active_{target.identity.persistentId:N}",
-                ref active))
+                ref active,
+                tooltip: "Enable or disable this GameObject."))
         {
             m_edits.SetGameObjectActive(target, active);
         }
@@ -210,7 +211,10 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                     ? () =>
                     {
                         bool enabled = behavior.enabled;
-                        if (EditorWidget.CompactCheckbox($"enabled_{componentId}", ref enabled))
+                        if (EditorWidget.CompactCheckbox(
+                                $"enabled_{componentId}",
+                                ref enabled,
+                                tooltip: "Enable or disable this component."))
                         {
                             _ = m_edits.ChangeProperty(
                                 behavior,

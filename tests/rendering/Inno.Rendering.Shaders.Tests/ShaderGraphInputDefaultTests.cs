@@ -22,27 +22,36 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
     { m_modules = new(new() { cacheDirectory = m_root }); m_types = new(m_modules); m_serialization = new(m_types); }
 
     [Fact]
-    public void UnconnectedTypedDefaultsLowerAndRoundTripWithoutSyntheticGraphNodes()
+    public void RequiredInputsRejectStoredDefaultsAndAcceptExplicitGraphConstants()
     {
         var graph = new GraphDocument();
         var node = new GraphNodeRecord(new("multiply"), "inno.shader.binary");
+        var left = new GraphNodeRecord(new("left"), "inno.shader.constant");
+        var right = new GraphNodeRecord(new("right"), "inno.shader.constant");
         graph.AddNode(node);
-        Set(node, "type", "float4"); Set(node, "operation", "multiply");
-        ShaderGraphLiteral value = ShaderGraphLiteral.Zero(ShaderSourceType.Atomic("float4"));
-        value.scalarBits = [0x3f800000, 0x3f000000, 0x3e800000, 0x3f800000];
+        graph.AddNode(left);
+        graph.AddNode(right);
+        Set(node, "type", "float"); Set(node, "operation", "multiply");
+        ShaderGraphLiteral value = ShaderGraphLiteral.Zero(ShaderSourceType.Atomic("float"));
+        value.scalarBits = [0x3f800000];
         Set(node, ShaderGraphDocument.inputDefaultPrefix + "left", value);
         Set(node, ShaderGraphDocument.inputDefaultPrefix + "right", value);
         GraphDocument restored = GraphDocumentCodec.Decode(GraphDocumentCodec.Encode(graph, m_serialization), m_serialization);
-        var catalog = new ShaderNodeCompilerCatalog([new ShaderBinaryNodeCompiler()]);
+        var catalog = new ShaderNodeCompilerCatalog([new ShaderBinaryNodeCompiler(), new ShaderConstantNodeCompiler()]);
+        ShaderGraphLoweringResult missing = Lower(restored, catalog);
+        Assert.Equal(2, missing.diagnostics.Count(value => value.code == "SHADER_GRAPH_INPUT_REQUIRED"));
+
+        restored.AddEdge(new(new("left-edge"), new(left.id, new("value")), new(node.id, new("left"))));
+        restored.AddEdge(new(new("right-edge"), new(right.id, new("value")), new(node.id, new("right"))));
         ShaderGraphLoweringResult result = Lower(restored, catalog);
         Assert.True(result.succeeded, string.Join("\n", result.diagnostics.Select(value => value.message)));
-        Assert.Single(restored.nodes); Assert.Empty(restored.edges);
-        Assert.Equal(2, result.block!.instructions.Count(value => value.operation == ShaderIrOperation.Construct));
-        Assert.Contains(result.block.instructions, value => value.operation == ShaderIrOperation.Multiply);
+        Assert.Equal(3, restored.nodes.Count);
+        Assert.Equal(2, restored.edges.Count);
+        Assert.Contains(result.block!.instructions, value => value.operation == ShaderIrOperation.Multiply);
     }
 
     [Fact]
-    public void ConnectedInputIgnoresButRetainsItsObsoleteDefault()
+    public void ConnectedInputsIgnoreButRetainObsoleteStoredDefaults()
     {
         var graph = new GraphDocument();
         var node = new GraphNodeRecord(new("multiply"), "inno.shader.binary");
@@ -52,8 +61,9 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
         Set(node, ShaderGraphDocument.inputDefaultPrefix + "left", ShaderGraphLiteral.Zero(ShaderSourceType.Atomic("uint")));
         Set(node, ShaderGraphDocument.inputDefaultPrefix + "right", ShaderGraphLiteral.Zero(ShaderSourceType.Atomic("float")));
         var catalog = new ShaderNodeCompilerCatalog([new ShaderBinaryNodeCompiler(), new ShaderConstantNodeCompiler()]);
-        Assert.Contains(Lower(graph, catalog).diagnostics, value => value.code == "SHADER_GRAPH_DEFAULT_TYPE" && value.portId == "left");
-        graph.AddEdge(new(new("connect"), new(constant.id, new("value")), new(node.id, new("left"))));
+        Assert.Equal(2, Lower(graph, catalog).diagnostics.Count(value => value.code == "SHADER_GRAPH_INPUT_REQUIRED"));
+        graph.AddEdge(new(new("connect-left"), new(constant.id, new("value")), new(node.id, new("left"))));
+        graph.AddEdge(new(new("connect-right"), new(constant.id, new("value")), new(node.id, new("right"))));
         Assert.True(Lower(graph, catalog).succeeded);
         Assert.True(node.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "left", out _));
     }
@@ -136,8 +146,57 @@ public sealed class ShaderGraphInputDefaultTests : IDisposable
             SerializationContext.empty);
         GraphNodeRecord value = Assert.Single(expanded.nodes);
         Assert.Equal("inno.shader.reroute", value.definitionId);
-        Assert.True(value.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "input", out _));
+        Assert.False(value.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "input", out _));
         Assert.False(value.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "value", out _));
+    }
+
+    [Fact]
+    public void OptionalInputsCompileFromTypedZeroWithoutPersistedOverrides()
+    {
+        var graph = new GraphDocument();
+        var reroute = new GraphNodeRecord(new("optional"), "inno.shader.reroute");
+        graph.AddNode(reroute);
+        Set(reroute, "valueType", new ShaderGraphType { id = "float3" });
+
+        var catalog = new ShaderNodeCompilerCatalog([new ShaderRerouteNodeCompiler()]);
+        ShaderGraphLoweringResult result = catalog.Lower(
+            new(
+                graph,
+                new Dictionary<string, GraphEndpoint>
+                {
+                    ["value"] = new(reroute.id, new("value"))
+                },
+                "test.optional-zero"),
+            m_serialization,
+            SerializationContext.empty);
+
+        Assert.True(result.succeeded, string.Join("\n", result.diagnostics.Select(value => value.message)));
+        Assert.Empty(result.diagnostics);
+        Assert.False(reroute.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + "input", out _));
+    }
+
+    [Fact]
+    public void OptionalInputsRejectTypesThatCannotHaveAZeroValue()
+    {
+        var graph = new GraphDocument();
+        var reroute = new GraphNodeRecord(new("optional-resource"), "inno.shader.reroute");
+        graph.AddNode(reroute);
+        Set(reroute, "valueType", new ShaderGraphType { id = "sampled-texture2d" });
+
+        var catalog = new ShaderNodeCompilerCatalog([new ShaderRerouteNodeCompiler()]);
+        ShaderGraphLoweringResult result = catalog.Lower(
+            new(
+                graph,
+                new Dictionary<string, GraphEndpoint>
+                {
+                    ["value"] = new(reroute.id, new("value"))
+                },
+                "test.optional-resource"),
+            m_serialization,
+            SerializationContext.empty);
+
+        ShaderGraphDiagnostic diagnostic = Assert.Single(result.diagnostics);
+        Assert.Equal("SHADER_GRAPH_OPTIONAL_TYPE", diagnostic.code);
     }
 
     private ShaderGraphLoweringResult Lower(GraphDocument graph, ShaderNodeCompilerCatalog catalog)

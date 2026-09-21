@@ -278,7 +278,10 @@ public static class EditorMenuRenderer
         for (int i = 0; i < items.Count; i++)
         {
             EditorMenuItem item = items[i];
-            if (item.separatorBefore)
+            // A separator groups adjacent commands; it is never meaningful before the first
+            // visible item of a popup or submenu. Enforcing that here keeps every menu surface
+            // consistent even when a type-specific query hides the commands that preceded it.
+            if (i > 0 && item.separatorBefore)
                 NativeImGui.Separator();
             if (item.children.Count > 0)
             {

@@ -80,16 +80,18 @@ internal static class PipelineInspector
         UI.PushID(id.ToString("N"));
         try
         {
-            Widget.SectionHeader("Render Pipeline", "This source is the configuration authority. Unsaved settings do not change Scene, Game or Player content.");
-            Widget.Hint(draft.isDirty ? "Unsaved changes · rendering unchanged" : "Saved · import and activation are separate");
-            if (draft.error.Length != 0) Widget.Hint(draft.error);
-            if (draft.readOnly) Widget.Hint("Installed Pipeline · copy into the project to edit");
-            Widget.Hint("Pipeline: " + pipeline.pipelineTypeId);
-            DrawSettings("pipeline.settings", pipeline.pipelineState, value => pipeline.pipelineState = value);
+            if (Widget.SectionHeader("Render Pipeline", "This source is the configuration authority. Unsaved settings do not change Scene, Game or Player content."))
+            {
+                Widget.Hint(draft.isDirty ? "Unsaved changes · rendering unchanged" : "Saved · import and activation are separate");
+                if (draft.error.Length != 0) Widget.Hint(draft.error);
+                if (draft.readOnly) Widget.Hint("Installed Pipeline · copy into the project to edit");
+                Widget.Hint("Pipeline: " + pipeline.pipelineTypeId);
+                DrawSettings("pipeline.settings", pipeline.pipelineState, value => pipeline.pipelineState = value);
+            }
 
-            Widget.SectionHeader("Features", "Ordered extension settings belong to this Pipeline. Each enabled feature participates in its render graph.");
+            bool featuresOpen = Widget.SectionHeader("Features", "Ordered extension settings belong to this Pipeline. Each enabled feature participates in its render graph.");
             RenderFeatureConfiguration[] features = pipeline.features;
-            for (int index = 0; index < features.Length; index++)
+            for (int index = 0; featuresOpen && index < features.Length; index++)
             {
                 int slot = index;
                 UI.PushID(slot);
@@ -117,7 +119,7 @@ internal static class PipelineInspector
                 }
                 finally { UI.PopID(); }
             }
-            if (features.Length == 0) Widget.Hint("No additional features");
+            if (featuresOpen && features.Length == 0) Widget.Hint("No additional features");
             if (!UI.IsAnyItemActive()) documents.Commit(id);
         }
         finally { UI.PopID(); }

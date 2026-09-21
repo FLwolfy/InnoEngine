@@ -2815,13 +2815,22 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     private AssetRecord? FindRecordLocked(string relativePath)
     {
         m_recordsByPath.TryGetValue(relativePath, out AssetRecord? record);
-        if (record is not null && record.persistentId != Guid.Empty)
-            return record;
         string metaPath = GetMetaPath(relativePath);
         if (!TryReadSourceMeta(metaPath, out AssetSourceMeta sourceMeta))
             return record;
         if (sourceMeta.persistentId == Guid.Empty)
             return record;
+        if (record is not null && record.persistentId == sourceMeta.persistentId)
+            return record;
+        if (record is not null && record.persistentId != Guid.Empty)
+        {
+            // The source sidecar owns path identity. A catalog entry at the same path can be
+            // historical after an interrupted save or catalog promotion and must not replace it.
+            RetireRecordLocked(
+                record,
+                $"Source '{relativePath}' now declares persistent id '{sourceMeta.persistentId}'.");
+            record = null;
+        }
         if (m_recordsById.TryGetValue(sourceMeta.persistentId, out AssetRecord? tombstone) &&
             tombstone.meta.isTombstone)
         {
@@ -3241,8 +3250,12 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
             if (meta.persistentId == Guid.Empty)
                 return;
             AssetRecord tombstone = FindRecordByIdWithoutLoading(meta.persistentId) ?? new AssetRecord();
-            if (!string.IsNullOrWhiteSpace(tombstone.relativePath))
+            if (!string.IsNullOrWhiteSpace(tombstone.relativePath) &&
+                m_recordsByPath.TryGetValue(tombstone.relativePath, out AssetRecord? pathRecord) &&
+                ReferenceEquals(pathRecord, tombstone))
+            {
                 m_recordsByPath.Remove(tombstone.relativePath);
+            }
             tombstone.relativePath = meta.relativePath;
             tombstone.persistentId = meta.persistentId;
             tombstone.stableTypeId = meta.stableAssetTypeId;
@@ -3257,7 +3270,11 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         if (!string.IsNullOrWhiteSpace(record.relativePath) &&
             !string.Equals(record.relativePath, meta.relativePath, StringComparison.OrdinalIgnoreCase))
         {
-            m_recordsByPath.Remove(record.relativePath);
+            if (m_recordsByPath.TryGetValue(record.relativePath, out AssetRecord? pathRecord) &&
+                ReferenceEquals(pathRecord, record))
+            {
+                m_recordsByPath.Remove(record.relativePath);
+            }
         }
         record.relativePath = meta.relativePath;
         record.persistentId = meta.persistentId;

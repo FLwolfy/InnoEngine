@@ -8,7 +8,6 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Adapter.Presentation.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -91,6 +90,13 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
     /// </param>
     protected override void Draw(InspectionDrawContext context, AssetFileEntry entry)
     {
+        if (!EditorWidget.SectionHeader(
+                "Asset",
+                "This view describes the selected source entry. Structured assets may replace it with a dedicated authoring drawer."))
+        {
+            return;
+        }
+
         DrawMetadata(
             "Type",
             m_assets.IsPluginRoot(entry)
@@ -108,9 +114,9 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
 
     private static void DrawMetadata(string label, string value)
     {
-        NativeImGui.TextUnformatted(label);
-        NativeImGui.Separator();
-        NativeImGui.TextUnformatted(value);
-        NativeImGui.Spacing();
+        EditorWidget.PropertyRow(
+            "asset.metadata." + label,
+            label,
+            () => EditorWidget.Hint(value));
     }
 }

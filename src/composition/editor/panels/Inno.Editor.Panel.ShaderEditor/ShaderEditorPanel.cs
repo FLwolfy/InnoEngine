@@ -44,15 +44,14 @@ internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : Edito
     }
 }
 
-[EditorAction("editor/open", "panel/asset.file-browser", priority: 1000)]
-internal sealed class OpenShaderEditorAction : EditorAction<AssetFileEntry>
+[EditorAction("editor/open", priority: 1000)]
+internal sealed class OpenShaderEditorAction : EditorAction<ShaderAsset, string>
 {
     /// <inheritdoc />
-    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
-        => !context.target.isDirectory && context.target.assetPath.localPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase)
-            ? EditorActionState.enabled : EditorActionState.hidden;
+    protected override EditorActionState Query(EditorActionContext<ShaderAsset, string> context)
+        => EditorActionState.enabled;
     /// <inheritdoc />
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    protected override void Execute(EditorActionContext<ShaderAsset, string> context)
     {
         context.interactions.SetSelection(context.target);
         if (!context.interactions.OpenPanel("rendering.shader-editor")) throw new InvalidOperationException("Shader Editor is unavailable.");

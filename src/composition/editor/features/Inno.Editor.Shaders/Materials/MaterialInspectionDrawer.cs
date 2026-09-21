@@ -75,29 +75,38 @@ internal static class MaterialInspector
         NativeImGui.PushID(draft.id.ToString("N"));
         try
         {
-            EditorWidget.SectionHeader("Material", "Edits stay in this draft. Save publishes through normal asset import; Revert reloads the source.");
-            EditorWidget.Hint(draft.isDirty ? "Unsaved changes · Scene/Game unchanged" : "Saved · compilation and import are separate");
-            if (draft.error.Length != 0) EditorWidget.Hint(draft.error);
-            if (draft.readOnly) EditorWidget.Hint("Installed material · copy to the project to edit");
-            Draw("shader", "Shader", typeof(ShaderAsset), () => material.shader, value => material.shader = (ShaderAsset?)value);
+            bool materialOpen = EditorWidget.SectionHeader("Material", "Edits stay in this draft. Save publishes through normal asset import; Revert reloads the source.");
+            if (materialOpen)
+            {
+                EditorWidget.Hint(draft.isDirty ? "Unsaved changes · Scene/Game unchanged" : "Saved · compilation and import are separate");
+                if (draft.error.Length != 0) EditorWidget.Hint(draft.error);
+                if (draft.readOnly) EditorWidget.Hint("Installed material · copy to the project to edit");
+                Draw("shader", "Shader", typeof(ShaderAsset), () => material.shader, value => material.shader = (ShaderAsset?)value);
+            }
             ShaderDefinition? definition = material.shader?.definition;
             if (material.shader is null || material.shader.isMissing || definition is null)
-            { EditorWidget.Hint("Choose an available Shader. Existing overrides are retained until its interface can be resolved."); return; }
-            if (NativeImGui.SmallButton("Open Shader Editor"))
+            {
+                if (materialOpen) EditorWidget.Hint("Choose an available Shader. Existing overrides are retained until its interface can be resolved.");
+                return;
+            }
+            if (materialOpen && NativeImGui.SmallButton("Open Shader Editor"))
             {
                 context.interactions.SetSelection(material.shader);
                 context.interactions.OpenPanel("rendering.shader-editor");
             }
-            NativeImGui.SameLine();
-            if (NativeImGui.SmallButton("Locate Shader")
-                && documents.assets.TryGetFileSystemEntry(material.shader.assetPath, out AssetFileEntry shaderEntry))
-                context.interactions.SetSelection(shaderEntry);
+            if (materialOpen)
+            {
+                NativeImGui.SameLine();
+                if (NativeImGui.SmallButton("Locate Shader")
+                    && documents.assets.TryGetFileSystemEntry(material.shader.assetPath, out AssetFileEntry shaderEntry))
+                    context.interactions.SetSelection(shaderEntry);
+            }
 
-            if (NativeImGui.CollapsingHeader("Material Preview")
+            if (materialOpen && NativeImGui.CollapsingHeader("Material Preview")
                 && context.interactions.TryGetModule<ShaderPreviews>(out var shaderPreviews) && shaderPreviews is not null)
                 shaderPreviews.DrawMaterial(draft.id, material, MathF.Max(1f, MathF.Min(256f, NativeImGui.GetContentRegionAvail().X)));
 
-            if (definition.techniques.Length > 1 || material.techniqueId.isValid)
+            if (materialOpen && (definition.techniques.Length > 1 || material.techniqueId.isValid))
             {
                 if (EditorWidget.BeginBoundedCombo("##technique", material.techniqueId.isValid ? material.techniqueId.value : "Automatic"))
                 {
@@ -113,7 +122,8 @@ internal static class MaterialInspector
                 }
             }
 
-            EditorWidget.SectionHeader("Parameters", "Inherited values follow Shader defaults. Changing a field creates a Material override; Reset restores inheritance.");
+            bool parametersOpen = EditorWidget.SectionHeader("Parameters", "Inherited values follow Shader defaults. Changing a field creates a Material override; Reset restores inheritance.");
+            bool groupOpen = parametersOpen;
             string currentGroup = "";
             foreach (ShaderPropertyDefinition property in definition.properties.Where(IsEditable))
             {
@@ -123,8 +133,9 @@ internal static class MaterialInspector
                 if (presentation.group != currentGroup)
                 {
                     currentGroup = presentation.group;
-                    EditorWidget.SectionHeader(currentGroup.Length == 0 ? "Parameters" : currentGroup);
+                    groupOpen = EditorWidget.SectionHeader(currentGroup.Length == 0 ? "Parameters" : currentGroup);
                 }
+                if (!groupOpen) continue;
                 bool overridden = material.TryGet(property.id, out MaterialValue value);
                 if (overridden && !ShaderPropertyInspector.Compatible(property.type, value.kind)) continue;
                 if (!overridden) value = property.defaultValue;
@@ -150,10 +161,10 @@ internal static class MaterialInspector
                 finally { NativeImGui.PopID(); }
             }
 
-            if (material.properties.Count != 0 && !draft.readOnly && NativeImGui.Button("Reset all overrides"))
+            if (parametersOpen && material.properties.Count != 0 && !draft.readOnly && NativeImGui.Button("Reset all overrides"))
             { material.ReplaceProperties([]); documents.Edit(draft, material, true); }
 
-            foreach (ShaderKeywordDefinition keyword in definition.keywords)
+            foreach (ShaderKeywordDefinition keyword in parametersOpen ? definition.keywords : [])
             {
                 string selected = keyword.options.FirstOrDefault(option => material.keywords.Contains(option)) ?? "None";
                 if (!EditorWidget.BeginBoundedCombo(keyword.id, selected)) continue;
@@ -175,31 +186,37 @@ internal static class MaterialInspector
                 && IsEditable(property) && ShaderPropertyInspector.Compatible(property.type, entry.value.kind))).ToArray();
             if (orphaned.Length != 0)
             {
-                EditorWidget.SectionHeader("Unresolved Overrides", "These values were retained after an interface change. Remove them explicitly or restore a compatible Shader before publishing.");
-                foreach (MaterialPropertyEntry entry in orphaned)
+                if (EditorWidget.SectionHeader("Unresolved Overrides", "These values were retained after an interface change. Remove them explicitly or restore a compatible Shader before publishing."))
                 {
-                    NativeImGui.TextUnformatted(entry.id.value + " · " + entry.value.kind);
-                    if (!draft.readOnly && NativeImGui.SmallButton("Remove##" + entry.id.value))
-                    { material.ReplaceProperties(material.properties.Where(value => value.id != entry.id).ToArray()); documents.Edit(draft, material, true); }
+                    foreach (MaterialPropertyEntry entry in orphaned)
+                    {
+                        NativeImGui.TextUnformatted(entry.id.value + " · " + entry.value.kind);
+                        if (!draft.readOnly && NativeImGui.SmallButton("Remove##" + entry.id.value))
+                        { material.ReplaceProperties(material.properties.Where(value => value.id != entry.id).ToArray()); documents.Edit(draft, material, true); }
+                    }
                 }
             }
             ShaderPropertyDefinition[] passBindings = definition.properties.Where(property => !IsEditable(property)).ToArray();
             string[] unknownKeywords = material.keywords.Where(value => !definition.keywords.Any(keyword => keyword.options.Contains(value))).ToArray();
             if (unknownKeywords.Length != 0)
             {
-                EditorWidget.SectionHeader("Unresolved Keywords", "These overrides no longer belong to the Shader interface. They remain until explicitly removed.");
-                foreach (string keyword in unknownKeywords)
+                if (EditorWidget.SectionHeader("Unresolved Keywords", "These overrides no longer belong to the Shader interface. They remain until explicitly removed."))
                 {
-                    NativeImGui.TextUnformatted(keyword);
-                    if (!draft.readOnly && NativeImGui.SmallButton("Remove##keyword." + keyword))
-                    { material.SetKeyword(keyword, false); documents.Edit(draft, material, true); }
+                    foreach (string keyword in unknownKeywords)
+                    {
+                        NativeImGui.TextUnformatted(keyword);
+                        if (!draft.readOnly && NativeImGui.SmallButton("Remove##keyword." + keyword))
+                        { material.SetKeyword(keyword, false); documents.Edit(draft, material, true); }
+                    }
                 }
             }
             if (passBindings.Length != 0)
             {
-                EditorWidget.SectionHeader("Pipeline Bindings", "These resources are supplied by the Render Pass, not by this Material.");
-                foreach (ShaderPropertyDefinition property in passBindings)
-                    EditorWidget.Hint(property.displayName + " · " + property.type + " · " + property.bindingOwner);
+                if (EditorWidget.SectionHeader("Pipeline Bindings", "These resources are supplied by the Render Pass, not by this Material."))
+                {
+                    foreach (ShaderPropertyDefinition property in passBindings)
+                        EditorWidget.Hint(property.displayName + " · " + property.type + " · " + property.bindingOwner);
+                }
             }
             if (!NativeImGui.IsAnyItemActive()) documents.Commit(draft);
         }

@@ -122,7 +122,7 @@ public sealed class CreateAnimationStateAction : EditorAction<AnimationGraph>
 }
 ```
 
-同一个 Attribute 同时适用于主菜单和右键菜单；区别只在 area。`EditorMenuRenderer` 会递归创建一级、二级或任意更深的菜单。
+同一个 Attribute 同时适用于主菜单和右键菜单；区别只在 area。`EditorMenuRenderer` 会递归创建一级、二级或任意更深的菜单。Create 类命令应使用 `Create/...` 路径形成统一子菜单，不在 label 中手写层级或分隔线。`separatorBefore` 只表达两个相邻可见命令组之间的边界；当前菜单/子菜单的首个可见项永远不会绘制分隔线，因此前置命令被 Query 隐藏时也不会留下孤立横线。
 
 动态列表使用 `EditorMenuSource`：
 
@@ -141,6 +141,8 @@ public sealed class AnimationTemplateMenu : EditorMenuSource
 ```
 
 Action 的 `Query` 决定条目是否可见、可用、勾选和动态标题；快捷键标签从 `[EditorShortcut]` 自动生成。
+
+File Browser 的资产操作同样使用 Action/Menu 路由：条目 Action 只负责识别 source entry 类型并转发稳定语义动作，实际 Scene Load、Prefab Instantiate 等行为由对应资产类型的 `editor/open` Action 完成。双击和右键因此共享一条执行链；未来资产类型可按相同方式贡献自己的右键功能，不在 File Browser renderer 中增加类型 switch。
 
 Panel 主菜单使用同一棵层级菜单模型。`EditorPanelAttribute.menuPath` 是 `Panel/` 下的开放分类路径，支持任意斜杠层级；`separatorBefore` 在条目所在分类内开启视觉分组。每次构建菜单时，generated Panel leaf 直接从当前 extension generation 的 `isOpen` 生成 checked 状态，因此勾选与窗口关闭按钮、reload 后恢复状态始终一致。Host 不维护封闭类别枚举，内置 Panel 当前按 Workspace、Viewports、Authoring、Content 与 Diagnostics 分类，Plugin Panel 可以声明自己的稳定分类而无需修改 Editor。
 

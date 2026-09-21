@@ -116,7 +116,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         bool graphNode = ShaderGraphNodes.IsNodeGraph(Controller.document);
         if (!graphNode)
         {
-            Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views.");
+            if (Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views."))
             {
                 var preview = owner.Preview(draft);
                 if (preview is null)
@@ -138,33 +138,37 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         }
         else
         {
-            Widget.SectionHeader("Graph Node", "Function Inputs and Function Outputs independently define the reusable typed interface. Check validates the interface; callers validate the inlined computation.");
-            try
+            if (Widget.SectionHeader("Graph Node", "Function Inputs and Function Outputs independently define the reusable typed interface. Check validates the interface; callers validate the inlined computation."))
             {
-                ShaderGraphNodeInterface nodeInterface = ShaderGraphNodes.ReadInterface(Controller.document, owner.serialization, owner.context);
-                InspectorRow("graph-node.summary", "Interface", () => UI.TextDisabled(
-                    $"{nodeInterface.inputs.Length} input(s) · {nodeInterface.outputs.Length} output(s) · {nodeInterface.kind}"));
-            }
-            catch (Exception failure) when (failure is InvalidOperationException or ArgumentException or FormatException or NotSupportedException)
-            {
-                Widget.Hint(failure.Message);
+                try
+                {
+                    ShaderGraphNodeInterface nodeInterface = ShaderGraphNodes.ReadInterface(Controller.document, owner.serialization, owner.context);
+                    InspectorRow("graph-node.summary", "Interface", () => Widget.WrappedText(
+                        $"{nodeInterface.inputs.Length} input(s) · {nodeInterface.outputs.Length} output(s) · {nodeInterface.kind}"));
+                }
+                catch (Exception failure) when (failure is InvalidOperationException or ArgumentException or FormatException or NotSupportedException)
+                {
+                    Widget.Hint(failure.Message);
+                }
             }
         }
         if (selected.Count == 0)
         {
-            Widget.SectionHeader(graphNode ? "Node Definition" : "Shader",
+            if (Widget.SectionHeader(graphNode ? "Node Definition" : "Shader",
                 graphNode ? "Select Function Inputs or Function Outputs to edit this reusable node's public interface."
-                    : "Target and public interface belong to this Shader, not to any Material override.");
-            if (!graphNode) DrawTarget();
-            if (Controller.document.metadata.ContainsKey(ShaderGraphDocument.definitionKey))
+                    : "Target and public interface belong to this Shader, not to any Material override."))
             {
-                var definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
-                foreach (var property in definition.properties)
-                    InspectorRow("definition." + property.id.value, property.displayName,
-                        () => UI.TextDisabled(property.type + " · " + property.bindingOwner));
+                if (!graphNode) DrawTarget();
+                if (Controller.document.metadata.ContainsKey(ShaderGraphDocument.definitionKey))
+                {
+                    var definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
+                    foreach (var property in definition.properties)
+                        InspectorRow("definition." + property.id.value, property.displayName,
+                            () => Widget.WrappedText(property.type + " · " + property.bindingOwner));
+                }
+                owner.RefreshCompilation(draft);
+                InspectorRow("compilation", "Compilation", () => Widget.WrappedText(draft.compilationStatus));
             }
-            owner.RefreshCompilation(draft);
-            InspectorRow("compilation", "Compilation", () => UI.TextWrapped(draft.compilationStatus));
             return;
         }
         GraphNodeRecord[] nodes = selected.Select(Controller.document.FindNode).OfType<GraphNodeRecord>().ToArray();
@@ -173,18 +177,22 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         if (nodes.Any(node => node.definitionId != nodes[0].definitionId))
         { Widget.Hint("Select nodes of the same kind to edit common settings."); return; }
         m_inspectionNodes = nodes;
-        Widget.SectionHeader(Title(nodes[0]), "Inputs, defaults and output configuration are edited here. Changes remain in the Shader draft until Save.");
-        if (nodes.Length > 1) Widget.Hint("Editing " + nodes.Length + " nodes · differing values are replaced together");
         UI.PushID(draft.id.ToString("N"));
         UI.PushID(nodes[0].id.value);
         UI.BeginDisabled(draft.readOnly);
         try
         {
-            Controls(nodes[0]);
+            if (Widget.SectionHeader(Title(nodes[0]), "Inputs, defaults and output configuration are edited here. Changes remain in the Shader draft until Save."))
+            {
+                if (nodes.Length > 1) Widget.Hint("Editing " + nodes.Length + " nodes · differing values are replaced together");
+                Controls(nodes[0]);
+            }
             ShaderNodePort[] inputs = draft.ports[nodes[0].id].Where(port => port.direction == GraphPortDirection.Input).ToArray();
-            if (inputs.Length != 0) Widget.SectionHeader("Inputs", "Connected inputs show their source; unconnected inputs expose their stored default when supported.");
-            foreach (ShaderNodePort port in inputs)
-                DrawInputDefault(nodes[0], port);
+            if (inputs.Length != 0 && Widget.SectionHeader("Inputs", "Connected inputs show their source. Optional inputs use an automatic zero; required inputs must be connected in the graph."))
+            {
+                foreach (ShaderNodePort port in inputs)
+                    DrawInputDefault(nodes[0], port);
+            }
         }
         finally { UI.EndDisabled(); UI.PopID(); UI.PopID(); m_inspectionNodes = null; }
     }
@@ -198,15 +206,8 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     internal static void DrawHeader(ShaderEditorDocuments owner, ShaderEditorDocuments.Draft? draft)
     {
         ArgumentNullException.ThrowIfNull(owner);
-        UI.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorTargetHeader);
-        UI.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorTargetHeaderBorder);
-        UI.PushStyleVar(ImGuiStyleVar.FrameRounding, Widget.style.frameRounding);
-        UI.PushStyleVar(ImGuiStyleVar.FrameBorderSize, Widget.style.borderSize);
-        bool visible = UI.BeginChild("##shader-header", new(0, 0), ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY,
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings);
-        try
+        Widget.HeaderSurface("##shader-header", () =>
         {
-            if (!visible) return;
             UI.SetNextItemWidth(-1f);
             string title = draft is null
                 ? "Select Shader"
@@ -249,13 +250,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
                 _ = owner.interactions.For(C_AREA, checkEntry).Execute("shader/check");
             Widget.DrawItemTooltip("Compile-check the current draft without saving or publishing it, and show diagnostics with source locations.");
             UI.EndDisabled();
-        }
-        finally
-        {
-            UI.EndChild();
-            UI.PopStyleVar(2);
-            UI.PopStyleColor(2);
-        }
+        }, spanWindowPadding: true);
     }
 
     private void RefreshPorts()

@@ -1,4 +1,4 @@
-using NativeImGui = Inno.Native.ImGui.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Inspection;
 
@@ -14,7 +14,7 @@ internal sealed class BooleanPropertyDrawer : IPropertyDrawer
     public void Draw(PropertyDrawContext context)
     {
         bool value = context.GetValue() is bool current && current;
-        if (NativeImGui.Checkbox($"##{context.path}", ref value))
+        if (EditorWidget.Checkbox($"##{context.path}", ref value, context.tooltip))
         {
             context.SetValue(value);
         }

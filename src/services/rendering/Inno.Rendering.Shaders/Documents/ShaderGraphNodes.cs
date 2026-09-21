@@ -289,12 +289,8 @@ public static class ShaderGraphNodes
         {
             if (incoming.TryGetValue(port.id, out GraphEdgeRecord[]? edges))
                 resolvedInputs.Add(port.id, edges[0].output);
-            else if (call.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + port.id, out GraphSerializedValue? value))
-                resolvedInputs.Add(port.id, AddDefault(parent, call, port, value!, stage, serialization, context));
             else if (!port.required)
-                resolvedInputs.Add(port.id, AddDefault(parent, call, port,
-                    ShaderGraphDocument.Encode(ShaderGraphLiteral.Zero(port.type.CreateType()), serialization, context),
-                    stage, serialization, context));
+                resolvedInputs.Add(port.id, AddOptionalZero(parent, call, port, stage, serialization, context));
             else
                 throw new InvalidOperationException(
                     $"Required graph-node input '{port.id}' is not connected on '{nodeInterface.displayName}'.");
@@ -367,14 +363,14 @@ public static class ShaderGraphNodes
             ShaderGraphDocument.Encode(serialization.Serialize(parentDefinition, context), serialization, context));
     }
 
-    private static GraphEndpoint AddDefault(GraphDocument graph, GraphNodeRecord call,
-        ShaderGraphNodePortDefinition port, GraphSerializedValue value, string stage,
+    private static GraphEndpoint AddOptionalZero(GraphDocument graph, GraphNodeRecord call,
+        ShaderGraphNodePortDefinition port, string stage,
         SerializationRegistry serialization, SerializationContext context)
     {
+        _ = ShaderGraphLiteral.Zero(port.type.CreateType());
         var id = new GraphNodeId(call.id.value + "/default/" + port.id);
         var node = new GraphNodeRecord(id, "inno.shader.reroute") { position = call.position };
         node.SetValue("valueType", ShaderGraphDocument.Encode(port.type, serialization, context));
-        node.SetValue(ShaderGraphDocument.inputDefaultPrefix + "input", value);
         if (stage.Length != 0) node.SetValue(ShaderGraphDocument.stageKey, ShaderGraphDocument.Encode(stage, serialization, context));
         graph.AddNode(node);
         return new(id, new("value"));

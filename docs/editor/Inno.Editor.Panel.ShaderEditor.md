@@ -62,7 +62,7 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 
 ## 当前限制
 
-节点参数和输入默认值现在在 Inspector 编辑，不在画布重复一套字段。未连接数值输入支持精确类型默认值，连接后只显示上游来源；资源/副作用必须接线。
+节点参数在 Inspector 编辑，不在画布重复一套字段；输入值本身只由 Graph 连接决定。Optional 输入在未连接时由编译器生成精确类型的零值，Inspector 只显示 `Optional · Zero when unconnected`，不保存或提供外部 override。Required 输入必须在 Graph 中连接 Constant 或其他类型兼容的 output；旧文档里残留的 `input-default.*` 不能再让 required 输入通过编译。资源类型若不能表示零值则不能声明为 optional。连接后只显示上游来源。输入 label 只保留端口名；类型和来源统一留在右侧 value column，以 `Float4 · From tint-multiply.value` 这类普通弱化文字表达。所有 Inspector fieldset 都可直接点击标题文字折叠，折叠后保留中断横线和左右居中的短竖帽，不显示额外加减号或整行 hover 背景。Preview、连接来源、错误提示和其他 Hint 都按当前 fieldset 宽度自动换行。
 Inspector 的 Draft Preview 只在用户显式执行 Check 且当前草稿编译成功后显示；任何后续草稿修改都会使其失效并要求重新 Check。Check 失败时 Inspector 只提示失败，不显示详细错误，也不呈现编译器缓存中的 last-good 候选；完整成功/失败诊断统一进入 Console。未经 Save 的预览不进入正式资源发布；它当前是编译预览，不是完整材质画面预览。
 
 Pass/Variant、Technique/Role、自定义混合和能力要求在 Output Inspector 中编辑，不再通过“Create Pass”一次生成一组可重复 Output。存储读写、原子加法和 discard 节点通过显式 after/then 连线约束副作用顺序。右键沿用共享菜单与搜索，并分为 Create、View、Edit、Connections、Organize 与 Assets；分隔线只标示同级语义边界或插件贡献的顶级函数目录，不向父级和每个子项传播。Group 可被选中，拖动组标题会整体移动成员；组名位于独立 Header，Header 颜色取成员节点 Header 颜色的混合。Insert Reroute 在当前连接线上插入一个强类型、零运算的布线点，只整理长连线，不改变生成的 Shader 语义。Format 使用分层依赖布局和多轮端口感知的交叉最小化：输入在左、Output 在右，并按目标端口次序排列同层来源；它只改画布位置且可 Undo。源码导入设置通过 .imeta 与共享 History 编辑；`catalogPath`/`catalogOrder` 让插件把函数库放入自己的可读菜单分组。端口快照只保存中立类型/身份，缺失端口以红色保留，不按序号重连。

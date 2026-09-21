@@ -44,6 +44,7 @@ internal sealed class AnimationControllerInspectionDrawer
 - 当前 `EditorInteractions`。
 - 当前 target。
 - `SerializedPropertyRenderer`。
+- `DrawProperties()`，把当前 target 的全部 runtime-visible `SerializableProperty` 送入同一 Attribute/PropertyDrawer 管线；没有显式 `[Header]` 的首组属性自动进入 `Properties` fieldset。
 - `InspectionDrawerAttribute(..., conditional: true)` 声明由 CanInspect 筛选目标的 Drawer，允许同类型、同优先级的条件注册。实际同时接受同一目标仍明确报歧义，不依赖发现顺序；普通无条件冲突继续在候选构建时报错。
 - `DrawValue(..., readOnly, hdrColor, tooltip, minimum, maximum)` 用共享控件编辑声明值，允许动态声明贡献 Tooltip/数值范围，不伪造 CLR Attribute 或建立第二套控件；`DrawDraftProperty(editorContext, stateOwner, valueOwner, ownerPath, property, edits, readOnly)` 还保留原生属性 Header/Tooltip/范围。stateOwner 为中立文档状态，valueOwner 是仅本帧使用的设置对象，避免文本状态保留插件代际。
 
@@ -65,7 +66,7 @@ internal sealed class AnimationCurvePropertyDrawer : IPropertyDrawer
 }
 ```
 
-PropertyDrawer 通过 declared property type 匹配。`PropertyDrawContext.SetValue` 会把修改交给所属 feature 的 edit service，由它写入中立的 Undo/Redo payload；Drawer 不应该绕过 context 直接修改 serialized owner。
+PropertyDrawer 通过 declared property type 匹配。`PropertyDrawContext.SetValue` 会把修改交给所属 feature 的 edit service，由它写入中立的 Undo/Redo payload；Drawer 不应该绕过 context 直接修改 serialized owner。`PropertyDrawContext.tooltip` 暴露已经组合完成的 hover help；bool 与 nullable 内建 Drawer 会把它同时绑定到 checkbox 本身，因此 label 和 control 都能解释同一属性。
 
 `SerializedPropertyRenderer` 本身不依赖 Scene。创建 renderer 的 feature 提供 `IInspectionPropertyEditService`，负责把通用的 owner、root property 与 mutation 转换成自己的 Undo/Redo 协议。Inspector Panel 使用 Scene adapter；未来 Material、Animation 或 RenderGraph 检查器可以使用各自的 history adapter，而不用把 Scene 引入通用 Inspection 项目。
 
@@ -104,7 +105,7 @@ public sealed class CharacterPresentation : ISerializable
 public float authoredValue { get; set; }
 ```
 
-内建集合包括 `Header`、`Text`、`Space`、`Tooltip`、`InspectorName`、`Range`、`InspectorReadOnly`、`ShowIf`、`HideIf` 和 `HelpBox`。多个条件按 AND 组合；`InspectorCondition` 支持 truthy/falsy、equal/not-equal、null/not-null，以及资源引用的 assigned/not-assigned。`HelpBox` 既能始终显示，也能由 sibling member 条件控制。它使用独立图标、语义色侧边、背景与边框表达 Info/Warning/Error 状态；`Text` 是无状态、常驻的普通说明；`Tooltip` 仅在悬停时展示。标题 description 也只作为 tooltip。
+内建集合包括 `Header`、`Text`、`Space`、`Tooltip`、`InspectorName`、`Range`、`InspectorReadOnly`、`ShowIf`、`HideIf` 和 `HelpBox`。多个条件按 AND 组合；`InspectorCondition` 支持 truthy/falsy、equal/not-equal、null/not-null，以及资源引用的 assigned/not-assigned。`HelpBox` 既能始终显示，也能由 sibling member 条件控制。它使用独立图标、语义色侧边、背景与边框表达 Info/Warning/Error 状态；`Text` 是无状态、常驻的普通说明；`Tooltip` 仅在悬停时展示。标题 description 也只作为 tooltip。默认 Drawer 不复制 fieldset、tooltip 或 property layout：它只调用 `InspectionDrawContext.DrawProperties()`；Asset/Panel 的定制 Drawer 可以复用同一入口，也可以只替换确实属于领域的部分。
 
 Inspector 的浮点标量以及 `Vector2/3/4`、`Rect`、Quaternion Euler 和 Transform 轴字段默认以一位小数显示，但底层值不会按显示精度舍入。双击字段会进入九位有效数字的 round-trip 文本编辑；带 `Range` 的 float 常态保持 slider，进入精确编辑时仍执行相同的上下界约束。
 

@@ -66,21 +66,27 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 Widget.Hint(draft.path.localPath + ": " + draft.error);
             var edits = new SelectionEdits(owner, materials);
             MaterialAsset first = materials.Values.First();
-            Widget.SectionHeader("Material Selection", "Changes are recorded together. Changing Shader retains each Material's independent overrides.");
-            if (materials.Values.Any(value => value.shader?.identity.persistentId != first.shader?.identity.persistentId))
-                Widget.Hint("Shader · Mixed values");
-            context.properties.DrawValue(context.editorContext, target, "materials.shader", "Shader", typeof(ShaderAsset),
-                () => first.shader, value =>
-                {
-                    foreach (MaterialAsset material in materials.Values) material.shader = (ShaderAsset?)value;
-                }, edits, readOnly);
+            bool selectionOpen = Widget.SectionHeader("Material Selection", "Changes are recorded together. Changing Shader retains each Material's independent overrides.");
+            if (selectionOpen)
+            {
+                if (materials.Values.Any(value => value.shader?.identity.persistentId != first.shader?.identity.persistentId))
+                    Widget.Hint("Shader · Mixed values");
+                context.properties.DrawValue(context.editorContext, target, "materials.shader", "Shader", typeof(ShaderAsset),
+                    () => first.shader, value =>
+                    {
+                        foreach (MaterialAsset material in materials.Values) material.shader = (ShaderAsset?)value;
+                    }, edits, readOnly);
+            }
             if (first.shader is null || first.shader.isMissing || first.shader.definition is not { } firstDefinition)
-            { Widget.Hint("A selected Shader is unavailable."); return; }
+            {
+                if (selectionOpen) Widget.Hint("A selected Shader is unavailable.");
+                return;
+            }
             ShaderTechniqueId[] commonTechniques = firstDefinition.techniques.Select(value => value.id)
                 .Where(id => materials.Values.All(material => material.shader is { isMissing: false, definition: { } definition }
                     && definition.techniques.Any(technique => technique.id == id))).ToArray();
             bool mixedTechnique = materials.Values.Any(value => value.techniqueId != first.techniqueId);
-            if (commonTechniques.Length > 1 || materials.Values.Any(value => value.techniqueId.isValid))
+            if (selectionOpen && (commonTechniques.Length > 1 || materials.Values.Any(value => value.techniqueId.isValid)))
             {
                 string current = mixedTechnique ? "Mixed Techniques" : first.techniqueId.isValid ? first.techniqueId.value : "Automatic";
                 if (Widget.BeginBoundedCombo("##materials.technique", current))
@@ -95,7 +101,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
         }
     }
 
-            foreach (ShaderKeywordDefinition keyword in firstDefinition.keywords)
+            foreach (ShaderKeywordDefinition keyword in selectionOpen ? firstDefinition.keywords : [])
             {
                 if (!materials.Values.All(material => material.shader is { isMissing: false, definition: { } definition }
                     && definition.keywords.Any(value => value.id == keyword.id && value.options.SequenceEqual(keyword.options))))
@@ -118,7 +124,8 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                     owner.ReplaceMany(materials);
                 }
             }
-            Widget.SectionHeader("Common Parameters", "Only compatible Material-owned inputs appear here. Unrelated overrides are retained per Material.");
+            bool parametersOpen = Widget.SectionHeader("Common Parameters", "Only compatible Material-owned inputs appear here. Unrelated overrides are retained per Material.");
+            bool groupOpen = parametersOpen;
             string currentGroup = "";
             foreach (ShaderPropertyDefinition property in firstDefinition.properties)
             {
@@ -155,8 +162,9 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 if (presentation.group != currentGroup)
                 {
                     currentGroup = presentation.group;
-                    Widget.SectionHeader(currentGroup.Length == 0 ? "Common Parameters" : currentGroup);
+                    groupOpen = Widget.SectionHeader(currentGroup.Length == 0 ? "Common Parameters" : currentGroup);
                 }
+                if (!groupOpen) continue;
                 bool mixed = values.Skip(1).Any(value => !value.Equals(values[0]));
                 UI.PushID(property.id.value);
                 try
@@ -183,7 +191,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 }
                 finally { UI.PopID(); }
             }
-            if (materials.Values.Any(value => value.properties.Count != 0) && UI.Button("Reset All Selected Overrides"))
+            if (parametersOpen && materials.Values.Any(value => value.properties.Count != 0) && UI.Button("Reset All Selected Overrides"))
             {
                 foreach (MaterialAsset material in materials.Values) material.ReplaceProperties([]);
                 owner.ReplaceMany(materials);

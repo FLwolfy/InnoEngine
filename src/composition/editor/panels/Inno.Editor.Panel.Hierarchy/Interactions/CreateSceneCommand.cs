@@ -5,7 +5,7 @@ using Inno.Scene;
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyInteractionIds.C_CREATE_SCENE)]
-[EditorMenu(HierarchyInteractionIds.C_AREA, "Create Scene", order: 300, separatorBefore: true)]
+[EditorMenu(HierarchyInteractionIds.C_AREA, "Create/Scene", order: 300)]
 internal sealed class CreateSceneCommand(SceneEdits edits) : EditorAction
 {
     /// <summary>

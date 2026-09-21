@@ -421,7 +421,8 @@ public static partial class ImGuiWidget
     public static void WrappedText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        NativeImGui.PushTextWrapPos(0f);
+        NativeImGui.PushTextWrapPos(
+            NativeImGui.GetCursorPosX() + MathF.Max(1f, NativeImGui.GetContentRegionAvail().X));
         try
         {
             NativeImGui.TextUnformatted(text);

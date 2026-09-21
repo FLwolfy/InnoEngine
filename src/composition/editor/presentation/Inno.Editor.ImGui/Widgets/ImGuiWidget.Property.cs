@@ -33,6 +33,12 @@ public static partial class ImGuiWidget
     /// <param name="tooltip">
     /// Optional hover help displayed from the property label.
     /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="label"/> or <paramref name="drawValue"/> is <see langword="null"/>.
+    /// </exception>
     public static void PropertyRow(
         string id,
         string label,
@@ -40,7 +46,47 @@ public static partial class ImGuiWidget
         float labelWidth = -1f,
         string? tooltip = null)
     {
+        ArgumentNullException.ThrowIfNull(label);
+        PropertyRow(
+            id,
+            () =>
+            {
+                NativeImGui.TextUnformatted(label);
+                DrawItemTooltip(tooltip);
+            },
+            drawValue,
+            labelWidth);
+    }
+
+    /// <summary>
+    /// Draws a two-column property row whose label is supplied by a custom presentation callback.
+    /// </summary>
+    /// <param name="id">
+    /// Stable row identifier.
+    /// </param>
+    /// <param name="drawLabel">
+    /// Label presentation callback. It may wrap or draw badges inside the label column.
+    /// </param>
+    /// <param name="drawValue">
+    /// Value control callback.
+    /// </param>
+    /// <param name="labelWidth">
+    /// Optional fixed label column width.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="drawLabel"/> or <paramref name="drawValue"/> is <see langword="null"/>.
+    /// </exception>
+    public static void PropertyRow(
+        string id,
+        Action drawLabel,
+        Action drawValue,
+        float labelWidth = -1f)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(drawLabel);
         ArgumentNullException.ThrowIfNull(drawValue);
 
         ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchProp
@@ -69,8 +115,7 @@ public static partial class ImGuiWidget
             NativeImGui.TableNextRow();
             NativeImGui.TableSetColumnIndex(0);
             NativeImGui.AlignTextToFramePadding();
-            NativeImGui.TextUnformatted(label);
-            DrawItemTooltip(tooltip);
+            drawLabel();
             NativeImGui.TableSetColumnIndex(1);
             NativeImGui.SetNextItemWidth(-1f);
             drawValue();
@@ -78,6 +123,74 @@ public static partial class ImGuiWidget
         finally
         {
             NativeImGui.EndTable();
+        }
+    }
+
+    /// <summary>
+    /// Draws a subdued metadata prefix followed by an interactive value on the same line.
+    /// </summary>
+    /// <param name="metadata">
+    /// Short contextual text such as a declared value type.
+    /// </param>
+    /// <param name="drawValue">
+    /// Callback that draws the value or action following the metadata.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional explanation displayed while the metadata is hovered.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="metadata"/> or <paramref name="drawValue"/> is
+    /// <see langword="null"/>.
+    /// </exception>
+    public static void MetadataValue(
+        string metadata,
+        Action drawValue,
+        string? tooltip = null)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(drawValue);
+        NativeImGui.AlignTextToFramePadding();
+        NativeImGui.TextDisabled(metadata);
+        DrawItemTooltip(tooltip);
+        NativeImGui.SameLine(0f, style.propertyMetadataSpacing);
+        NativeImGui.TextDisabled("·");
+        NativeImGui.SameLine(0f, style.propertyMetadataSpacing);
+        NativeImGui.SetNextItemWidth(-1f);
+        drawValue();
+    }
+
+    /// <summary>
+    /// Draws one wrapped, subdued value whose metadata and content remain in the value column.
+    /// </summary>
+    /// <param name="metadata">
+    /// Short contextual text such as a declared value type.
+    /// </param>
+    /// <param name="value">
+    /// Literal value description shown after the metadata separator.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional explanation displayed while the combined value is hovered.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="metadata"/> or <paramref name="value"/> is
+    /// <see langword="null"/>.
+    /// </exception>
+    public static void MetadataValue(
+        string metadata,
+        string value,
+        string? tooltip = null)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(value);
+        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.textDisabled);
+        try
+        {
+            WrappedText(metadata + " · " + value);
+            DrawItemTooltip(tooltip);
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor();
         }
     }
 

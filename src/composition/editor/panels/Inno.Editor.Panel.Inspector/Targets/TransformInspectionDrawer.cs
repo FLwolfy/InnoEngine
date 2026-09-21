@@ -25,12 +25,18 @@ internal sealed class TransformInspectionDrawer(SceneEdits edits) : InspectionDr
     /// <inheritdoc />
     protected override void Draw(InspectionDrawContext context, Transform target)
     {
-        EditorWidget.SectionHeader(
+        if (!EditorWidget.SectionHeader(
             m_world ? "World Space" : "Local Space",
             m_world
                 ? "Position, rotation, and scale include the parent hierarchy. Edits are stored as local values and support Undo/Redo."
                 : "Position, rotation, and scale are relative to the parent. Rotation is expressed in degrees.",
-            () => _ = EditorWidget.CompactCheckbox("##transform_space", ref m_world));
+            () => _ = EditorWidget.CompactCheckbox(
+                "##transform_space",
+                ref m_world,
+                tooltip: m_world ? "Switch to Local Space." : "Switch to World Space.")))
+        {
+            return;
+        }
 
         bool invertible = true;
         if (m_world && target.parent is not null)

@@ -70,6 +70,8 @@ TextAsset value = assets.Load<TextAsset>(AssetPath.Project("Config/value.txt"));
 
 `Save(path, detachedAsset)` 替换已有 source 内容时以目标 `.imeta` / Catalog 的 persistent ID 为权威，并原位更新已加载的 canonical asset；草稿对象自身的临时 identity 不会把同一路径保存成一个新资产。因此 Scene、Camera、Material 等现有引用在 Inspector 保存后仍指向同一个资产。只有目标路径尚未拥有 identity 时，保存才采用待保存对象的 identity 或创建新的 identity。
 
+Authoring 启动与 Rescan 时，当前 source 的 `.imeta` 是“路径属于哪个 persistent ID”的唯一权威；Catalog 是可重建的索引与 artifact cache。若 Catalog 在同一路径保留历史 live ID，而 sidecar 已声明另一个 ID，Loader 会把历史记录退休为 tombstone，并以 sidecar ID 建立当前记录；合并 tombstone 时也只移除它自己拥有的 path mapping，不能误删后来建立的 live 记录。这样 Save、崩溃恢复、候选 Catalog 提升或历史重复记录都不会在下一次启动反向改写 source ID，已保存的 Camera/Material/Scene 引用也不会因启动顺序变成 Missing。
+
 运行时导出同时校验创作依赖：沿 Artifact 依赖递归检查当前导入状态和源指纹（包括 include/Source 输入）。Editor 可以继续使用 last-good，但失败、缺失或过期的必需创作输入不能认证 Player 构建。导出不在中途重导入，以免已编译的目标产物与新资产混用 generation；拒绝时报告完整依赖路径，需重导入后重新构建。
 
 ### Source Mount 候选与共同 Recovery

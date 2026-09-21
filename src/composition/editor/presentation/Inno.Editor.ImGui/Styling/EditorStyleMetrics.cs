@@ -118,7 +118,7 @@ public sealed class EditorStyleMetrics
     /// <summary>
     /// Gets standard window rounding.
     /// </summary>
-    public float windowRounding => Scale(2f);
+    public float windowRounding => 0f;
 
     /// <summary>
     /// Gets standard border thickness.
@@ -341,6 +341,11 @@ public sealed class EditorStyleMetrics
     public Vector2 inspectorCardHeaderPadding => ScaleVector(new(4f, 1f));
 
     /// <summary>
+    /// Gets the shared padding around separator-style section titles.
+    /// </summary>
+    public Vector2 sectionHeaderPadding => ScaleVector(new(20f, 3f));
+
+    /// <summary>
     /// Gets the inner padding of a framed Inspector section.
     /// </summary>
     public Vector2 inspectorSectionPadding => ScaleVector(new(7f, 5f));
@@ -348,12 +353,27 @@ public sealed class EditorStyleMetrics
     /// <summary>
     /// Gets the gap between an Inspector section legend and its interrupted top border.
     /// </summary>
-    public float inspectorSectionLegendGap => Scale(4f);
+    public float inspectorSectionLegendGap => itemSpacing.X;
+
+    /// <summary>
+    /// Gets the length of each centered end cap on a collapsed Inspector section.
+    /// </summary>
+    public float inspectorCollapsedSectionCapLength => Scale(10f);
+
+    /// <summary>
+    /// Gets the spacing around the separator between inline metadata and its value.
+    /// </summary>
+    public float propertyMetadataSpacing => Scale(5f);
 
     /// <summary>
     /// Gets the vertical distance after a framed Inspector section.
     /// </summary>
     public float inspectorSectionSpacing => Scale(4f);
+
+    /// <summary>
+    /// Gets the subtle corner rounding used by framed content sections inside editor containers.
+    /// </summary>
+    public float inspectorSectionRounding => Scale(3f);
 
     /// <summary>
     /// Gets inspector disclosure inset.
@@ -414,6 +434,26 @@ public sealed class EditorStyleMetrics
     /// Gets the corner rounding of compact colored label chips.
     /// </summary>
     public float labelChipRounding => frameRounding;
+
+    /// <summary>
+    /// Gets the compact inner padding of outlined type badges.
+    /// </summary>
+    public Vector2 typeBadgePadding => ScaleVector(new(5f, 1f));
+
+    /// <summary>
+    /// Gets the corner rounding of outlined type badges.
+    /// </summary>
+    public float typeBadgeRounding => Scale(3f);
+
+    /// <summary>
+    /// Gets the horizontal gap between a property name and its type badge.
+    /// </summary>
+    public float typeBadgeSpacing => Scale(6f);
+
+    /// <summary>
+    /// Gets the vertical padding inside one statistics row.
+    /// </summary>
+    public float statisticRowPadding => Scale(3f);
 
     /// <summary>
     /// Gets spacing between distinct control groups in an Inspector target header row.

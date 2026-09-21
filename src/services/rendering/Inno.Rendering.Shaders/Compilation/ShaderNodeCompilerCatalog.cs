@@ -128,20 +128,27 @@ public sealed class ShaderNodeCompilerCatalog
             foreach ((GraphEndpoint endpoint, ShaderNodePort port) in ports)
             {
                 if (port.direction != GraphPortDirection.Input || connections.ContainsKey(endpoint)) continue;
-                GraphNodeRecord node = nodes[nodeIndexes[endpoint.nodeId]];
-                if (node.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + port.id, out GraphSerializedValue? encoded))
+                if (port.required)
                 {
-                    activeNode = node.id;
-                    ShaderGraphLiteral value = ShaderGraphDocument.Decode<ShaderGraphLiteral>(encoded!, serialization, context);
-                    if (!value.type.CreateType().IsEquivalentTo(port.type))
-                        Error("SHADER_GRAPH_DEFAULT_TYPE", "The input default has an obsolete type; reset it explicitly.", endpoint.nodeId, port.id);
-                    else inputDefaults.Add(endpoint, value);
+                    Error(
+                        "SHADER_GRAPH_INPUT_REQUIRED",
+                        $"Required input '{endpoint.portId.value}' on node '{endpoint.nodeId.value}' is not connected. Connect a Constant or another compatible graph output.",
+                        endpoint.nodeId,
+                        endpoint.portId.value);
+                    continue;
                 }
-                else if (port.required) Error(
-                    "SHADER_GRAPH_INPUT_REQUIRED",
-                    $"Required input '{endpoint.portId.value}' on node '{endpoint.nodeId.value}' is not connected and has no explicit default.",
-                    endpoint.nodeId,
-                    endpoint.portId.value);
+                try
+                {
+                    inputDefaults.Add(endpoint, ShaderGraphLiteral.Zero(port.type));
+                }
+                catch (NotSupportedException)
+                {
+                    Error(
+                        "SHADER_GRAPH_OPTIONAL_TYPE",
+                        $"Optional input '{endpoint.portId.value}' cannot represent an automatic zero value and must be required instead.",
+                        endpoint.nodeId,
+                        endpoint.portId.value);
+                }
             }
             activeNode = null;
             foreach ((string name, GraphEndpoint endpoint) in request.outputs)

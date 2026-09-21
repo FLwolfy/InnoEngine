@@ -66,6 +66,71 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
+    /// Gets the layout size of a compact outlined type badge.
+    /// </summary>
+    /// <param name="label">
+    /// Visible type name.
+    /// </param>
+    /// <returns>
+    /// The size reserved by <see cref="TypeBadge"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="label"/> is <see langword="null"/>.
+    /// </exception>
+    public static Vector2 GetTypeBadgeSize(string label)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Vector2 textSize = NativeImGui.CalcTextSize(label);
+        return textSize + style.typeBadgePadding * 2f;
+    }
+
+    /// <summary>
+    /// Draws a compact, non-interactive type badge with a subdued fill and semantic outline.
+    /// </summary>
+    /// <param name="label">
+    /// Visible type name.
+    /// </param>
+    /// <param name="accent">
+    /// Semantic type-family accent.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional explanation shown while the badge is hovered.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="label"/> is <see langword="null"/>.
+    /// </exception>
+    public static void TypeBadge(string label, Vector4 accent, string? tooltip = null)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Vector2 size = GetTypeBadgeSize(label);
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        Vector2 textSize = NativeImGui.CalcTextSize(label);
+        ImDrawListPtr draw = NativeImGui.GetWindowDrawList();
+        Vector4 background = Vector4.Lerp(EditorPalette.windowBackground, accent, 0.14f);
+        background.W = 1f;
+        Vector4 outline = accent;
+        outline.W = 0.58f;
+        draw.AddRectFilled(
+            minimum,
+            minimum + size,
+            NativeImGui.ColorConvertFloat4ToU32(background),
+            style.typeBadgeRounding);
+        draw.AddRect(
+            minimum,
+            minimum + size,
+            NativeImGui.ColorConvertFloat4ToU32(outline),
+            style.typeBadgeRounding,
+            ImDrawFlags.None,
+            style.borderSize);
+        draw.AddText(
+            minimum + (size - textSize) * 0.5f,
+            NativeImGui.ColorConvertFloat4ToU32(accent),
+            label);
+        NativeImGui.Dummy(size);
+        DrawItemTooltip(tooltip);
+    }
+
+    /// <summary>
     /// Draws a compact checkbox whose checked fill uses the current text color.
     /// </summary>
     /// <param name="id">
@@ -77,10 +142,17 @@ public static partial class ImGuiWidget
     /// <param name="size">
     /// Visual square size in pixels.
     /// </param>
+    /// <param name="tooltip">
+    /// Optional explanation displayed while the checkbox is hovered.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the value changed.
     /// </returns>
-    public static bool CompactCheckbox(string id, ref bool value, float size = -1f)
+    public static bool CompactCheckbox(
+        string id,
+        ref bool value,
+        float size = -1f,
+        string? tooltip = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (size < 0f)
@@ -136,6 +208,37 @@ public static partial class ImGuiWidget
                 1.5f);
         }
 
+        DrawItemTooltip(tooltip);
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Draws a standard checkbox with the shared editor tooltip behavior.
+    /// </summary>
+    /// <param name="label">
+    /// Visible label and stable ImGui identifier.
+    /// </param>
+    /// <param name="value">
+    /// Mutable checked state.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional explanation displayed while the checkbox is hovered.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the value changed.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="label"/> is empty or whitespace.
+    /// </exception>
+    public static bool Checkbox(
+        string label,
+        ref bool value,
+        string? tooltip = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        bool changed = NativeImGui.Checkbox(label, ref value);
+        DrawItemTooltip(tooltip);
         return changed;
     }
 
