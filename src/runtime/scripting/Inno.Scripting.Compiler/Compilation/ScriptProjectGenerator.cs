@@ -14,6 +14,10 @@ namespace Inno.Scripting.Compiler;
 internal static class ScriptProjectGenerator
 {
     private const string C_EDITOR_COMPILATION_SYMBOL = "INNO_EDITOR";
+    private static readonly IReadOnlyList<string> C_IDE_CONTENT_FILE_EXTENSIONS =
+    [
+        ".ishadersource"
+    ];
 
     internal static void Generate(
         ScriptCompilerOptions options,
@@ -181,6 +185,10 @@ internal static class ScriptProjectGenerator
             "ItemGroup",
             sourcePaths.Select(static path =>
                 new XElement("Compile", new XAttribute("Include", path))));
+        var contentGroup = new XElement(
+            "ItemGroup",
+            C_IDE_CONTENT_FILE_EXTENSIONS.Select(static extension =>
+                new XElement("None", new XAttribute("Include", $"Assets/**/*{extension}"))));
 
         var referenceGroup = new XElement("ItemGroup");
         foreach (string path in apiReferences.ideReferencePaths)
@@ -208,6 +216,7 @@ internal static class ScriptProjectGenerator
                 new XAttribute("Sdk", "Microsoft.NET.Sdk")),
             propertyGroup,
             compileGroup,
+            contentGroup,
             referenceGroup,
             codeAnalysisGroup);
         project.Add(folderGroup);

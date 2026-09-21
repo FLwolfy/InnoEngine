@@ -12,6 +12,61 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 `.ishader` 图 importer、函数源码模块和 typed program 已进入实际资产编译链，Rendering2D 与 ImGui 图产物已在 Metal 启动中使用。
 [Shader Editor](../editor/Inno.Editor.Panel.ShaderEditor.md)、Target/Template 扩展、安全帧原子发布和当前资产替换均已接入。历史阶段与硬件验收边界以[阶段验收](../issues/2026-09-13-shader-authoring-validation.md)为准；本轮函数库与创作体验收口见[实施记录](../issues/2026-09-14-shader-editor-authoring-experience.md)。
 
+## Shader 作者的三个入口
+
+用户创作 Shader 只有三个主要入口。它们不是三套彼此竞争的 Shader 系统，而是在同一条
+`Graph → typed Shader IR → Adapter source generation → native compilation` 链中承担不同层级的职责。
+
+| 入口 | 适合谁与适用内容 | 产生什么 | 明确不负责什么 |
+| --- | --- | --- | --- |
+| `.ishadersource` | Shader/TA 程序员编写 Noise、采样、BRDF、滤镜等局部算法 | 一个或多个具有显式强类型输入/输出的 Source Function 节点 | 不声明完整 Shader、`main()`、Pass、Stage、Render State 或隐式 GPU 输入 |
+| 编辑 `.ishader` | 艺术家与 TA 用 Shader Editor 组合完整 Shader 或可复用 Sub Graph Node | 持久化的 `GraphDocument`，包含节点、连接、参数、Stage、Pass、Technique 或可复用函数边界 | 不保存生成的后端源码，不从任意源码反向恢复画布 |
+| `ShaderTarget` | 渲染程序员或高级 TA 为 PBR、Terrain、Particle 等领域定义稳定管线规则 | 编译前把领域级作者图展开为完整、普通的 Stage/Pass Graph | 不直接生成 Shader IR、BGFX/HLSL/GLSL 字符串或 GPU binary，也不调度场景 Render Graph |
+
+### `.ishadersource`：局部算法函数
+
+`.ishadersource` 是源码函数库，不是完整源码 Shader。Import Settings 必须显式列出公开函数；未列出的函数只作为
+private helper。前端从公开函数签名建立节点端口并验证 include、类型和多实现接口一致性，函数体在公共 IR 中作为
+类型化 `SourceCall` 保留，由对应 Adapter 在生成阶段嵌入。公共图编译器不会把函数体反编译成可视化节点，也不会
+允许函数通过隐藏的 native global 绕过 Stage 接口。
+
+选择规则：一个算法如果用现有可视化节点表达会过度膨胀、依赖语言特有实现，或天然适合作为稳定函数调用，就使用
+`.ishadersource`。它仍必须把值、资源和副作用依赖显式暴露在函数接口中。
+
+### `.ishader`：主要可视化创作资产
+
+`.ishader` 是 Shader 创作的唯一权威图资产。它既可以是具有显式 Vertex/Fragment/Compute Stage、Pass 和 Technique
+的完整可编译 Shader，也可以通过 Function Inputs / Function Outputs 定义可复用 Graph Node。普通 Function 子图在
+导入候选中递归内联；Domain Output 子图保留为 Target 可识别的领域边界。保存写回的是 Graph 本身，Check 才把当前
+图经统一 typed IR 和 Adapter 工具链编译；生成的后端源码不是可反向编辑的第二份源。
+
+`ShaderGraphTemplate` 不是第四种 Shader 表示。Template 只在创建 Asset 时运行一次，为新的 `.ishader` 提供初始
+节点、连接、Pass 和设置；生成后资产独立存在，后续编辑和编译不再调用该 Template。希望作者看见并能修改完整
+Stage/Pass 结构时，应优先使用 Template 创建显式 `.ishader`，例如 Rendering2D 的 Sprite Shader。
+
+### `ShaderTarget`：领域级程序结构展开
+
+`ShaderTarget` 是 generation-scoped 的 Editor/Plugin 扩展。资产只持久化与 `[ShaderTarget(id)]` 匹配的稳定 ID；每次
+Import 或 Check 捕获编译候选时，Target 接收作者图的独立副本，把高层 Surface/Domain Output 契约展开成具有明确
+Stage Input/Output、资源、Technique、Pass 和 Render State 的普通 `GraphDocument`，随后仍进入公共节点降低、typed
+IR 和 Adapter 编译链。Target 返回 Graph，不拥有编译器后端，也不能直接注入 native Shader 字符串。
+
+选择规则：只有一个领域需要从同一份高层 Surface 自动派生多个固定 Pass，或必须统一约束管线接口时才使用 Target，
+例如从 PBR Surface 派生 Forward、Depth、Shadow 和 GBuffer Pass。简单 Sprite、Post-process、Compute 或希望所有
+Stage 结构对作者可见的 Shader，可以完全不选择 Target，并直接编辑显式 Stage Graph。Target 与 `.ishadersource` 不重复：
+前者决定完整程序骨架，后者只实现骨架中被调用的局部算法。
+
+```text
+.ishadersource function ───────────────┐
+                                      │ SourceCall node
+authored .ishader ── reusable graphs ─┼─→ expanded stage graph ─→ typed Shader IR ─→ Adapter ─→ GPU binary
+                                      │
+optional ShaderTarget ─ domain expand ┘
+```
+
+实际项目通常组合三者：艺术家在 `.ishader` 中连接节点，高级 TA 用可复用 `.ishader` 和 `.ishadersource` 封装复杂算法，
+渲染程序员只在需要隐藏并强制执行领域管线结构时提供 `ShaderTarget`。
+
 ## 公开 API
 
 | 类型 | 入口及语义 |
