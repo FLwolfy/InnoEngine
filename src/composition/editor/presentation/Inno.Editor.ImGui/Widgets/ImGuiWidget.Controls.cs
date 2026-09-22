@@ -107,9 +107,9 @@ public static partial class ImGuiWidget
         Vector2 textSize = NativeImGui.CalcTextSize(label);
         ImDrawListPtr draw = NativeImGui.GetWindowDrawList();
         Vector4 background = Vector4.Lerp(EditorPalette.windowBackground, accent, 0.14f);
-        background.W = 1f;
+        background.W = EditorPalette.opacityOpaque;
         Vector4 outline = accent;
-        outline.W = 0.58f;
+        outline.W = EditorPalette.opacityStrong;
         draw.AddRectFilled(
             minimum,
             minimum + size,

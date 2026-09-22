@@ -83,7 +83,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             if (draft.boxSelecting)
             {
                 Vector2 min = Vector2.Min(draft.pointerStart, mouse), max = Vector2.Max(draft.pointerStart, mouse);
-                draw.AddRectFilled(min, max, Color(0.52f, 0.37f, 0.78f, 0.13f));
+                draw.AddRectFilled(min, max, Color(0.52f, 0.37f, 0.78f, EditorPalette.opacitySubtle));
                 draw.AddRect(min, max, Color(0.65f, 0.47f, 0.88f));
             }
             string status = draft.readOnly ? "Read-only · copy to project to edit" : Controller.isDirty ? "Unsaved changes · Save to apply" : draft.status;
@@ -482,7 +482,8 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         if (rect.max.X < m_origin.X || rect.min.X > m_origin.X + m_size.X || rect.max.Y < m_origin.Y || rect.min.Y > m_origin.Y + m_size.Y) return;
         float zoom = Canvas.zoom;
         bool selected = Canvas.selectedNodes.Contains(node.id);
-        draw.AddRectFilled(rect.min + new Vector2(3, 5), rect.max + new Vector2(3, 5), Color(0, 0, 0, 0.25f), 6 * zoom);
+        draw.AddRectFilled(rect.min + new Vector2(3, 5), rect.max + new Vector2(3, 5),
+            Color(0, 0, 0, EditorPalette.opacityMuted), 6 * zoom);
         draw.AddRectFilled(rect.min, rect.max, Color(0.115f, 0.12f, 0.14f), 6 * zoom);
         Vector4 headerColor = NodeHeaderColor(node);
         draw.AddRectFilled(rect.min, new(rect.max.X, rect.min.Y + C_HEADER * zoom),
@@ -495,7 +496,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         draw.AddLine(
             new Vector2(divider, bodyTop + bodyPadding),
             new Vector2(divider, rect.max.Y - bodyPadding),
-            Color(0.62f, 0.63f, 0.69f, 0.10f));
+            Color(0.62f, 0.63f, 0.69f, EditorPalette.opacityFaint));
         foreach (ShaderNodePort port in draft.ports[node.id])
         {
             var handle = new PortHandle(new(node.id, new(port.id)), port.direction);
@@ -534,7 +535,13 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         if (!draft.readOnly)
         {
             bool resizeHovered = ContainsResizeHandle(rect, UI.GetMousePos());
-            uint gripColor = Color(0.62f, 0.63f, 0.69f, resizeHovered || draft.resizingNode == node.id ? 0.82f : 0.42f);
+            uint gripColor = Color(
+                0.62f,
+                0.63f,
+                0.69f,
+                resizeHovered || draft.resizingNode == node.id
+                    ? EditorPalette.opacityEmphasized
+                    : EditorPalette.opacityMedium);
             const float inset = 4f;
             draw.AddLine(rect.max - new Vector2(C_RESIZE_HANDLE, inset) * zoom, rect.max - new Vector2(inset, C_RESIZE_HANDLE) * zoom, gripColor);
             draw.AddLine(rect.max - new Vector2(C_RESIZE_HANDLE * 0.62f, inset) * zoom, rect.max - new Vector2(inset, C_RESIZE_HANDLE * 0.62f) * zoom, gripColor);
@@ -569,14 +576,14 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             Vector2 min = bounds.min, max = bounds.max;
             bool selected = draft.selectedGroupId == group.id;
             Vector4 headerColor = GroupHeaderColor(group);
-            Vector4 bodyColor = new(headerColor.X, headerColor.Y, headerColor.Z, 0.16f);
+            Vector4 bodyColor = EditorPalette.WithOpacity(headerColor, EditorPalette.opacitySoft);
             Vector4 borderColor = selected
-                ? new(0.65f, 0.47f, 0.88f, 1f)
+                ? new(0.65f, 0.47f, 0.88f, EditorPalette.opacityOpaque)
                 : new(
                     MathF.Min(1f, headerColor.X * 1.22f),
                     MathF.Min(1f, headerColor.Y * 1.22f),
                     MathF.Min(1f, headerColor.Z * 1.22f),
-                    0.82f);
+                    EditorPalette.opacityEmphasized);
             float headerHeight = C_HEADER * Canvas.zoom;
             draw.AddRectFilled(min, max, UI.ColorConvertFloat4ToU32(bodyColor), 8 * Canvas.zoom);
             draw.AddRectFilled(min, new(max.X, min.Y + headerHeight), UI.ColorConvertFloat4ToU32(headerColor),
@@ -744,7 +751,8 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private ShaderNodePort Port(GraphEndpoint endpoint) => draft.ports[endpoint.nodeId].Single(port => port.id == endpoint.portId.value);
     private GraphPosition ToGraph(Vector2 point) => new((point.X - m_origin.X - Canvas.pan.x) / Canvas.zoom, (point.Y - m_origin.Y - Canvas.pan.y) / Canvas.zoom);
     private static bool Contains((Vector2 min, Vector2 max) rect, Vector2 point) => point.X >= rect.min.X && point.Y >= rect.min.Y && point.X <= rect.max.X && point.Y <= rect.max.Y;
-    private static uint Color(float r, float g, float b, float a = 1) => UI.ColorConvertFloat4ToU32(new(r, g, b, a));
+    private static uint Color(float r, float g, float b, float a = EditorPalette.opacityOpaque)
+        => UI.ColorConvertFloat4ToU32(new(r, g, b, a));
 
     private Vector4 NodeHeaderColor(GraphNodeRecord node)
     {
@@ -779,7 +787,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         }
         if (count == 0) return EditorPalette.shaderNodeHeader;
         Vector4 average = total / count;
-        return new(average.X, average.Y, average.Z, 0.92f);
+        return EditorPalette.WithOpacity(average, EditorPalette.opacityNearOpaque);
     }
 
     private static Vector4 StableHeaderColor(string key, float startHue, float hueRange)
@@ -806,7 +814,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             _ => (chroma, 0f, secondary)
         };
         float match = brightness - chroma;
-        return new(red + match, green + match, blue + match, 1f);
+        return new(red + match, green + match, blue + match, EditorPalette.opacityOpaque);
     }
 
     private static bool CenteredAddButton(string label)

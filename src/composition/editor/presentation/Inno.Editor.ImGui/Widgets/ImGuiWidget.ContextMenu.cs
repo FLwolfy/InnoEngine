@@ -209,6 +209,7 @@ public static partial class ImGuiWidget
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.menuItemHovered);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.menuItemActive);
         NativeImGui.PushStyleColor(ImGuiCol.Separator, EditorPalette.menuSeparator);
+        NativeImGui.PushStyleColor(ImGuiCol.NavCursor, EditorPalette.transparent);
         NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, style.menuWindowPadding);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.menuFramePadding);
         NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, style.menuItemSpacing);
@@ -219,6 +220,6 @@ public static partial class ImGuiWidget
     private static void PopContextMenuStyle()
     {
         NativeImGui.PopStyleVar(5);
-        NativeImGui.PopStyleColor(6);
+        NativeImGui.PopStyleColor(7);
     }
 }

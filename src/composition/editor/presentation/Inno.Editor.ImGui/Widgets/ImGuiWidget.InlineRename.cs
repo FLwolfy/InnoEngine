@@ -82,7 +82,7 @@ public static partial class ImGuiWidget
             }
 
             bool submitted;
-            NativeImGui.PushStyleColor(ImGuiCol.NavCursor, Vector4.Zero);
+            NativeImGui.PushStyleColor(ImGuiCol.NavCursor, EditorPalette.transparent);
             try
             {
                 submitted = NativeImGui.InputText(

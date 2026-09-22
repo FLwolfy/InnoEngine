@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Inno.Editor.ImGui;
 using Inno.Editor.Settings;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -9,7 +10,7 @@ namespace Inno.Editor.Panel.SceneView;
 internal sealed class SceneViewBackgroundSetting : EditorSetting
 {
     internal const string C_PATH = "Editor/Appearance/Viewports/Scene Background";
-    private static readonly float[] S_DEFAULT = [0.11f, 0.12f, 0.14f, 1f];
+    private static readonly float[] S_DEFAULT = [0.11f, 0.12f, 0.14f, EditorPalette.opacityOpaque];
 
     /// <summary>
     /// Gets a new value initialized to this setting's canonical default state.

@@ -155,7 +155,6 @@ public static class EditorMenuRenderer
         NativeImGui.PushStyleVar(
             ImGuiStyleVar.FramePadding,
             EditorWidget.style.menuSearchFramePadding);
-        NativeImGui.PushStyleColor(ImGuiCol.NavCursor, Vector4.Zero);
         try
         {
             if (NativeImGui.IsWindowAppearing())
@@ -168,7 +167,6 @@ public static class EditorMenuRenderer
         }
         finally
         {
-            NativeImGui.PopStyleColor();
             NativeImGui.PopStyleVar();
         }
         m_contextSearches[popupId] = search;

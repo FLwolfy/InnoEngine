@@ -186,7 +186,7 @@ internal sealed class HelpBoxInspectorAttributeDrawer : IInspectorAttributeDrawe
         {
             InspectorMessageType.Warning => EditorPalette.warning,
             InspectorMessageType.Error => EditorPalette.error,
-            _ => new System.Numerics.Vector4(0.42f, 0.66f, 0.88f, 1f)
+            _ => new System.Numerics.Vector4(0.42f, 0.66f, 0.88f, EditorPalette.opacityOpaque)
         };
         string icon = help.messageType switch
         {

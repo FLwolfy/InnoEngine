@@ -601,7 +601,7 @@ internal sealed class SceneViewPanel : EditorPanel
     {
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         Vector4 background = EditorPalette.inspectorTargetHeader;
-        background.W = 0.5f;
+        background.W = EditorPalette.opacityMedium;
         drawList.AddRectFilled(
             layout.minimum,
             layout.maximum,

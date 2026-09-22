@@ -28,9 +28,9 @@ public static partial class ImGuiWidget
         float height = MathF.Max(NativeImGui.GetTextLineHeight(), textSize.Y) + padding.Y * 2f;
         ImDrawListPtr draw = NativeImGui.GetWindowDrawList();
         Vector4 background = Vector4.Lerp(EditorPalette.windowBackground, color, 0.075f);
-        background.W = 1f;
+        background.W = EditorPalette.opacityOpaque;
         Vector4 outline = color;
-        outline.W = 0.28f;
+        outline.W = EditorPalette.opacityMuted;
         draw.AddRectFilled(origin, origin + new Vector2(width, height), NativeImGui.ColorConvertFloat4ToU32(background), 4f * style.zoom);
         draw.AddRect(origin, origin + new Vector2(width, height), NativeImGui.ColorConvertFloat4ToU32(outline), 4f * style.zoom);
         draw.AddRectFilled(origin, origin + new Vector2(2f * style.zoom, height), NativeImGui.ColorConvertFloat4ToU32(color));

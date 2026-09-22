@@ -41,7 +41,7 @@ public static partial class ImGuiWidget
 
     private static void ApplyLayoutStyle(ImGuiStylePtr nativeStyle)
     {
-        nativeStyle.Alpha = 1f;
+        nativeStyle.Alpha = EditorPalette.opacityOpaque;
         nativeStyle.DisabledAlpha = style.disabledAlpha;
         nativeStyle.FontScaleMain = style.fontScale;
         nativeStyle.WindowPadding = style.windowPadding;

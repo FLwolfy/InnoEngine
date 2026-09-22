@@ -103,7 +103,7 @@ internal sealed class GameViewPanel : EditorPanel
             NativeImGui.GetWindowDrawList().AddRectFilled(
                 origin,
                 origin + available,
-                NativeImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 1f)));
+                NativeImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, EditorPalette.opacityOpaque)));
         }
         NativeImGui.SetCursorScreenPos(origin + layout.offset);
         m_rendering.Draw(output, layout.size);

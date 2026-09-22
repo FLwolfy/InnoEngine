@@ -10,49 +10,88 @@ namespace Inno.Editor.ImGui;
 /// </summary>
 public static class EditorPalette
 {
+    /// <summary>Gets zero opacity for invisible surfaces.</summary>
+    public const float opacityNone = 0f;
+
+    /// <summary>Gets trace opacity for barely perceptible alternating surfaces.</summary>
+    public const float opacityTrace = 0.005f;
+
+    /// <summary>Gets faint opacity for quiet guides and separators.</summary>
+    public const float opacityFaint = 0.04f;
+
+    /// <summary>Gets subtle opacity for selection washes and low-emphasis overlays.</summary>
+    public const float opacitySubtle = 0.12f;
+
+    /// <summary>Gets soft opacity for tinted container surfaces.</summary>
+    public const float opacitySoft = 0.20f;
+
+    /// <summary>Gets muted opacity for shadows and subdued outlines.</summary>
+    public const float opacityMuted = 0.28f;
+
+    /// <summary>Gets medium opacity for secondary content and overlays.</summary>
+    public const float opacityMedium = 0.45f;
+
+    /// <summary>Gets strong opacity for accents that remain translucent.</summary>
+    public const float opacityStrong = 0.55f;
+
+    /// <summary>Gets prominent opacity for navigation emphasis.</summary>
+    public const float opacityProminent = 0.70f;
+
+    /// <summary>Gets emphasized opacity for borders and interactive grips.</summary>
+    public const float opacityEmphasized = 0.82f;
+
+    /// <summary>Gets near-opaque opacity for active overlays.</summary>
+    public const float opacityNearOpaque = 0.92f;
+
+    /// <summary>Gets popup opacity, retaining only enough transparency for depth.</summary>
+    public const float opacityPopup = 0.985f;
+
+    /// <summary>Gets full opacity.</summary>
+    public const float opacityOpaque = 1f;
+
     /// <summary>
     /// Gets fully transparent color.
     /// </summary>
-    public static Vector4 transparent { get; } = new(0f, 0f, 0f, 0f);
+    public static Vector4 transparent { get; } = new(0f, 0f, 0f, opacityNone);
 
     /// <summary>
     /// Gets the primary text color.
     /// </summary>
-    public static Vector4 text { get; } = new(0.88f, 0.89f, 0.91f, 1f);
+    public static Vector4 text { get; } = new(0.88f, 0.89f, 0.91f, opacityOpaque);
 
     /// <summary>
     /// Gets disabled text color.
     /// </summary>
-    public static Vector4 textDisabled { get; } = new(0.58f, 0.60f, 0.64f, 1f);
+    public static Vector4 textDisabled { get; } = new(0.58f, 0.60f, 0.64f, opacityOpaque);
 
     /// <summary>
     /// Gets the standard error color.
     /// </summary>
-    public static Vector4 error { get; } = new(1f, 0.35f, 0.35f, 1f);
+    public static Vector4 error { get; } = new(1f, 0.35f, 0.35f, opacityOpaque);
 
     /// <summary>
     /// Gets the standard warning color.
     /// </summary>
-    public static Vector4 warning { get; } = new(0.9f, 0.65f, 0.25f, 1f);
+    public static Vector4 warning { get; } = new(0.9f, 0.65f, 0.25f, opacityOpaque);
 
     /// <summary>Gets the neutral Shader node heading surface.</summary>
-    public static Vector4 shaderNodeHeader { get; } = new(0.16f, 0.17f, 0.20f, 1f);
+    public static Vector4 shaderNodeHeader { get; } = new(0.16f, 0.17f, 0.20f, opacityOpaque);
 
     /// <summary>Gets the orange heading surface shared by Shader input nodes.</summary>
-    public static Vector4 shaderInputNodeHeader { get; } = new(0.43f, 0.245f, 0.085f, 1f);
+    public static Vector4 shaderInputNodeHeader { get; } = new(0.43f, 0.245f, 0.085f, opacityOpaque);
 
     /// <summary>Gets the purple heading surface shared by Shader output nodes.</summary>
-    public static Vector4 shaderOutputNodeHeader { get; } = new(0.25f, 0.19f, 0.34f, 1f);
+    public static Vector4 shaderOutputNodeHeader { get; } = new(0.25f, 0.19f, 0.34f, opacityOpaque);
 
     /// <summary>
     /// Gets the editor window background.
     /// </summary>
-    public static Vector4 windowBackground { get; } = new(0.105f, 0.112f, 0.125f, 1f);
+    public static Vector4 windowBackground { get; } = new(0.105f, 0.112f, 0.125f, opacityOpaque);
 
     /// <summary>
     /// Gets the editor popup background.
     /// </summary>
-    public static Vector4 popupBackground { get; } = new(0.075f, 0.081f, 0.092f, 0.985f);
+    public static Vector4 popupBackground { get; } = new(0.075f, 0.081f, 0.092f, opacityPopup);
 
     /// <summary>
     /// Gets text color used by editor context menus.
@@ -72,12 +111,12 @@ public static class EditorPalette
     /// <summary>
     /// Gets the hovered background of an editor context-menu item.
     /// </summary>
-    public static Vector4 menuItemHovered => new(0.235f, 0.245f, 0.275f, 1f);
+    public static Vector4 menuItemHovered => new(0.235f, 0.245f, 0.275f, opacityOpaque);
 
     /// <summary>
     /// Gets the active background of an editor context-menu item.
     /// </summary>
-    public static Vector4 menuItemActive => new(0.31f, 0.285f, 0.43f, 1f);
+    public static Vector4 menuItemActive => new(0.31f, 0.285f, 0.43f, opacityOpaque);
 
     /// <summary>
     /// Gets the separator color used by editor context menus.
@@ -87,222 +126,222 @@ public static class EditorPalette
     /// <summary>
     /// Gets the standard border color.
     /// </summary>
-    public static Vector4 border { get; } = new(0.235f, 0.25f, 0.285f, 0.82f);
+    public static Vector4 border { get; } = new(0.235f, 0.25f, 0.285f, opacityEmphasized);
 
     /// <summary>
     /// Gets the standard border shadow color.
     /// </summary>
-    public static Vector4 borderShadow { get; } = new(0f, 0f, 0f, 0.45f);
+    public static Vector4 borderShadow { get; } = new(0f, 0f, 0f, opacityMedium);
 
     /// <summary>
     /// Gets the standard frame background.
     /// </summary>
-    public static Vector4 frame { get; } = new(0.145f, 0.155f, 0.175f, 1f);
+    public static Vector4 frame { get; } = new(0.145f, 0.155f, 0.175f, opacityOpaque);
 
     /// <summary>
     /// Gets the hovered frame background.
     /// </summary>
-    public static Vector4 frameHovered { get; } = new(0.205f, 0.218f, 0.245f, 1f);
+    public static Vector4 frameHovered { get; } = new(0.205f, 0.218f, 0.245f, opacityOpaque);
 
     /// <summary>
     /// Gets the active frame background.
     /// </summary>
-    public static Vector4 frameActive { get; } = new(0.275f, 0.258f, 0.36f, 1f);
+    public static Vector4 frameActive { get; } = new(0.275f, 0.258f, 0.36f, opacityOpaque);
 
     /// <summary>
     /// Gets the inactive title background.
     /// </summary>
-    public static Vector4 title { get; } = new(0.075f, 0.081f, 0.092f, 1f);
+    public static Vector4 title { get; } = new(0.075f, 0.081f, 0.092f, opacityOpaque);
 
     /// <summary>
     /// Gets the active title background.
     /// </summary>
-    public static Vector4 titleActive { get; } = new(0.115f, 0.123f, 0.139f, 1f);
+    public static Vector4 titleActive { get; } = new(0.115f, 0.123f, 0.139f, opacityOpaque);
 
     /// <summary>
     /// Gets the collapsed title background.
     /// </summary>
-    public static Vector4 titleCollapsed { get; } = new(0.065f, 0.070f, 0.080f, 1f);
+    public static Vector4 titleCollapsed { get; } = new(0.065f, 0.070f, 0.080f, opacityOpaque);
 
     /// <summary>
     /// Gets the standard scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrab { get; } = new(0.30f, 0.32f, 0.36f, 0.82f);
+    public static Vector4 scrollbarGrab { get; } = new(0.30f, 0.32f, 0.36f, opacityEmphasized);
 
     /// <summary>
     /// Gets the hovered scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrabHovered { get; } = new(0.42f, 0.44f, 0.49f, 0.92f);
+    public static Vector4 scrollbarGrabHovered { get; } = new(0.42f, 0.44f, 0.49f, opacityNearOpaque);
 
     /// <summary>
     /// Gets the active scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrabActive { get; } = new(0.55f, 0.57f, 0.63f, 1f);
+    public static Vector4 scrollbarGrabActive { get; } = new(0.55f, 0.57f, 0.63f, opacityOpaque);
 
     /// <summary>
     /// Gets the standard accent color.
     /// </summary>
-    public static Vector4 accent { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, 0.54901963f);
+    public static Vector4 accent { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, opacityStrong);
 
     /// <summary>
     /// Gets the hovered accent color.
     /// </summary>
-    public static Vector4 accentHovered { get; } = new(0.7372549f, 0.69411767f, 0.8862745f, 0.54901963f);
+    public static Vector4 accentHovered { get; } = new(0.7372549f, 0.69411767f, 0.8862745f, opacityStrong);
 
     /// <summary>
     /// Gets the active accent color.
     /// </summary>
-    public static Vector4 accentActive { get; } = new(0.8156863f, 0.77254903f, 0.9647059f, 0.54901963f);
+    public static Vector4 accentActive { get; } = new(0.8156863f, 0.77254903f, 0.9647059f, opacityStrong);
 
     /// <summary>
     /// Gets the standard tab color.
     /// </summary>
-    public static Vector4 tab { get; } = new(0.105f, 0.112f, 0.125f, 1f);
+    public static Vector4 tab { get; } = new(0.105f, 0.112f, 0.125f, opacityOpaque);
 
     /// <summary>
     /// Gets the hovered tab color.
     /// </summary>
-    public static Vector4 tabHovered { get; } = new(0.19f, 0.20f, 0.225f, 1f);
+    public static Vector4 tabHovered { get; } = new(0.19f, 0.20f, 0.225f, opacityOpaque);
 
     /// <summary>
     /// Gets the selected tab color.
     /// </summary>
-    public static Vector4 tabSelected { get; } = new(0.17f, 0.176f, 0.20f, 1f);
+    public static Vector4 tabSelected { get; } = new(0.17f, 0.176f, 0.20f, opacityOpaque);
 
     /// <summary>
     /// Gets the dimmed tab color.
     /// </summary>
-    public static Vector4 tabDimmed { get; } = new(0.082f, 0.088f, 0.10f, 1f);
+    public static Vector4 tabDimmed { get; } = new(0.082f, 0.088f, 0.10f, opacityOpaque);
 
     /// <summary>
     /// Gets the selected dimmed tab color.
     /// </summary>
-    public static Vector4 tabDimmedSelected { get; } = new(0.135f, 0.142f, 0.16f, 1f);
+    public static Vector4 tabDimmedSelected { get; } = new(0.135f, 0.142f, 0.16f, opacityOpaque);
 
     /// <summary>
     /// Gets the selected tab overline color.
     /// </summary>
-    public static Vector4 tabSelectedOverline { get; } = new(0.72f, 0.66f, 0.90f, 1f);
+    public static Vector4 tabSelectedOverline { get; } = new(0.72f, 0.66f, 0.90f, opacityOpaque);
 
     /// <summary>
     /// Gets the table header background.
     /// </summary>
-    public static Vector4 tableHeader { get; } = new(0.1882353f, 0.1882353f, 0.2f, 1f);
+    public static Vector4 tableHeader { get; } = new(0.1882353f, 0.1882353f, 0.2f, opacityOpaque);
 
     /// <summary>
     /// Gets the strong table border.
     /// </summary>
-    public static Vector4 tableBorderStrong { get; } = new(0.245f, 0.258f, 0.29f, 0.85f);
+    public static Vector4 tableBorderStrong { get; } = new(0.245f, 0.258f, 0.29f, opacityEmphasized);
 
     /// <summary>
     /// Gets the light table border.
     /// </summary>
-    public static Vector4 tableBorderLight { get; } = new(0.205f, 0.215f, 0.245f, 0.55f);
+    public static Vector4 tableBorderLight { get; } = new(0.205f, 0.215f, 0.245f, opacityStrong);
 
     /// <summary>
     /// Gets the alternate table row background.
     /// </summary>
-    public static Vector4 tableRowAlternate { get; } = new(1f, 1f, 1f, 0.03433478f);
+    public static Vector4 tableRowAlternate { get; } = new(1f, 1f, 1f, opacityFaint);
 
     /// <summary>
     /// Gets the standard drag target color.
     /// </summary>
-    public static Vector4 dragDropTarget { get; } = new(1f, 1f, 0f, 0.9f);
+    public static Vector4 dragDropTarget { get; } = new(1f, 1f, 0f, opacityNearOpaque);
 
     /// <summary>
     /// Gets navigation highlight color.
     /// </summary>
-    public static Vector4 navigationHighlight { get; } = new(1f, 1f, 1f, 0.7f);
+    public static Vector4 navigationHighlight { get; } = new(1f, 1f, 1f, opacityProminent);
 
     /// <summary>
     /// Gets navigation dim background.
     /// </summary>
-    public static Vector4 navigationDim { get; } = new(0.8f, 0.8f, 0.8f, 0.2f);
+    public static Vector4 navigationDim { get; } = new(0.8f, 0.8f, 0.8f, opacitySoft);
 
     /// <summary>
     /// Gets modal dim background.
     /// </summary>
-    public static Vector4 modalDim { get; } = new(0.8f, 0.8f, 0.8f, 0.35f);
+    public static Vector4 modalDim { get; } = new(0.8f, 0.8f, 0.8f, opacityMuted);
 
     /// <summary>
     /// Gets inspector card header background.
     /// </summary>
-    public static Vector4 inspectorCardHeader { get; } = new(0.17f, 0.18f, 0.205f, 1f);
+    public static Vector4 inspectorCardHeader { get; } = new(0.17f, 0.18f, 0.205f, opacityOpaque);
 
     /// <summary>
     /// Gets the persistent Inspector target header background.
     /// </summary>
-    public static Vector4 inspectorTargetHeader { get; } = new(0.14f, 0.14f, 0.16f, 1f);
+    public static Vector4 inspectorTargetHeader { get; } = new(0.14f, 0.14f, 0.16f, opacityOpaque);
 
     /// <summary>
     /// Gets the persistent Inspector target header border.
     /// </summary>
-    public static Vector4 inspectorTargetHeaderBorder { get; } = new(0.30f, 0.29f, 0.34f, 1f);
+    public static Vector4 inspectorTargetHeaderBorder { get; } = new(0.30f, 0.29f, 0.34f, opacityOpaque);
 
     /// <summary>
     /// Gets the subdued background of Tag labels in Inspector target headers.
     /// </summary>
-    public static Vector4 inspectorTagLabel { get; } = new(0.34f, 0.29f, 0.44f, 1f);
+    public static Vector4 inspectorTagLabel { get; } = new(0.34f, 0.29f, 0.44f, opacityOpaque);
 
     /// <summary>
     /// Gets the subdued background of Layer labels in Inspector target headers.
     /// </summary>
-    public static Vector4 inspectorLayerLabel { get; } = new(0.24f, 0.34f, 0.40f, 1f);
+    public static Vector4 inspectorLayerLabel { get; } = new(0.24f, 0.34f, 0.40f, opacityOpaque);
 
     /// <summary>
     /// Gets inspector card body background.
     /// </summary>
-    public static Vector4 inspectorCardBody { get; } = new(0.12f, 0.12f, 0.14f, 1f);
+    public static Vector4 inspectorCardBody { get; } = new(0.12f, 0.12f, 0.14f, opacityOpaque);
 
     /// <summary>
     /// Gets inspector card body border.
     /// </summary>
-    public static Vector4 inspectorCardBodyBorder { get; } = new(0.28f, 0.27f, 0.32f, 1f);
+    public static Vector4 inspectorCardBodyBorder { get; } = new(0.28f, 0.27f, 0.32f, opacityOpaque);
 
     /// <summary>
     /// Gets the outline color of framed Inspector sections.
     /// </summary>
-    public static Vector4 inspectorSectionBorder { get; } = new(0.34f, 0.33f, 0.39f, 1f);
+    public static Vector4 inspectorSectionBorder { get; } = new(0.34f, 0.33f, 0.39f, opacityOpaque);
 
     /// <summary>
     /// Gets the accent used by numeric Shader type badges.
     /// </summary>
-    public static Vector4 shaderTypeNumeric { get; } = new(0.53f, 0.72f, 0.96f, 1f);
+    public static Vector4 shaderTypeNumeric { get; } = new(0.53f, 0.72f, 0.96f, opacityOpaque);
 
     /// <summary>
     /// Gets the accent used by integer Shader type badges.
     /// </summary>
-    public static Vector4 shaderTypeInteger { get; } = new(0.58f, 0.82f, 0.72f, 1f);
+    public static Vector4 shaderTypeInteger { get; } = new(0.58f, 0.82f, 0.72f, opacityOpaque);
 
     /// <summary>
     /// Gets the accent used by Boolean Shader type badges.
     /// </summary>
-    public static Vector4 shaderTypeBoolean { get; } = new(0.91f, 0.69f, 0.38f, 1f);
+    public static Vector4 shaderTypeBoolean { get; } = new(0.91f, 0.69f, 0.38f, opacityOpaque);
 
     /// <summary>
     /// Gets the accent used by Shader resource type badges.
     /// </summary>
-    public static Vector4 shaderTypeResource { get; } = new(0.58f, 0.78f, 0.86f, 1f);
+    public static Vector4 shaderTypeResource { get; } = new(0.58f, 0.78f, 0.86f, opacityOpaque);
 
     /// <summary>
     /// Gets the accent used by unclassified Shader type badges.
     /// </summary>
-    public static Vector4 shaderTypeOther { get; } = new(0.72f, 0.66f, 0.84f, 1f);
+    public static Vector4 shaderTypeOther { get; } = new(0.72f, 0.66f, 0.84f, opacityOpaque);
 
     /// <summary>
     /// Gets disabled inspector card text.
     /// </summary>
-    public static Vector4 inspectorCardDisabledText { get; } = new(0.52f, 0.52f, 0.54f, 1f);
+    public static Vector4 inspectorCardDisabledText { get; } = new(0.52f, 0.52f, 0.54f, opacityOpaque);
 
     /// <summary>
     /// Gets inspector disclosure hover background.
     /// </summary>
-    public static Vector4 inspectorCardDisclosureHovered { get; } = new(0.24f, 0.22f, 0.31f, 1f);
+    public static Vector4 inspectorCardDisclosureHovered { get; } = new(0.24f, 0.22f, 0.31f, opacityOpaque);
 
     /// <summary>
     /// Gets compact control hover color.
     /// </summary>
-    public static Vector4 compactControlHovered { get; } = new(0.74f, 0.70f, 0.90f, 1f);
+    public static Vector4 compactControlHovered { get; } = new(0.74f, 0.70f, 0.90f, opacityOpaque);
 
     /// <summary>
     /// Gets the deepest collection background.
@@ -312,57 +351,57 @@ public static class EditorPalette
     /// <summary>
     /// Gets the primary collection row background.
     /// </summary>
-    public static Vector4 collectionRow { get; } = new(0.115f, 0.123f, 0.137f, 1f);
+    public static Vector4 collectionRow { get; } = new(0.115f, 0.123f, 0.137f, opacityOpaque);
 
     /// <summary>
     /// Gets the alternate collection row background.
     /// </summary>
-    public static Vector4 collectionRowAlternate { get; } = new(0.135f, 0.144f, 0.160f, 1f);
+    public static Vector4 collectionRowAlternate { get; } = new(0.135f, 0.144f, 0.160f, opacityOpaque);
 
     /// <summary>
     /// Gets the translucent primary background of a complete Settings field.
     /// </summary>
-    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, 0.005f);
+    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, opacityTrace);
 
     /// <summary>
     /// Gets the translucent alternate background of a complete Settings field.
     /// </summary>
-    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, 0.005f);
+    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, opacityTrace);
 
     /// <summary>
     /// Gets the asset browser field background.
     /// </summary>
-    public static Vector4 assetField { get; } = new(0.235f, 0.22f, 0.27f, 1f);
+    public static Vector4 assetField { get; } = new(0.235f, 0.22f, 0.27f, opacityOpaque);
 
     /// <summary>
     /// Gets the asset browser border.
     /// </summary>
-    public static Vector4 assetBorder { get; } = new(0.31f, 0.30f, 0.35f, 1f);
+    public static Vector4 assetBorder { get; } = new(0.31f, 0.30f, 0.35f, opacityOpaque);
 
     /// <summary>
     /// Gets the soft asset browser border.
     /// </summary>
-    public static Vector4 assetBorderSoft { get; } = new(0.24f, 0.24f, 0.27f, 1f);
+    public static Vector4 assetBorderSoft { get; } = new(0.24f, 0.24f, 0.27f, opacityOpaque);
 
     /// <summary>
     /// Gets the asset browser text color.
     /// </summary>
-    public static Vector4 assetText { get; } = new(0.86f, 0.86f, 0.86f, 1f);
+    public static Vector4 assetText { get; } = new(0.86f, 0.86f, 0.86f, opacityOpaque);
 
     /// <summary>
     /// Gets the muted asset browser text color.
     /// </summary>
-    public static Vector4 assetTextMuted { get; } = new(0.54f, 0.54f, 0.56f, 1f);
+    public static Vector4 assetTextMuted { get; } = new(0.54f, 0.54f, 0.56f, opacityOpaque);
 
     /// <summary>
     /// Gets the subdued text color used by asset browser breadcrumb paths.
     /// </summary>
-    public static Vector4 assetBreadcrumbText { get; } = new(0.86f, 0.86f, 0.86f, 0.5f);
+    public static Vector4 assetBreadcrumbText { get; } = new(0.86f, 0.86f, 0.86f, opacityMedium);
 
     /// <summary>
     /// Gets the opaque asset browser accent.
     /// </summary>
-    public static Vector4 assetAccent { get; } = new(0.50f, 0.45f, 0.62f, 1f);
+    public static Vector4 assetAccent { get; } = new(0.50f, 0.45f, 0.62f, opacityOpaque);
 
     /// <summary>
     /// Gets a hover treatment derived from a base theme color.
@@ -394,92 +433,92 @@ public static class EditorPalette
     /// <summary>
     /// Gets inactive hierarchy text.
     /// </summary>
-    public static Vector4 hierarchyInactiveText { get; } = new(0.52f, 0.52f, 0.54f, 1f);
+    public static Vector4 hierarchyInactiveText { get; } = new(0.52f, 0.52f, 0.54f, opacityOpaque);
 
     /// <summary>
     /// Gets hierarchy tree guide color.
     /// </summary>
-    public static Vector4 treeGuide { get; } = new(0.62f, 0.62f, 0.66f, 1f);
+    public static Vector4 treeGuide { get; } = new(0.62f, 0.62f, 0.66f, opacityOpaque);
 
     /// <summary>
     /// Gets X axis color.
     /// </summary>
-    public static Vector4 axisX { get; } = new(0.76f, 0.20f, 0.22f, 1f);
+    public static Vector4 axisX { get; } = new(0.76f, 0.20f, 0.22f, opacityOpaque);
 
     /// <summary>
     /// Gets Y axis color.
     /// </summary>
-    public static Vector4 axisY { get; } = new(0.16f, 0.62f, 0.30f, 1f);
+    public static Vector4 axisY { get; } = new(0.16f, 0.62f, 0.30f, opacityOpaque);
 
     /// <summary>
     /// Gets Z axis color.
     /// </summary>
-    public static Vector4 axisZ { get; } = new(0.20f, 0.34f, 0.78f, 1f);
+    public static Vector4 axisZ { get; } = new(0.20f, 0.34f, 0.78f, opacityOpaque);
 
     /// <summary>
     /// Gets W axis color.
     /// </summary>
-    public static Vector4 axisW { get; } = new(0.48f, 0.48f, 0.50f, 1f);
+    public static Vector4 axisW { get; } = new(0.48f, 0.48f, 0.50f, opacityOpaque);
 
     /// <summary>
     /// Gets debug log color.
     /// </summary>
-    public static Vector4 logDebug { get; } = new(0.80f, 0.90f, 0.85f, 1f);
+    public static Vector4 logDebug { get; } = new(0.80f, 0.90f, 0.85f, opacityOpaque);
 
     /// <summary>
     /// Gets informational log color.
     /// </summary>
-    public static Vector4 logInfo { get; } = new(0.20f, 1f, 0.20f, 1f);
+    public static Vector4 logInfo { get; } = new(0.20f, 1f, 0.20f, opacityOpaque);
 
     /// <summary>
     /// Gets warning log color.
     /// </summary>
-    public static Vector4 logWarning { get; } = new(1f, 1f, 0.20f, 1f);
+    public static Vector4 logWarning { get; } = new(1f, 1f, 0.20f, opacityOpaque);
 
     /// <summary>
     /// Gets error log color.
     /// </summary>
-    public static Vector4 logError { get; } = new(1f, 0.20f, 0.20f, 1f);
+    public static Vector4 logError { get; } = new(1f, 0.20f, 0.20f, opacityOpaque);
 
     /// <summary>
     /// Gets fatal log color.
     /// </summary>
-    public static Vector4 logFatal { get; } = new(1f, 0.20f, 1f, 1f);
+    public static Vector4 logFatal { get; } = new(1f, 0.20f, 1f, opacityOpaque);
 
     /// <summary>
     /// Gets collapsed log card background.
     /// </summary>
-    public static Vector4 logCollapsedCard { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, 0.3019608f);
+    public static Vector4 logCollapsedCard { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, opacityMuted);
 
     /// <summary>
     /// Gets collapsed log card border.
     /// </summary>
-    public static Vector4 logCollapsedBorder { get; } = new(0.32f, 0.34f, 0.37f, 0.4225f);
+    public static Vector4 logCollapsedBorder { get; } = new(0.32f, 0.34f, 0.37f, opacityMedium);
 
     /// <summary>
     /// Gets the base expanded log card background.
     /// </summary>
-    public static Vector4 logExpandedBase { get; } = new(0.10f, 0.10f, 0.10f, 1f);
+    public static Vector4 logExpandedBase { get; } = new(0.10f, 0.10f, 0.10f, opacityOpaque);
 
     /// <summary>
     /// Gets the base expanded log card border.
     /// </summary>
-    public static Vector4 logExpandedBorderBase { get; } = new(0.24f, 0.24f, 0.24f, 1f);
+    public static Vector4 logExpandedBorderBase { get; } = new(0.24f, 0.24f, 0.24f, opacityOpaque);
 
     /// <summary>
     /// Gets log header button background.
     /// </summary>
-    public static Vector4 logToggle { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, 0f);
+    public static Vector4 logToggle { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, opacityNone);
 
     /// <summary>
     /// Gets hovered log header button background.
     /// </summary>
-    public static Vector4 logToggleHovered { get; } = new(0.7372549f, 0.69411767f, 0.8862745f, 0.4501961f);
+    public static Vector4 logToggleHovered { get; } = new(0.7372549f, 0.69411767f, 0.8862745f, opacityMedium);
 
     /// <summary>
     /// Gets active log header button background.
     /// </summary>
-    public static Vector4 logToggleActive { get; } = new(0.8156863f, 0.77254903f, 0.9647059f, 0.4501961f);
+    public static Vector4 logToggleActive { get; } = new(0.8156863f, 0.77254903f, 0.9647059f, opacityMedium);
 
     /// <summary>
     /// Gets the expanded log card background derived from a severity color.
@@ -558,7 +597,7 @@ public static class EditorPalette
         style.Colors[(int)ImGuiCol.TitleBgActive] = titleActive;
         style.Colors[(int)ImGuiCol.TitleBgCollapsed] = titleCollapsed;
         style.Colors[(int)ImGuiCol.MenuBarBg] = transparent;
-        style.Colors[(int)ImGuiCol.ScrollbarBg] = WithAlpha(frame, 0f);
+        style.Colors[(int)ImGuiCol.ScrollbarBg] = WithOpacity(frame, opacityNone);
         style.Colors[(int)ImGuiCol.ScrollbarGrab] = scrollbarGrab;
         style.Colors[(int)ImGuiCol.ScrollbarGrabHovered] = scrollbarGrabHovered;
         style.Colors[(int)ImGuiCol.ScrollbarGrabActive] = scrollbarGrabActive;
@@ -600,6 +639,11 @@ public static class EditorPalette
         style.Colors[(int)ImGuiCol.DockingPreview] = accentActive;
     }
 
-    private static Vector4 WithAlpha(Vector4 color, float alpha)
-        => new(color.X, color.Y, color.Z, alpha);
+    /// <summary>
+    /// Returns a theme color with a caller-selected opacity, normally one of the shared opacity levels.
+    /// </summary>
+    /// <param name="color">Base RGB color.</param>
+    /// <param name="opacity">Replacement alpha in the inclusive zero-to-one range.</param>
+    public static Vector4 WithOpacity(Vector4 color, float opacity)
+        => new(color.X, color.Y, color.Z, Math.Clamp(opacity, opacityNone, opacityOpaque));
 }

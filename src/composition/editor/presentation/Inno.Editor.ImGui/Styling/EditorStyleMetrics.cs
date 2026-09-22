@@ -108,7 +108,7 @@ public sealed class EditorStyleMetrics
     /// <summary>
     /// Gets disabled content opacity.
     /// </summary>
-    public float disabledAlpha => 0.42f;
+    public float disabledAlpha => EditorPalette.opacityMedium;
 
     /// <summary>
     /// Gets standard window padding.

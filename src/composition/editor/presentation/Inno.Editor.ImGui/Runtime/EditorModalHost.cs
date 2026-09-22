@@ -107,10 +107,10 @@ internal sealed class EditorModalHost
             if (m_requested || now <= m_hideAt)
             {
                 double fadeIn = (now - m_visibleAt) / EditorWidget.style.modalFadeInSeconds;
-                return (float)Math.Clamp(fadeIn, 0.05, 1.0);
+                return (float)Math.Clamp(fadeIn, EditorPalette.opacityFaint, EditorPalette.opacityOpaque);
             }
             double fadeOut = (now - m_hideAt) / EditorWidget.style.modalFadeOutSeconds;
-            return (float)Math.Clamp(1.0 - fadeOut, 0.05, 1.0);
+            return (float)Math.Clamp(1.0 - fadeOut, EditorPalette.opacityFaint, EditorPalette.opacityOpaque);
         }
     }
 }
