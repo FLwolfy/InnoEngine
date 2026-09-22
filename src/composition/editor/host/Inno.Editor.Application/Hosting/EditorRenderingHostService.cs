@@ -1,12 +1,15 @@
 using Inno.Extensibility.Reload;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 using Inno.Extensibility.Modules;
 using Inno.Adapter.Presentation;
 using Inno.Editor.Core;
 using Inno.Editor.Rendering;
+using Inno.Core.Diagnostics;
+using Inno.Core.Execution;
 using Inno.Rendering;
 using Inno.Rendering.Runtime;
 
@@ -15,6 +18,8 @@ namespace Inno.Editor.Application;
 internal sealed class EditorRenderingHostService :
     IEditorRenderingHost,
     IEditorPreviewService,
+    IEditorShaderArtifactValidator,
+    IRenderFrameGraphContributor,
     IEditorReloadParticipant,
     IDisposable
 {
@@ -25,6 +30,8 @@ internal sealed class EditorRenderingHostService :
     private readonly Dictionary<RenderTextureArtifactReference, PreviewState> m_previews = [];
     private readonly Dictionary<ulong, PreviewState> m_previewsById = [];
     private readonly Dictionary<string, PreviewState> m_renderedPreviews = new(StringComparer.Ordinal);
+    private readonly object m_shaderValidationLock = new();
+    private readonly Dictionary<Guid, ShaderValidationState> m_shaderValidations = [];
     private ulong m_nextPreviewId;
     private bool m_disposed;
 
@@ -37,12 +44,93 @@ internal sealed class EditorRenderingHostService :
         m_presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
         ArgumentNullException.ThrowIfNull(reloads);
         m_reloadRegistration = reloads.Register(this);
+        m_runtime.RegisterContributor(this);
     }
 
     /// <summary>
     /// Gets the active rendering-device generation.
     /// </summary>
     public uint deviceGeneration => m_runtime.deviceGeneration;
+
+    /// <inheritdoc />
+    public GraphicsCapabilities capabilities => m_runtime.resources.capabilities;
+
+    /// <inheritdoc />
+    public EditorShaderArtifactValidationSnapshot Request(
+        Guid documentId,
+        ulong revision,
+        RenderShaderArtifact artifact)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (documentId == Guid.Empty)
+            throw new ArgumentException("Shader validation requires a document identity.", nameof(documentId));
+        ArgumentNullException.ThrowIfNull(artifact);
+        lock (m_shaderValidationLock)
+        {
+            if (!m_shaderValidations.TryGetValue(documentId, out ShaderValidationState? state)
+                || state.revision != revision
+                || !string.Equals(state.contentHash, artifact.contentHash, StringComparison.Ordinal))
+            {
+                state = new ShaderValidationState(documentId, revision, artifact);
+                m_shaderValidations[documentId] = state;
+            }
+            return state.snapshot;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Release(Guid documentId)
+    {
+        if (documentId == Guid.Empty)
+            return;
+        lock (m_shaderValidationLock)
+            m_shaderValidations.Remove(documentId);
+    }
+
+    /// <inheritdoc />
+    public void PrepareFrame(ulong frameIndex)
+    {
+        _ = frameIndex;
+        ShaderValidationState[] pending;
+        lock (m_shaderValidationLock)
+            pending = m_shaderValidations.Values
+                .Where(static state => state.artifact is not null)
+                .ToArray();
+        foreach (ShaderValidationState state in pending)
+        {
+            EditorShaderArtifactValidationSnapshot snapshot;
+            try
+            {
+                m_runtime.resources.ValidateShaderArtifact(state.artifact!);
+                snapshot = new(EditorShaderCompilationState.Succeeded, []);
+            }
+            catch (Exception pendingRetirement) when (RetirementPendingException.Find(pendingRetirement) is not null)
+            {
+                throw;
+            }
+            catch (Exception failure)
+            {
+                snapshot = new(EditorShaderCompilationState.Failed,
+                    [new ShaderDiagnostic("SHADER_DEVICE_VALIDATION", DiagnosticSeverity.Error, failure.Message)]);
+            }
+            lock (m_shaderValidationLock)
+            {
+                if (m_shaderValidations.TryGetValue(state.documentId, out ShaderValidationState? current)
+                    && ReferenceEquals(current, state))
+                {
+                    state.snapshot = snapshot;
+                    state.artifact = null;
+                }
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void AddRenderPasses(RenderGraphBuilder graph, ulong frameIndex)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        _ = frameIndex;
+    }
 
     /// <inheritdoc />
     public bool TryRender(EditorViewportComposition composition, out EditorPreviewHandle handle)
@@ -325,9 +413,12 @@ internal sealed class EditorRenderingHostService :
     {
         if (m_disposed)
             return;
+        _ = m_runtime.UnregisterContributor(this);
         m_reloadRegistration.Dispose();
         ReleaseAll();
         ReleaseAllPreviews();
+        lock (m_shaderValidationLock)
+            m_shaderValidations.Clear();
         m_disposed = true;
     }
 
@@ -374,6 +465,8 @@ internal sealed class EditorRenderingHostService :
         {
             owner.ReleaseAll();
             owner.ReleaseAllPreviews();
+            lock (owner.m_shaderValidationLock)
+                owner.m_shaderValidations.Clear();
         }
 
         /// <summary>
@@ -409,4 +502,22 @@ internal sealed class EditorRenderingHostService :
         PersistentTextureHandle residentTexture,
         PresentationTextureHandle presentationTexture,
         string? viewportId = null);
+
+    private sealed class ShaderValidationState
+    {
+        internal ShaderValidationState(Guid documentId, ulong revision, RenderShaderArtifact artifact)
+        {
+            this.documentId = documentId;
+            this.revision = revision;
+            contentHash = artifact.contentHash;
+            this.artifact = artifact;
+            snapshot = new(EditorShaderCompilationState.Compiling, []);
+        }
+
+        internal Guid documentId { get; set; }
+        internal ulong revision { get; }
+        internal string contentHash { get; }
+        internal RenderShaderArtifact? artifact { get; set; }
+        internal EditorShaderArtifactValidationSnapshot snapshot { get; set; }
+    }
 }

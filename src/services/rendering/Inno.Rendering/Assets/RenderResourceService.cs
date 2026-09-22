@@ -237,17 +237,29 @@ internal sealed record RenderMaterialBinding(
 public sealed class RenderMaterialPass
 {
     private readonly ShaderPassDefinition m_definition;
+    private readonly IReadOnlyDictionary<RenderBindingId, RenderShaderBindingKind> m_declaredBindings;
+    private readonly IReadOnlySet<RenderBindingId> m_activeBindings;
     private readonly IReadOnlyList<RenderMaterialBinding> m_bindings;
 
     internal RenderMaterialPass(
         ShaderPassDefinition definition,
         GraphicsPipelineHandle graphicsPipeline,
         ComputePipelineHandle computePipeline,
+        IReadOnlyList<ShaderPropertyDefinition> declaredBindings,
+        ShaderInterface activeInterface,
         IReadOnlyList<RenderMaterialBinding> bindings)
     {
+        ArgumentNullException.ThrowIfNull(declaredBindings);
+        ArgumentNullException.ThrowIfNull(activeInterface);
         m_definition = ShaderDefinitionSnapshot.Copy(definition);
         this.graphicsPipeline = graphicsPipeline;
         this.computePipeline = computePipeline;
+        m_declaredBindings = declaredBindings.ToDictionary(
+            static property => new RenderBindingId(property.id.value),
+            static property => ToRenderBindingKind(property.bindingKind));
+        m_activeBindings = activeInterface.bindings
+            .Select(static binding => new RenderBindingId(binding.id.value))
+            .ToHashSet();
         m_bindings = Array.AsReadOnly(bindings.Select(static binding => binding with
         {
             uniformData = binding.uniformData?.ToArray()
@@ -280,6 +292,37 @@ public sealed class RenderMaterialPass
     public bool isCompute => computePipeline.isValid;
 
     /// <summary>
+    /// Gets whether the compiled program actively consumes one declared binding.
+    /// </summary>
+    /// <param name="binding">
+    /// Stable binding declared by the shader contract.
+    /// </param>
+    /// <param name="kind">
+    /// Expected command-binding domain.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the final compiled pass reflects the binding; otherwise,
+    /// <see langword="false"/> when the compiler proved the declared binding unused and removed it.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The binding is not declared by the shader, or its declared kind differs from <paramref name="kind"/>.
+    /// </exception>
+    public bool UsesBinding(RenderBindingId binding, RenderShaderBindingKind kind)
+    {
+        if (!binding.isValid)
+            throw new ArgumentException("A stable shader binding identifier is required.", nameof(binding));
+        if (!Enum.IsDefined(kind))
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        if (!m_declaredBindings.TryGetValue(binding, out RenderShaderBindingKind declaredKind))
+            throw new ArgumentException($"Shader does not declare binding '{binding.value}'.", nameof(binding));
+        if (declaredKind != kind)
+            throw new ArgumentException(
+                $"Shader binding '{binding.value}' is declared as {declaredKind}, not {kind}.",
+                nameof(kind));
+        return m_activeBindings.Contains(binding);
+    }
+
+    /// <summary>
     /// Binds the program and all material-owned values and textures.
     /// </summary>
     /// <param name="commands">
@@ -303,6 +346,16 @@ public sealed class RenderMaterialPass
                 commands.BindTexture(binding.id, binding.texture, binding.sampler);
         }
     }
+
+    private static RenderShaderBindingKind ToRenderBindingKind(ShaderPropertyBindingKind kind)
+        => kind switch
+        {
+            ShaderPropertyBindingKind.Uniform => RenderShaderBindingKind.Uniform,
+            ShaderPropertyBindingKind.SampledTexture => RenderShaderBindingKind.Texture,
+            ShaderPropertyBindingKind.StorageTexture => RenderShaderBindingKind.StorageTexture,
+            ShaderPropertyBindingKind.StorageBuffer => RenderShaderBindingKind.StorageBuffer,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
 }
 
 /// <summary>
@@ -314,6 +367,17 @@ public interface IRenderResourceService
     /// Gets the active backend-neutral capability snapshot.
     /// </summary>
     GraphicsCapabilities capabilities { get; }
+
+    /// <summary>
+    /// Creates and retires every program in one compiled artifact through the active device without publishing it.
+    /// </summary>
+    /// <param name="artifact">
+    /// Complete target artifact whose binaries, links, and reflected interfaces must be accepted by the active device.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// The call is outside a frame resource-mutation safety point, or the artifact fails device validation.
+    /// </exception>
+    void ValidateShaderArtifact(RenderShaderArtifact artifact);
 
     /// <summary>
     /// Queues all target shader work required by a material without blocking the render thread.

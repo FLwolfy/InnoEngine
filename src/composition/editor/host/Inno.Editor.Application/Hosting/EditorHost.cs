@@ -467,7 +467,7 @@ internal sealed class EditorHost : ShellHost
             engineHost.logs,
             [
                 renderingHost,
-                new EditorShaderCompilation(renderArtifacts, renderDevice.capabilities),
+                new EditorShaderCompilation(renderArtifacts, renderingHost),
                 framePacing,
                 reloadCoordinator,
                 engineHost,

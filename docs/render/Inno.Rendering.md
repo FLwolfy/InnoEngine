@@ -6,6 +6,7 @@
 它用于隔离预览等显式消费者，不读取图、不解析源码，也不将传入产物注册为资产。Raster/Compute 均经过正式材质的反射校验、能力检查、绑定及全 Pass 原子发布流程。
 缓存由非空 `RenderPersistentResourceId` 与 Shader 身份、目标和变体共同隔离；同一帧内相同 scope 的产物固定。候选失败只保留同 scope 的 last-good；调用者提供的 `IDiagnosticReporter` 不被保留或转发到正式项目诊断。
 `Release(scope)` 退休该消费者的全部程序，不影响 canonical Material 或其他预览。统一程序容量限制和未使用资源清扫对这类程序同样生效。
+`IRenderResourceService.ValidateShaderArtifact(artifact)` 只能在帧资源变更安全点调用；它复用正式程序创建和 Reflection 校验路径创建并退休所有 Pass，但不发布、不缓存，也不解析创作源码。Editor 的显式 Check 通过异步帧队列使用该入口，因此不会在 UI/Presentation 阶段越过设备生命周期。
 `RenderShaderArtifact`、`RenderShaderPassArtifact`、`RenderShaderStageArtifact`、`RenderShaderVariant` 的脚本导出为后端中立运行时产物协议，不新增完整 Shader 源码资产入口。
 
 [Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [Shader 图](Inno.Rendering.Shaders.md)
@@ -75,6 +76,8 @@ MaterialPassResolution? selection = MaterialPassResolver.Resolve(
 解析不是“内建所有模型再用开关启用”。Resolver 只做四件通用工作：按 Plugin 提供的 Contract 找 Technique、按设备能力过滤、尊重 Material 显式 Technique、按 Plugin 提供的 Role 找 Pass。它不知道 sprite、PBR、shadow 或 post process；这些名字、属性、排序和 pass 组合都由 Pipeline/Plugin 拥有。解析结果会被确定性缓存和验证，不会在每个 draw 上用 CLR 反射猜测语义。
 
 Material/Geometry 是可选帮助层，不是强制执行路径。纹理 `MaterialValue` 同时保存后端中立 `RenderSamplerState`，因此 filter/address mode 不由 Runtime 写死；BGFX 的 texture/sampler 组合绑定不会伪装成不可用的独立 Material Sampler property。Buffer 属于 Pipeline/Pass 显式资源接口，不被 Material helper 隐式拥有。低级 Pipeline 可以通过 `IRenderResourceService.AcquireBuffer`、`AcquireTexture`、`AcquireKtxTexture`、`AcquireGraphicsPipeline` 和 `AcquireComputePipeline` 提交自己的目标二进制与资源描述，再直接使用 `RenderCommandEncoder` 绑定和录制；这些入口仍只返回后端中立 opaque handle。
+
+`RenderMaterialPass.UsesBinding(id, kind)` 是 Pipeline 在录制 Pass-owned uniform、texture 或 storage 资源前查询最终编译接口的严格入口。它先核对 Shader 声明中确实存在相同 ID 和 binding kind，再返回当前 Pass 的编译后 Reflection 是否仍消费该 binding：`false` 只表示编译器证明未使用并已优化掉；未声明 ID、拼写错误和类型错误继续抛出，不能借此静默跳过契约错误。Material-owned binding 仍由 `Bind` 自动处理；直接调用 `RenderCommandEncoder` 的 Pipeline 必须用该入口保护可能被编译优化移除的绑定。后端的绑定解析保持严格，不提供“缺失即忽略”的兼容路径。
 
 `ShaderPropertyDefinition.bindingKind` 用 `ShaderPropertyBindingKind` 明确区分 `Uniform`、`SampledTexture`、`StorageTexture` 与 `StorageBuffer`；storage binding 还通过 `RenderStorageAccess` 声明 Read、Write 或 ReadWrite。数值默认推断为 Uniform，纹理默认推断为 SampledTexture，Buffer 默认推断为 StorageBuffer，但资产可以显式声明。Shader IR、Pass-local `ShaderInterface`、编译 artifact 与 Runtime binding descriptor 会保留同一个绑定契约。Material 只拥有 Uniform 与 SampledTexture 值；StorageTexture/StorageBuffer 必须由 Pipeline 在对应 Pass 中显式获取、向 RenderGraph 声明，并通过 `BindStorageTexture`/`BindBuffer` 绑定，避免把帧级 UAV 错误持久化到材质资产。
 

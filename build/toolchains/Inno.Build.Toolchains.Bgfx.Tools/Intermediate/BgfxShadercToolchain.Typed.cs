@@ -1,6 +1,9 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +16,9 @@ namespace Inno.Build.Toolchains.Bgfx.Tools;
 
 public sealed partial class BgfxShadercToolchain
 {
+    private const byte C_SHADER_BINARY_VERSION = 11;
+    private const int C_SHADER_BINARY_HEADER_SIZE = 12;
+    private const int C_SHADER_UNIFORM_METADATA_SIZE = 10;
     private static readonly IReadOnlyList<string> s_languages = Array.AsReadOnly(new[] { "inno.shader-language.bgfx-sc" });
 
     /// <inheritdoc />
@@ -48,7 +54,57 @@ public sealed partial class BgfxShadercToolchain
                 diagnostics.Add(new("BGFX_SHADER_COMPILE_FAILED", DiagnosticSeverity.Error, $"BGFX shaderc exited with code {native.exitCode} without a usable binary.", new("inno-generated-stage", 0, 0)));
             return new([], generated.bindings, diagnostics);
         }
-        return new(native.bytes, generated.bindings, diagnostics);
+        IReadOnlyList<ShaderStageBinding> reflectedBindings;
+        try
+        {
+            HashSet<string> reflectedNames = ReadReflectedUniformNames(native.bytes);
+            reflectedBindings = generated.bindings.Where(binding =>
+            {
+                ShaderIrStageInput input = request.stage.inputs.Single(value => value.id == binding.id);
+                return input.kind == ShaderIrInputKind.Storage || reflectedNames.Contains(binding.nativeName);
+            }).ToArray();
+        }
+        catch (InvalidDataException failure)
+        {
+            diagnostics.Add(new("BGFX_SHADER_REFLECTION", DiagnosticSeverity.Error, failure.Message,
+                new("inno-generated-stage", 0, 0)));
+            return new([], [], diagnostics);
+        }
+        return new(native.bytes, reflectedBindings, diagnostics);
+    }
+
+    private static HashSet<string> ReadReflectedUniformNames(ReadOnlySpan<byte> binary)
+    {
+        if (binary.Length < C_SHADER_BINARY_HEADER_SIZE + sizeof(ushort))
+            throw new InvalidDataException("BGFX shaderc returned a truncated shader binary header.");
+        if (binary[1] != (byte)'S' || binary[2] != (byte)'H'
+            || binary[0] is not ((byte)'V' or (byte)'F' or (byte)'C'))
+            throw new InvalidDataException("BGFX shaderc returned an unrecognized shader binary.");
+        if (binary[3] != C_SHADER_BINARY_VERSION)
+            throw new InvalidDataException(
+                $"BGFX shader binary version {binary[3]} does not match the bundled reader version {C_SHADER_BINARY_VERSION}.");
+
+        int offset = C_SHADER_BINARY_HEADER_SIZE;
+        ushort count = BinaryPrimitives.ReadUInt16LittleEndian(binary.Slice(offset, sizeof(ushort)));
+        offset += sizeof(ushort);
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < count; index++)
+        {
+            RequireBinaryRange(binary, offset, sizeof(byte));
+            int nameLength = binary[offset++];
+            RequireBinaryRange(binary, offset, nameLength + C_SHADER_UNIFORM_METADATA_SIZE);
+            string name = Encoding.UTF8.GetString(binary.Slice(offset, nameLength));
+            if (string.IsNullOrWhiteSpace(name) || !result.Add(name))
+                throw new InvalidDataException("BGFX shader binary contains an invalid reflected uniform table.");
+            offset += nameLength + C_SHADER_UNIFORM_METADATA_SIZE;
+        }
+        return result;
+    }
+
+    private static void RequireBinaryRange(ReadOnlySpan<byte> binary, int offset, int length)
+    {
+        if (length < 0 || offset < 0 || offset > binary.Length - length)
+            throw new InvalidDataException("BGFX shaderc returned a truncated reflected uniform table.");
     }
 
     private static List<ShaderSourceDiagnostic> ParseDiagnostics(BgfxShadercResult native,

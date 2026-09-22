@@ -8,6 +8,7 @@
 
 `EditorShaderCompilation.RequestArtifact(shader, variant)` 为 Material 预览读取当前正式 Shader 的不可变候选和编译状态，不改变 Material 值。
 `ReadDefinition(artifact)` 使用 owner 引用上下文读取该产物携带的精确接口。Shader 草稿仍通过 `RequestDraft` 独立缓存编译；预览错误和正式保存状态互不冒充。
+交互式 `Check` 在工具链编译完成后还会通过 `IEditorShaderArtifactValidator` 把不可变候选排入下一次渲染帧安全点；Host 使用正式 `IRenderResourceService.ValidateShaderArtifact` 为每个 Pass 创建并立即退休真实 Pipeline。只有二进制加载、Program link 和 Reflection 合同全部成功，当前 revision 才进入可预览状态。设备校验失败只产生本次 Check 诊断，不发布候选，也不回退显示旧预览。
 
 [Editor 索引](README.md) · [Rendering](../render/README.md) · [Scene View](Inno.Editor.Panel.SceneView.md) · [Game View](Inno.Editor.Panel.GameView.md)
 

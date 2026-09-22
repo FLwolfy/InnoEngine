@@ -53,6 +53,16 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     /// </summary>
     public GraphicsCapabilities capabilities => m_device.capabilities;
 
+    /// <inheritdoc />
+    public void ValidateShaderArtifact(RenderShaderArtifact artifact)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(artifact);
+        if (!m_mutationAllowed)
+            throw new InvalidOperationException("Shader artifact validation requires an open frame before graph execution.");
+        m_materials.ValidateArtifact(artifact);
+    }
+
     /// <summary>
     /// Creates runtime pipeline and binding resources for the material before first use.
     /// </summary>

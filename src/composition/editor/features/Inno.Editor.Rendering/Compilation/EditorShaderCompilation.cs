@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Inno.Core.Graphs;
 using Inno.Rendering;
 
@@ -36,11 +37,22 @@ public sealed class EditorShaderCompilation
 {
     private readonly EditorRenderTargetArtifactProvider m_provider;
     private readonly GraphicsCapabilities m_capabilities;
+    private readonly IEditorShaderArtifactValidator? m_validator;
     /// <summary>Pairs the authoring artifact owner with the active device's immutable capability snapshot.</summary>
     /// <param name="provider">Host-owned shader compilation service.</param>
     /// <param name="capabilities">Current device capability snapshot.</param>
     public EditorShaderCompilation(EditorRenderTargetArtifactProvider provider, GraphicsCapabilities capabilities)
     { m_provider = provider ?? throw new ArgumentNullException(nameof(provider)); m_capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities)); }
+
+    /// <summary>Pairs the authoring artifact owner with active-device validation at frame safety points.</summary>
+    /// <param name="provider">Host-owned shader compilation service.</param>
+    /// <param name="validator">Host-owned active-device artifact validator.</param>
+    public EditorShaderCompilation(EditorRenderTargetArtifactProvider provider, IEditorShaderArtifactValidator validator)
+    {
+        m_provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        m_validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        m_capabilities = validator.capabilities;
+    }
     /// <summary>Requests current compilation and reads its explicit last-good status.</summary>
     /// <param name="shader">Current generation shader asset, not retained by the service.</param>
     /// <param name="variant">Exact static keyword selection.</param>
@@ -71,9 +83,37 @@ public sealed class EditorShaderCompilation
     /// <param name="variant">Exact static keyword selection.</param>
     /// <returns>Preview-only state and artifact; calling this method cannot publish to Scene/Game.</returns>
     public EditorShaderDraftCompilationSnapshot RequestDraft(Guid documentId, GraphDocument graph, ulong revision, RenderShaderVariant variant)
-        => m_provider.RequestDraft(documentId, graph, revision, variant, m_capabilities);
+    {
+        EditorShaderDraftCompilationSnapshot compiled = m_provider.RequestDraft(
+            documentId,
+            graph,
+            revision,
+            variant,
+            m_capabilities);
+        if (m_validator is null || compiled.state != EditorShaderCompilationState.Succeeded
+            || compiled.artifact is null)
+            return compiled;
+
+        EditorShaderArtifactValidationSnapshot validated = m_validator.Request(
+            documentId,
+            revision,
+            compiled.artifact);
+        IReadOnlyList<ShaderDiagnostic> diagnostics = compiled.diagnostics
+            .Concat(validated.diagnostics)
+            .ToArray();
+        return validated.state switch
+        {
+            EditorShaderCompilationState.Compiling => new(validated.state, false, diagnostics, null),
+            EditorShaderCompilationState.Failed => new(validated.state, false, diagnostics, null),
+            _ => new(validated.state, false, diagnostics, compiled.artifact)
+        };
+    }
 
     /// <summary>Cancels a document's preview work and retires its cached candidate without touching canonical artifacts.</summary>
     /// <param name="documentId">Closing preview owner identity.</param>
-    public void ReleaseDraft(Guid documentId) => m_provider.ReleaseDraft(documentId);
+    public void ReleaseDraft(Guid documentId)
+    {
+        m_validator?.Release(documentId);
+        m_provider.ReleaseDraft(documentId);
+    }
 }

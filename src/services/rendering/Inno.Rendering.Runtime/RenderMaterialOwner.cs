@@ -253,7 +253,8 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         }
         publication.lastUsedFrame = m_frameIndex;
         if (!TryBuildBindings(material, overrides, publication, program.shaderInterface, out MaterialBinding[] bindings, diagnostics)) return false;
-        result = CreateMaterialPass(resolution.pass, program.graphicsPipeline, program.computePipeline, bindings);
+        result = CreateMaterialPass(resolution.pass, program.graphicsPipeline, program.computePipeline,
+            publication.definition.properties, program.shaderInterface, bindings);
         diagnostics.Resolve("RENDER_MATERIAL_PASS_UNAVAILABLE", material.assetPath.ToString());
         diagnostics.Resolve("RENDER_MATERIAL_PASS_KIND_MISMATCH", material.assetPath.ToString());
         diagnostics.Resolve("RENDER_MATERIAL_PROPERTY_TYPE_MISMATCH", material.assetPath.ToString());
@@ -289,6 +290,26 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
             pass.stages.Single(value => value.stage == ShaderStage.Compute).bytes.Span, bindings), artifact.shaderName + "/" + pass.name);
         if (!compute.isValid) throw new InvalidOperationException("The rendering device returned an invalid compute pipeline.");
         return new(default, compute, pass.shaderInterface);
+    }
+
+    internal void ValidateArtifact(RenderShaderArtifact artifact)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        foreach (RenderShaderPassArtifact pass in artifact.passes)
+        {
+            ProgramEntry? program = null;
+            try
+            {
+                program = CreateProgram(artifact, new(pass.name, pass.programKind, null));
+            }
+            finally
+            {
+                if (program?.graphicsPipeline.isValid == true)
+                    m_device.DestroyGraphicsPipeline(program.graphicsPipeline);
+                if (program?.computePipeline.isValid == true)
+                    m_device.DestroyComputePipeline(program.computePipeline);
+            }
+        }
     }
 
     private void ValidatePublication(RenderShaderArtifact artifact, ShaderDefinition definition, RenderShaderVariant variant)

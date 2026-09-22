@@ -241,6 +241,7 @@ _pkginfo.txt
 
 # Native binding generation scratch output
 /native/bindings/.scratch/
+/native/bindings/.bindgen-cache/
 
 # Others
 ClientBin/

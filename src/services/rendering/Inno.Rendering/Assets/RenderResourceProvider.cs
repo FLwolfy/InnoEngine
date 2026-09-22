@@ -36,7 +36,7 @@ public abstract class RenderResourceProvider
     /// The complete encoded uniform bytes.
     /// </param>
     /// <returns>
-    /// A binding token accepted by <see cref="CreateMaterialPass"/>.
+    /// A binding token accepted by the material-pass construction helpers.
     /// </returns>
     protected static MaterialBinding CreateUniformBinding(RenderBindingId id, ReadOnlySpan<byte> data)
         => new(new RenderMaterialBinding(RenderMaterialBindingKind.Uniform, id, data.ToArray(), default, default));
@@ -54,7 +54,7 @@ public abstract class RenderResourceProvider
     /// The backend-neutral sampler state.
     /// </param>
     /// <returns>
-    /// A binding token accepted by <see cref="CreateMaterialPass"/>.
+    /// A binding token accepted by the material-pass construction helpers.
     /// </returns>
     protected static MaterialBinding CreateTextureBinding(
         RenderBindingId id,
@@ -63,7 +63,7 @@ public abstract class RenderResourceProvider
         => new(new RenderMaterialBinding(RenderMaterialBindingKind.Texture, id, null, texture, sampler));
 
     /// <summary>
-    /// Creates a generation-scoped resolved material pass.
+    /// Creates a generation-scoped resolved material pass when no compiled-interface query is required.
     /// </summary>
     /// <param name="definition">
     /// The selected shader pass definition.
@@ -78,17 +78,53 @@ public abstract class RenderResourceProvider
     /// The complete material-owned binding snapshot.
     /// </param>
     /// <returns>
-    /// A resolved material pass ready for command binding.
+    /// A resolved material pass ready for automatic material binding. Calls to
+    /// <see cref="RenderMaterialPass.UsesBinding"/> require the overload carrying the compiled interface.
     /// </returns>
     protected static RenderMaterialPass CreateMaterialPass(
         ShaderPassDefinition definition,
         GraphicsPipelineHandle graphicsPipeline,
         ComputePipelineHandle computePipeline,
         IReadOnlyList<MaterialBinding> bindings)
+        => CreateMaterialPass(definition, graphicsPipeline, computePipeline, [], new ShaderInterface([]), bindings);
+
+    /// <summary>
+    /// Creates a generation-scoped resolved material pass.
+    /// </summary>
+    /// <param name="definition">
+    /// The selected shader pass definition.
+    /// </param>
+    /// <param name="graphicsPipeline">
+    /// The graphics pipeline handle, or an invalid handle for compute.
+    /// </param>
+    /// <param name="computePipeline">
+    /// The compute pipeline handle, or an invalid handle for rasterization.
+    /// </param>
+    /// <param name="declaredBindings">
+    /// Complete shader binding declarations before backend optimization.
+    /// </param>
+    /// <param name="activeInterface">
+    /// Exact bindings reflected by the compiled pass after backend optimization.
+    /// </param>
+    /// <param name="bindings">
+    /// The complete material-owned binding snapshot.
+    /// </param>
+    /// <returns>
+    /// A resolved material pass ready for command binding.
+    /// </returns>
+    protected static RenderMaterialPass CreateMaterialPass(
+        ShaderPassDefinition definition,
+        GraphicsPipelineHandle graphicsPipeline,
+        ComputePipelineHandle computePipeline,
+        IReadOnlyList<ShaderPropertyDefinition> declaredBindings,
+        ShaderInterface activeInterface,
+        IReadOnlyList<MaterialBinding> bindings)
         => new(
             definition,
             graphicsPipeline,
             computePipeline,
+            declaredBindings,
+            activeInterface,
             bindings.Select(static binding => binding.value).ToArray());
 
     /// <summary>

@@ -490,14 +490,19 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             UI.ColorConvertFloat4ToU32(headerColor), 6 * zoom, ImDrawFlags.RoundCornersTop);
         draw.AddRect(rect.min, rect.max, selected ? Color(0.65f, 0.47f, 0.88f) : Color(0.26f, 0.27f, 0.31f), 6 * zoom, ImDrawFlags.None, selected ? 2 : 1);
         draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, rect.min + new Vector2(10, 7) * zoom, UI.GetColorU32(ImGuiCol.Text), Title(node));
+        ShaderNodePort[] nodePorts = draft.ports[node.id];
+        bool splitPorts = UsesSplitPortLayout(nodePorts);
         float divider = (rect.min.X + rect.max.X) * 0.5f;
         float bodyTop = rect.min.Y + C_HEADER * zoom;
-        float bodyPadding = 7f * zoom;
-        draw.AddLine(
-            new Vector2(divider, bodyTop + bodyPadding),
-            new Vector2(divider, rect.max.Y - bodyPadding),
-            Color(0.62f, 0.63f, 0.69f, EditorPalette.opacityFaint));
-        foreach (ShaderNodePort port in draft.ports[node.id])
+        if (splitPorts)
+        {
+            float bodyPadding = 7f * zoom;
+            draw.AddLine(
+                new Vector2(divider, bodyTop + bodyPadding),
+                new Vector2(divider, rect.max.Y - bodyPadding),
+                Color(0.62f, 0.63f, 0.69f, EditorPalette.opacityFaint));
+        }
+        foreach (ShaderNodePort port in nodePorts)
         {
             var handle = new PortHandle(new(node.id, new(port.id)), port.direction);
             Vector2 point = points[handle];
@@ -512,17 +517,18 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
                 draw.AddCircleFilled(point, 2.75f * zoom, Color(0.115f, 0.12f, 0.14f));
             }
             float halfPadding = 12f * zoom;
-            float availableWidth = MathF.Max(1f, (rect.max.X - rect.min.X) * 0.5f - halfPadding * 2f);
+            float portAreaWidth = splitPorts
+                ? (rect.max.X - rect.min.X) * 0.5f
+                : rect.max.X - rect.min.X;
+            float availableWidth = MathF.Max(1f, portAreaWidth - halfPadding * 2f);
             string label = FitPortLabel(port.id, availableWidth, zoom);
             float labelWidth = UI.CalcTextSize(label).X * zoom;
             bool input = port.direction == GraphPortDirection.Input;
             float x = input ? rect.min.X + halfPadding : rect.max.X - labelWidth - halfPadding;
-            Vector2 clipMin = input
-                ? new(rect.min.X + 1f, bodyTop)
-                : new(divider + 1f, bodyTop);
-            Vector2 clipMax = input
-                ? new(divider - 1f, rect.max.Y)
-                : new(rect.max.X - 1f, rect.max.Y);
+            float clipLeft = splitPorts && !input ? divider + 1f : rect.min.X + 1f;
+            float clipRight = splitPorts && input ? divider - 1f : rect.max.X - 1f;
+            Vector2 clipMin = new(clipLeft, bodyTop);
+            Vector2 clipMax = new(clipRight, rect.max.Y);
             draw.PushClipRect(clipMin, clipMax, true);
             draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, new(x, point.Y - 8 * zoom),
                 UI.ColorConvertFloat4ToU32(optional ? EditorPalette.textDisabled : EditorPalette.text), label);
@@ -684,6 +690,9 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
         return rows == 0 && node.definitionId is ShaderGraphNodes.inputDefinitionId or ShaderGraphNodes.outputDefinitionId ? 1 : rows;
     }
+    private static bool UsesSplitPortLayout(IEnumerable<ShaderNodePort> ports)
+        => ports.Any(static port => port.direction == GraphPortDirection.Input)
+           && ports.Any(static port => port.direction == GraphPortDirection.Output);
     private GraphNodeRecord? HitNode(Vector2 point) => Controller.document.nodes.Reverse().FirstOrDefault(node => Contains(Rect(node), point));
     private PortHandle? HitPort(Vector2 point, Dictionary<PortHandle, Vector2> ports)
     {
@@ -691,11 +700,13 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             if (Vector2.DistanceSquared(point, position) <= MathF.Pow(MathF.Max(8, 7 * Canvas.zoom), 2)) return handle;
         foreach ((PortHandle handle, Vector2 position) in ports)
         {
-            (Vector2 min, Vector2 max) rect = Rect(Controller.document.FindNode(handle.endpoint.nodeId)!);
+            GraphNodeRecord node = Controller.document.FindNode(handle.endpoint.nodeId)!;
+            (Vector2 min, Vector2 max) rect = Rect(node);
+            bool splitPorts = UsesSplitPortLayout(draft.ports[node.id]);
             float divider = (rect.min.X + rect.max.X) * 0.5f;
             bool input = handle.direction == GraphPortDirection.Input;
-            float minimumX = input ? rect.min.X : divider;
-            float maximumX = input ? divider : rect.max.X;
+            float minimumX = splitPorts && !input ? divider : rect.min.X;
+            float maximumX = splitPorts && input ? divider : rect.max.X;
             float halfRow = C_ROW * Canvas.zoom * 0.5f;
             if (point.X >= minimumX && point.X <= maximumX && point.Y >= position.Y - halfRow && point.Y <= position.Y + halfRow)
                 return handle;
