@@ -558,7 +558,6 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal EditorShaderCompilationState? checkedState;
         internal EditorShaderDraftCompilationSnapshot? preview;
         internal long nextCompilationPoll;
-        internal string menuSearch = "";
         internal GraphEndpoint? createFromPort;
         internal GraphEdgeId? selectedEdge;
         internal bool frameRequested;
@@ -569,7 +568,6 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal byte[] sourceSettings = [];
         internal string sourceSettingsFingerprint = "";
         internal string sourceSettingsStatus = "";
-        internal readonly Dictionary<GraphEndpoint, System.Numerics.Vector2> portPoints = [];
         internal readonly GraphCanvasState canvas = new();
         internal GraphPosition menuPosition;
         internal GraphNodeId? activeStage;
@@ -579,6 +577,9 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal readonly EditorPlanarNavigation navigation = new();
         internal bool dragging;
         internal bool boxSelecting;
+        internal GraphNodeId? resizingNode;
+        internal float resizeStartWidth;
+        internal float resizePreviewWidth;
         internal System.Numerics.Vector2 pointerStart;
         internal readonly Dictionary<GraphNodeId, GraphPosition> dragStart = [];
         internal readonly Dictionary<GraphNodeId, GraphPosition> dragPreview = [];

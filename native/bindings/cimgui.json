@@ -1,0 +1,73 @@
+{
+  "BaseConfig": {
+    "Url": "file://cimgui-api-shape.json"
+  },
+  "Namespace": "Inno.Native.ImGui",
+  "ApiName": "ImGui",
+  "LibName": "cimgui",
+  "BoolType": "Byte",
+  "DelegatesAsVoidPointer": false,
+  "GenerateExtensions": true,
+  "EntryFiles": [
+    "../../extern/cimgui/cimgui.h"
+  ],
+  "AllowedHeaders": [
+    "../../extern/cimgui/cimgui.h"
+  ],
+  "IncludeFolders": [
+    "../../extern/cimgui"
+  ],
+  "Defines": [
+    "CIMGUI_DEFINE_ENUMS_AND_STRUCTS",
+    "CIMGUI_VARGS0"
+  ],
+  "OutputPath": "../Inno.Native.ImGui/Generated",
+  "Usings": [
+    "System.Numerics"
+  ],
+  "FunctionPrefixes": [
+    "ig"
+  ],
+  "IgnoredFunctions": [
+    "igText",
+    "igTextColored",
+    "igTextDisabled",
+    "igTextWrapped",
+    "igLabelText",
+    "igBulletText",
+    "igTreeNode_StrStr",
+    "igTreeNode_Ptr",
+    "igTreeNodeEx_StrStr",
+    "igTreeNodeEx_Ptr",
+    "igSetTooltip",
+    "igSetItemTooltip",
+    "igLogText",
+    "igDebugLog",
+    "igImFormatString",
+    "igImFormatStringToTempBuffer",
+    "igTextAligned",
+    "ImGuiTextBuffer_appendf"
+  ],
+  "TypeMappings": {
+    "ImVec2": "Vector2",
+    "ImVec2_c": "Vector2",
+    "ImVec4": "Vector4",
+    "ImVec4_c": "Vector4",
+    "ImTextureID": "ImTextureID",
+    "ImRect_c": "ImRect",
+    "ImColor_c": "ImColor"
+  },
+  "IgnoredTypes": [
+    "ImVec2_c",
+    "ImVec4_c"
+  ],
+  "IgnoredTypedefs": [
+    "ImVec2",
+    "ImVec2_c",
+    "ImVec4",
+    "ImVec4_c",
+    "ImTextureID",
+    "ImRect_c",
+    "ImColor_c"
+  ]
+}

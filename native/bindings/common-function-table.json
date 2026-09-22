@@ -1,0 +1,7 @@
+{
+  "Preset": "host-c,c-library,function-table",
+  "IncludeTransitivelyReferencedHeaders": false,
+  "GenerateRuntimeSource": false,
+  "MergeGeneratedFilesToSingleFile": true,
+  "SingleFileOutputName": "Bindings.cs"
+}

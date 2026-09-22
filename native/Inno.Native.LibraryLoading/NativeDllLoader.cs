@@ -108,6 +108,55 @@ public static class NativeDllLoader
         return copied;
     }
 
+    /// <summary>
+    /// Deploys a known native file into a relative path under the current output's native directory.
+    /// </summary>
+    /// <param name="sourcePath">Existing source file to deploy.</param>
+    /// <param name="relativeOutputPath">Relative path below the native output directory.</param>
+    /// <returns>The absolute deployed file path.</returns>
+    public static string DeployNativeFile(string sourcePath, string relativeOutputPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativeOutputPath);
+        if (Path.IsPathRooted(relativeOutputPath))
+        {
+            throw new ArgumentException("Native output path must be relative.", nameof(relativeOutputPath));
+        }
+
+        string fullSourcePath = Path.GetFullPath(sourcePath);
+        if (!File.Exists(fullSourcePath))
+        {
+            throw new FileNotFoundException("Native source file was not found.", fullSourcePath);
+        }
+
+        string nativeRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, NativeDllConstants.NATIVE_DIR_NAME));
+        string destinationPath = Path.GetFullPath(Path.Combine(nativeRoot, relativeOutputPath));
+        string nativeRootPrefix = Path.TrimEndingDirectorySeparator(nativeRoot) + Path.DirectorySeparatorChar;
+        StringComparison pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!destinationPath.StartsWith(nativeRootPrefix, pathComparison))
+        {
+            throw new ArgumentException("Native output path escapes the native directory.", nameof(relativeOutputPath));
+        }
+
+        string destinationDirectory = Path.GetDirectoryName(destinationPath)
+            ?? throw new InvalidOperationException("Native output path does not have a parent directory.");
+        Directory.CreateDirectory(destinationDirectory);
+        if (!File.Exists(destinationPath) || !FileContentsMatch(fullSourcePath, destinationPath))
+        {
+            File.Copy(fullSourcePath, destinationPath, overwrite: true);
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(destinationPath, File.GetUnixFileMode(fullSourcePath));
+        }
+
+        File.SetLastWriteTimeUtc(destinationPath, File.GetLastWriteTimeUtc(fullSourcePath));
+        return destinationPath;
+    }
+
     private static string EnsureNativeFile(string fileName, bool throwIfMissing)
     {
         string? deployed = FindNativeOutputFile(fileName);

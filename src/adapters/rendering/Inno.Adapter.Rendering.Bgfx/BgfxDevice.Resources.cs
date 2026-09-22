@@ -716,14 +716,9 @@ public sealed unsafe partial class BgfxDevice
 
     private static string UniformName(bgfx.UniformInfo info)
     {
-        byte* name = info.name;
-        int length = 0;
-        while (length < 256 && name[length] != 0)
-        {
-            length++;
-        }
-
-        return Encoding.UTF8.GetString(name, length);
+        ReadOnlySpan<byte> name = info.name;
+        int terminator = name.IndexOf((byte)0);
+        return Encoding.UTF8.GetString(terminator >= 0 ? name[..terminator] : name);
     }
 
     private bgfx.ShaderHandle CreateShader(ReadOnlySpan<byte> binary, string name)

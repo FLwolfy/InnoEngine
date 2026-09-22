@@ -24,7 +24,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_CreateRenderer failed.");
         }
 
-        _ = SDL.SetRenderDrawBlendMode(m_renderer, (uint)SDLBlendMode.Blend);
+        _ = SDL.SetRenderDrawBlendMode(m_renderer, SDL.SDL_BLENDMODE_BLEND);
     }
 
     /// <summary>
@@ -390,7 +390,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
                 return SDLTexturePtr.Null;
             }
 
-            _ = SDL.SetTextureBlendMode(texture, (uint)SDLBlendMode.Blend);
+            _ = SDL.SetTextureBlendMode(texture, SDL.SDL_BLENDMODE_BLEND);
             _ = SDL.SetTextureScaleMode(texture, SDLScaleMode.Linear);
             return texture;
         }

@@ -1,0 +1,161 @@
+{
+  "KnownEnumValueNames": {
+    "BGFX_ACCESS_READWRITE": "ReadWrite",
+    "BGFX_ATTRIB_TEXCOORD0": "TexCoord0",
+    "BGFX_ATTRIB_TEXCOORD1": "TexCoord1",
+    "BGFX_ATTRIB_TEXCOORD2": "TexCoord2",
+    "BGFX_ATTRIB_TEXCOORD3": "TexCoord3",
+    "BGFX_ATTRIB_TEXCOORD4": "TexCoord4",
+    "BGFX_ATTRIB_TEXCOORD5": "TexCoord5",
+    "BGFX_ATTRIB_TEXCOORD6": "TexCoord6",
+    "BGFX_ATTRIB_TEXCOORD7": "TexCoord7",
+    "BGFX_OCCLUSION_QUERY_RESULT_NORESULT": "NoResult",
+    "BGFX_RENDERER_TYPE_OPENGLES": "OpenGLES",
+    "BGFX_RENDERER_TYPE_OPENGL": "OpenGL",
+    "BGFX_RENDERER_TYPE_WEBGPU": "WebGPU",
+    "BGFX_SHADING_RATE_RATE_1X_1": "Rate1x1",
+    "BGFX_SHADING_RATE_RATE_1X_2": "Rate1x2",
+    "BGFX_SHADING_RATE_RATE_2X_1": "Rate2x1",
+    "BGFX_SHADING_RATE_RATE_2X_2": "Rate2x2",
+    "BGFX_SHADING_RATE_RATE_2X_4": "Rate2x4",
+    "BGFX_SHADING_RATE_RATE_4X_2": "Rate4x2",
+    "BGFX_SHADING_RATE_RATE_4X_4": "Rate4x4",
+    "BGFX_TEXTURE_FORMAT_BC1": "BC1",
+    "BGFX_TEXTURE_FORMAT_BC2": "BC2",
+    "BGFX_TEXTURE_FORMAT_BC3": "BC3",
+    "BGFX_TEXTURE_FORMAT_BC4": "BC4",
+    "BGFX_TEXTURE_FORMAT_BC5": "BC5",
+    "BGFX_TEXTURE_FORMAT_BC6H": "BC6H",
+    "BGFX_TEXTURE_FORMAT_BC7": "BC7",
+    "BGFX_TEXTURE_FORMAT_ETC1": "ETC1",
+    "BGFX_TEXTURE_FORMAT_ETC2": "ETC2",
+    "BGFX_TEXTURE_FORMAT_ETC2A": "ETC2A",
+    "BGFX_TEXTURE_FORMAT_ETC2A1": "ETC2A1",
+    "BGFX_TEXTURE_FORMAT_EACR11": "EACR11",
+    "BGFX_TEXTURE_FORMAT_EACR11S": "EACR11S",
+    "BGFX_TEXTURE_FORMAT_EACRG11": "EACRG11",
+    "BGFX_TEXTURE_FORMAT_EACRG11S": "EACRG11S",
+    "BGFX_TEXTURE_FORMAT_PTC12": "PTC12",
+    "BGFX_TEXTURE_FORMAT_PTC14": "PTC14",
+    "BGFX_TEXTURE_FORMAT_PTC12A": "PTC12A",
+    "BGFX_TEXTURE_FORMAT_PTC14A": "PTC14A",
+    "BGFX_TEXTURE_FORMAT_PTC22": "PTC22",
+    "BGFX_TEXTURE_FORMAT_PTC24": "PTC24",
+    "BGFX_TEXTURE_FORMAT_ATC": "ATC",
+    "BGFX_TEXTURE_FORMAT_ATCE": "ATCE",
+    "BGFX_TEXTURE_FORMAT_ATCI": "ATCI",
+    "BGFX_TEXTURE_FORMAT_ASTC4X4": "ASTC4x4",
+    "BGFX_TEXTURE_FORMAT_ASTC5X4": "ASTC5x4",
+    "BGFX_TEXTURE_FORMAT_ASTC5X5": "ASTC5x5",
+    "BGFX_TEXTURE_FORMAT_ASTC6X5": "ASTC6x5",
+    "BGFX_TEXTURE_FORMAT_ASTC6X6": "ASTC6x6",
+    "BGFX_TEXTURE_FORMAT_ASTC8X5": "ASTC8x5",
+    "BGFX_TEXTURE_FORMAT_ASTC8X6": "ASTC8x6",
+    "BGFX_TEXTURE_FORMAT_ASTC8X8": "ASTC8x8",
+    "BGFX_TEXTURE_FORMAT_ASTC10X5": "ASTC10x5",
+    "BGFX_TEXTURE_FORMAT_ASTC10X6": "ASTC10x6",
+    "BGFX_TEXTURE_FORMAT_ASTC10X8": "ASTC10x8",
+    "BGFX_TEXTURE_FORMAT_ASTC10X10": "ASTC10x10",
+    "BGFX_TEXTURE_FORMAT_ASTC12X10": "ASTC12x10",
+    "BGFX_TEXTURE_FORMAT_ASTC12X12": "ASTC12x12",
+    "BGFX_TEXTURE_FORMAT_RG8": "RG8",
+    "BGFX_TEXTURE_FORMAT_RG8I": "RG8I",
+    "BGFX_TEXTURE_FORMAT_RG8U": "RG8U",
+    "BGFX_TEXTURE_FORMAT_RG8S": "RG8S",
+    "BGFX_TEXTURE_FORMAT_RG16": "RG16",
+    "BGFX_TEXTURE_FORMAT_RG16I": "RG16I",
+    "BGFX_TEXTURE_FORMAT_RG16U": "RG16U",
+    "BGFX_TEXTURE_FORMAT_RG16F": "RG16F",
+    "BGFX_TEXTURE_FORMAT_RG16S": "RG16S",
+    "BGFX_TEXTURE_FORMAT_RG32I": "RG32I",
+    "BGFX_TEXTURE_FORMAT_RG32U": "RG32U",
+    "BGFX_TEXTURE_FORMAT_RG32F": "RG32F",
+    "BGFX_TEXTURE_FORMAT_RGB8": "RGB8",
+    "BGFX_TEXTURE_FORMAT_RGB8I": "RGB8I",
+    "BGFX_TEXTURE_FORMAT_RGB8U": "RGB8U",
+    "BGFX_TEXTURE_FORMAT_RGB8S": "RGB8S",
+    "BGFX_TEXTURE_FORMAT_RGB9E5F": "RGB9E5F",
+    "BGFX_TEXTURE_FORMAT_BGRA8": "BGRA8",
+    "BGFX_TEXTURE_FORMAT_RGBA8": "RGBA8",
+    "BGFX_TEXTURE_FORMAT_RGBA8I": "RGBA8I",
+    "BGFX_TEXTURE_FORMAT_RGBA8U": "RGBA8U",
+    "BGFX_TEXTURE_FORMAT_RGBA8S": "RGBA8S",
+    "BGFX_TEXTURE_FORMAT_RGBA16": "RGBA16",
+    "BGFX_TEXTURE_FORMAT_RGBA16I": "RGBA16I",
+    "BGFX_TEXTURE_FORMAT_RGBA16U": "RGBA16U",
+    "BGFX_TEXTURE_FORMAT_RGBA16F": "RGBA16F",
+    "BGFX_TEXTURE_FORMAT_RGBA16S": "RGBA16S",
+    "BGFX_TEXTURE_FORMAT_RGBA32I": "RGBA32I",
+    "BGFX_TEXTURE_FORMAT_RGBA32U": "RGBA32U",
+    "BGFX_TEXTURE_FORMAT_RGBA32F": "RGBA32F",
+    "BGFX_TEXTURE_FORMAT_BGRA4": "BGRA4",
+    "BGFX_TEXTURE_FORMAT_RGBA4": "RGBA4",
+    "BGFX_TEXTURE_FORMAT_BGR5A1": "BGR5A1",
+    "BGFX_TEXTURE_FORMAT_RGB5A1": "RGB5A1",
+    "BGFX_TEXTURE_FORMAT_RGB10A2": "RGB10A2",
+    "BGFX_TEXTURE_FORMAT_RG11B10F": "RG11B10F",
+    "BGFX_TEXTURE_FORMAT_UNKNOWNDEPTH": "UnknownDepth"
+  },
+  "ClassMappings": [
+    {
+      "ExportedName": "bgfx_dynamic_index_buffer_handle_s",
+      "FriendlyName": "DynamicIndexBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_dynamic_vertex_buffer_handle_s",
+      "FriendlyName": "DynamicVertexBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_frame_buffer_handle_s",
+      "FriendlyName": "FrameBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_index_buffer_handle_s",
+      "FriendlyName": "IndexBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_indirect_buffer_handle_s",
+      "FriendlyName": "IndirectBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_occlusion_query_handle_s",
+      "FriendlyName": "OcclusionQueryHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_program_handle_s",
+      "FriendlyName": "ProgramHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_shader_handle_s",
+      "FriendlyName": "ShaderHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_texture_handle_s",
+      "FriendlyName": "TextureHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_uniform_handle_s",
+      "FriendlyName": "UniformHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_vertex_buffer_handle_s",
+      "FriendlyName": "VertexBufferHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    },
+    {
+      "ExportedName": "bgfx_vertex_layout_handle_s",
+      "FriendlyName": "VertexLayoutHandle",
+      "Validity": { "FieldName": "idx", "InvalidValue": "ushort.MaxValue", "PropertyName": "Valid" }
+    }
+  ]
+}

@@ -3,7 +3,6 @@ using System.Numerics;
 
 using Inno.Scripting.Api;
 using Inno.Native.ImGui;
-using Inno.Adapter.Presentation.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
@@ -223,18 +222,15 @@ public static partial class ImGuiWidget
 
         try
         {
-            ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
             ImGuiTabBarPtr tabBar = dockNode.TabBar;
             if (tabBar == ImGuiTabBarPtr.Null)
                 return false;
-            float tabBarHeight = MathF.Max(
-                1f,
-                NativeImGui.GetTextLineHeight() + tabBar.FramePadding.Y * 2f);
+            ImRect tabBarBounds = tabBar.BarRect;
+            float tabBarHeight = MathF.Max(1f, tabBarBounds.Max.Y - tabBarBounds.Min.Y);
             float iconSlotSize = MathF.Min(GetCompactIconSize().X, tabBarHeight);
             Vector2 itemCenter = new(
-                dockNode.Pos.X + dockNode.Size.X - nativeStyle.WindowBorderSize -
-                nativeStyle.FramePadding.X - iconSlotSize * 0.5f,
-                dockNode.Pos.Y + tabBarHeight * 0.5f);
+                tabBarBounds.Max.X - iconSlotSize * 0.5f,
+                (tabBarBounds.Min.Y + tabBarBounds.Max.Y) * 0.5f);
             Vector2 itemMinimum = itemCenter - new Vector2(iconSlotSize * 0.5f);
             Vector2 itemMaximum = itemCenter + new Vector2(iconSlotSize * 0.5f);
             ImRect itemBounds = new()
@@ -258,12 +254,10 @@ public static partial class ImGuiWidget
             uint iconColor = hovered || held
                 ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
                 : NativeImGui.GetColorU32(ImGuiCol.Text);
-            AddGlyphCentered(
+            DrawPanelCloseMark(
                 NativeImGui.GetWindowDrawList(),
-                NativeImGui.GetFont(),
-                NativeImGui.GetFontSize(),
-                ImGuiIcon.Xmark,
                 itemCenter,
+                iconSlotSize,
                 iconColor);
 
             if (hovered && BeginMenuTooltip())
@@ -302,8 +296,10 @@ public static partial class ImGuiWidget
             bool pressed = ImGuiP.ItemAdd(bounds, id) && ImGuiP.ButtonBehavior(
                 bounds, id, ref hovered, ref held,
                 (ImGuiButtonFlags)((int)ImGuiButtonFlagsPrivate.NoNavFocus | (int)ImGuiButtonFlagsPrivate.PressedOnClickRelease));
-            DrawClickableTextPresentation(draw, minimum, new Vector2(size), ImGuiIcon.Xmark,
-                NativeImGui.CalcTextSize(ImGuiIcon.Xmark), hovered, held);
+            uint iconColor = hovered || held
+                ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
+                : NativeImGui.GetColorU32(ImGuiCol.Text);
+            DrawPanelCloseMark(draw, minimum + new Vector2(size * 0.5f), size, iconColor);
             if (hovered)
                 DrawItemTooltip($"Close {title}");
             return pressed;
@@ -313,6 +309,25 @@ public static partial class ImGuiWidget
             draw.PopClipRect();
             window.ClipRect = previousClip;
         }
+    }
+
+    private static void DrawPanelCloseMark(
+        ImDrawListPtr drawList,
+        Vector2 center,
+        float slotSize,
+        uint color)
+    {
+        float thickness = MathF.Max(1f, style.borderSize);
+        float extent = MathF.Max(
+            thickness,
+            slotSize * 0.5f * 0.7071f - thickness);
+        var diagonal = new Vector2(extent);
+        drawList.AddLine(center - diagonal, center + diagonal, color, thickness);
+        drawList.AddLine(
+            center + new Vector2(-extent, extent),
+            center + new Vector2(extent, -extent),
+            color,
+            thickness);
     }
 
     /// <summary>

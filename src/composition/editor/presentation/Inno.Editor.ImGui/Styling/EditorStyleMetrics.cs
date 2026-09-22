@@ -151,6 +151,12 @@ public sealed class EditorStyleMetrics
     public Vector2 menuFramePadding => ScaleVector(new(8f, 3f));
 
     /// <summary>
+    /// Gets the compact padding used by the search field at the top of editor context menus.
+    /// Its vertical padding matches the half-spacing that menu entries add above and below a line.
+    /// </summary>
+    public Vector2 menuSearchFramePadding => ScaleVector(new(8f, 1f));
+
+    /// <summary>
     /// Gets the uniform spacing between editor context-menu items.
     /// </summary>
     public Vector2 menuItemSpacing => ScaleVector(new(4f, 2f));

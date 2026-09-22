@@ -15,7 +15,7 @@ public sealed class Sdl3InitTests
     [Fact]
     public void InitAndQuit_ShouldSucceed()
     {
-        var initResult = SDL.Init((uint)SDLInitFlags.Events);
+        var initResult = SDL.Init(SDLInitFlags.Events);
         if (!initResult)
         {
             var error = SDL.GetErrorAsException();

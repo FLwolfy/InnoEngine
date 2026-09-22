@@ -37,9 +37,14 @@ public sealed class GraphCanvasState
     public IReadOnlyCollection<GraphEdgeId> selectedEdges => m_edgeSelection ??= m_selectedEdges.ToFrozenSet();
 
     /// <summary>
-    /// Gets the output endpoint currently being connected, or <see langword="null"/>.
+    /// Gets the endpoint currently being connected, or <see langword="null"/>.
     /// </summary>
     public GraphEndpoint? pendingConnection { get; private set; }
+
+    /// <summary>
+    /// Gets the direction of <see cref="pendingConnection"/>.
+    /// </summary>
+    public GraphPortDirection? pendingConnectionDirection { get; private set; }
 
     /// <summary>
     /// Restores persistent canvas navigation state with bounded zoom.
@@ -140,15 +145,34 @@ public sealed class GraphCanvasState
     }
 
     /// <summary>
+    /// Begins a connection drag from one endpoint.
+    /// </summary>
+    /// <param name="endpoint">
+    /// Stable endpoint.
+    /// </param>
+    /// <param name="direction">
+    /// Direction of the endpoint within its node interface.
+    /// </param>
+    public void BeginConnection(GraphEndpoint endpoint, GraphPortDirection direction)
+    {
+        pendingConnection = endpoint;
+        pendingConnectionDirection = direction;
+    }
+
+    /// <summary>
     /// Begins a connection drag from one output endpoint.
     /// </summary>
     /// <param name="output">
     /// Stable output endpoint.
     /// </param>
-    public void BeginConnection(GraphEndpoint output) => pendingConnection = output;
+    public void BeginConnection(GraphEndpoint output) => BeginConnection(output, GraphPortDirection.Output);
 
     /// <summary>
     /// Cancels any active connection drag.
     /// </summary>
-    public void CancelConnection() => pendingConnection = null;
+    public void CancelConnection()
+    {
+        pendingConnection = null;
+        pendingConnectionDirection = null;
+    }
 }

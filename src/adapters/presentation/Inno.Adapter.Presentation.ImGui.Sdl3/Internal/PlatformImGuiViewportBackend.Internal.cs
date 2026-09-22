@@ -79,19 +79,19 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         m_mainWindow = mainWindow.GetSdlWindow();
 
         var platformIo = ImGuiNative.GetPlatformIO();
-        platformIo.PlatformCreateWindow = FunctionPtr(s_platformCreateWindow);
-        platformIo.PlatformDestroyWindow = FunctionPtr(s_platformDestroyWindow);
-        platformIo.PlatformShowWindow = FunctionPtr(s_platformShowWindow);
-        platformIo.PlatformSetWindowPos = FunctionPtr(s_platformSetWindowPos);
-        platformIo.PlatformSetWindowSize = FunctionPtr(s_platformSetWindowSize);
-        platformIo.PlatformGetWindowFramebufferScale = FunctionPtr(s_platformGetWindowFramebufferScale);
-        platformIo.PlatformSetWindowFocus = FunctionPtr(s_platformSetWindowFocus);
-        platformIo.PlatformGetWindowFocus = FunctionPtr(s_platformGetWindowFocus);
-        platformIo.PlatformGetWindowMinimized = FunctionPtr(s_platformGetWindowMinimized);
-        platformIo.PlatformSetWindowTitle = FunctionPtr(s_platformSetWindowTitle);
-        platformIo.PlatformSetWindowAlpha = FunctionPtr(s_platformSetWindowAlpha);
-        platformIo.RendererRenderWindow = FunctionPtr(s_rendererRenderWindow);
-        platformIo.RendererSwapBuffers = FunctionPtr(s_rendererSwapBuffers);
+        platformIo.PlatformCreateWindow = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void>)FunctionPtr(s_platformCreateWindow);
+        platformIo.PlatformDestroyWindow = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void>)FunctionPtr(s_platformDestroyWindow);
+        platformIo.PlatformShowWindow = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void>)FunctionPtr(s_platformShowWindow);
+        platformIo.PlatformSetWindowPos = (delegate* unmanaged[Cdecl]<ImGuiViewport*, Vector2, void>)FunctionPtr(s_platformSetWindowPos);
+        platformIo.PlatformSetWindowSize = (delegate* unmanaged[Cdecl]<ImGuiViewport*, Vector2, void>)FunctionPtr(s_platformSetWindowSize);
+        platformIo.PlatformGetWindowFramebufferScale = (delegate* unmanaged[Cdecl]<ImGuiViewport*, Vector2>)FunctionPtr(s_platformGetWindowFramebufferScale);
+        platformIo.PlatformSetWindowFocus = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void>)FunctionPtr(s_platformSetWindowFocus);
+        platformIo.PlatformGetWindowFocus = (delegate* unmanaged[Cdecl]<ImGuiViewport*, byte>)FunctionPtr(s_platformGetWindowFocus);
+        platformIo.PlatformGetWindowMinimized = (delegate* unmanaged[Cdecl]<ImGuiViewport*, byte>)FunctionPtr(s_platformGetWindowMinimized);
+        platformIo.PlatformSetWindowTitle = (delegate* unmanaged[Cdecl]<ImGuiViewport*, byte*, void>)FunctionPtr(s_platformSetWindowTitle);
+        platformIo.PlatformSetWindowAlpha = (delegate* unmanaged[Cdecl]<ImGuiViewport*, float, void>)FunctionPtr(s_platformSetWindowAlpha);
+        platformIo.RendererRenderWindow = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void*, void>)FunctionPtr(s_rendererRenderWindow);
+        platformIo.RendererSwapBuffers = (delegate* unmanaged[Cdecl]<ImGuiViewport*, void*, void>)FunctionPtr(s_rendererSwapBuffers);
         ImGuiPlatformIoNative.SetPlatformGetWindowPos(platformIo, s_platformGetWindowPos);
         ImGuiPlatformIoNative.SetPlatformGetWindowSize(platformIo, s_platformGetWindowSize);
 
@@ -308,7 +308,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         var width = Math.Max(1, (int)viewport->Size.X);
         var height = Math.Max(1, (int)viewport->Size.Y);
-        var window = SDL.CreateWindow("ImGui", width, height, (ulong)flags);
+        var window = SDL.CreateWindow("ImGui", width, height, flags);
         if (window.IsNull)
         {
             return;
@@ -328,7 +328,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
                 return;
             }
 
-            _ = SDL.SetRenderDrawBlendMode(renderer, (uint)SDLBlendMode.Blend);
+            _ = SDL.SetRenderDrawBlendMode(renderer, SDL.SDL_BLENDMODE_BLEND);
         }
 
         var data = new ViewportWindowData
@@ -1063,7 +1063,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             var texture = SDL.CreateTextureWithProperties(renderer, props);
             if (!texture.IsNull)
             {
-                _ = SDL.SetTextureBlendMode(texture, (uint)SDLBlendMode.Blend);
+                _ = SDL.SetTextureBlendMode(texture, SDL.SDL_BLENDMODE_BLEND);
                 _ = SDL.SetTextureScaleMode(texture, SDLScaleMode.Linear);
             }
 

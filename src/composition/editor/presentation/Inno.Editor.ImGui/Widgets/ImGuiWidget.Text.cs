@@ -38,9 +38,11 @@ public static partial class ImGuiWidget
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("Glyph text cannot be empty.", nameof(text));
 
-        uint codepoint = (uint)char.ConvertToUtf32(text, 0);
+        int codepoint = char.ConvertToUtf32(text, 0);
         ImFontBakedPtr baked = NativeImGui.GetFontBaked(font, fontSize);
-        ImFontGlyphPtr glyph = NativeImGui.FindGlyph(baked, codepoint);
+        ImFontGlyphPtr glyph = codepoint <= ushort.MaxValue
+            ? NativeImGui.FindGlyph(baked, (ushort)codepoint)
+            : ImFontGlyphPtr.Null;
         if (!glyph.IsNull)
             return new Vector4(glyph.X0, glyph.Y0, glyph.X1, glyph.Y1);
 

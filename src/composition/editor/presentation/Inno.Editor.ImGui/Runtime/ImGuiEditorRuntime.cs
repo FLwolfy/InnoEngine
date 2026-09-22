@@ -56,8 +56,6 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         ArgumentNullException.ThrowIfNull(types);
         ArgumentNullException.ThrowIfNull(logs);
         ArgumentNullException.ThrowIfNull(hostServices);
-        ImGuiIOPtr io = NativeImGui.GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags.InnoOverlayScrollbars;
         m_runtime = new EditorInteractionRuntime(context, types, logs, hostServices);
     }
 

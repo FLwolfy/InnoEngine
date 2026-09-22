@@ -41,7 +41,7 @@ internal sealed class OsxArm64CimguiBuilder : CimguiBuilder
         var buildType = GetBuildType(config);
         string sourceDir = CimguiSourceOverlay.Prepare(cimguiDir);
 
-        ToolchainEnvironment.Run("cmake", $"-S \"{sourceDir}\" -B \"{buildDir}\" -DINNO_CIMGUI_SOURCE_DIR=\"{cimguiDir}\" -DCMAKE_BUILD_TYPE={buildType} -DBUILD_SHARED_LIBS=ON", cimguiDir);
+        ToolchainEnvironment.Run("cmake", $"-S \"{sourceDir}\" -B \"{buildDir}\" -DINNO_CIMGUI_SOURCE_DIR=\"{cimguiDir}\" -DCMAKE_BUILD_TYPE={buildType} -DBUILD_SHARED_LIBS=ON -DCIMGUI_VARGS0=ON", cimguiDir);
         ToolchainEnvironment.Run("cmake", $"--build \"{buildDir}\" --config {buildType}", cimguiDir);
     }
 }

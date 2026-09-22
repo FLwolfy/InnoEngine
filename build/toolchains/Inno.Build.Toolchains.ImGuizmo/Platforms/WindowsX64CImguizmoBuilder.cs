@@ -10,6 +10,7 @@ internal sealed class WindowsX64CImguizmoBuilder : CImguizmoBuilder
 {
     private const string OUTPUT_PLATFORM = "windows-x64";
     private const string BUILD_DIR_NAME = "windows-x64";
+    private const string THIRD_PARTY_WARNING_POLICY = "/WX /wd4996";
 
     /// <summary>
     /// Gets the native platform identifier produced by this builder.
@@ -66,7 +67,10 @@ internal sealed class WindowsX64CImguizmoBuilder : CImguizmoBuilder
 
         var includeArgs = string.Join(" ", includes.Select(path => $"/I\"{path}\""));
         var cflags = config == ToolchainLayout.C_DEBUG_CONFIGURATION ? "/Od /Zi" : "/O2";
-        var args = $"/LD {cflags} {includeArgs} \"{cimguizmoCpp}\" \"{imguizmoCpp}\" /link /OUT:\"{outputLib}\" \"{cimguiLib}\"";
+        // The published C wrapper intentionally retains ImGuizmo_SetID for ABI compatibility even though
+        // upstream marks the underlying C++ member deprecated. Keep that single third-party diagnostic quiet
+        // while treating every other compiler diagnostic enabled by default as an error.
+        var args = $"/LD {cflags} {THIRD_PARTY_WARNING_POLICY} {includeArgs} \"{cimguizmoCpp}\" \"{imguizmoCpp}\" /link /OUT:\"{outputLib}\" \"{cimguiLib}\"";
 
         ToolchainEnvironment.Run("cl", args, cimguizmoDir);
     }

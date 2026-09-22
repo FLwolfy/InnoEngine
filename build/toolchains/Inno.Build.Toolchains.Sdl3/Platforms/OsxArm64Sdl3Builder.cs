@@ -40,7 +40,13 @@ internal sealed class OsxArm64Sdl3Builder : Sdl3Builder
         var buildDir = Path.Combine(sdlDir, Sdl3BuildConstants.BUILD_DIR_NAME, BUILD_DIR_NAME);
         var buildType = GetBuildType(config);
 
-        ToolchainEnvironment.Run("cmake", $"-S . -B \"{buildDir}\" -DCMAKE_BUILD_TYPE={buildType} -DSDL_SHARED=ON -DSDL_STATIC=OFF", sdlDir);
-        ToolchainEnvironment.Run("cmake", $"--build \"{buildDir}\" --config {buildType}", sdlDir);
+        ToolchainEnvironment.Run(
+            "cmake",
+            $"-S . -B \"{buildDir}\" -DCMAKE_BUILD_TYPE={buildType} -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF",
+            sdlDir);
+        ToolchainEnvironment.Run(
+            "cmake",
+            $"--build \"{buildDir}\" --config {buildType} --target SDL3-shared",
+            sdlDir);
     }
 }

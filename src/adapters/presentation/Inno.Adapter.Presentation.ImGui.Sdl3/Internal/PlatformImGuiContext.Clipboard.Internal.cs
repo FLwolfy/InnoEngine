@@ -83,8 +83,8 @@ public sealed unsafe partial class PlatformImGuiContext
         }
 
         ImGuiPlatformIOPtr platformIo = ImGuiNative.GetPlatformIO();
-        platformIo.PlatformGetClipboardTextFn = FunctionPointer(S_PLATFORM_GET_CLIPBOARD_TEXT);
-        platformIo.PlatformSetClipboardTextFn = FunctionPointer(S_PLATFORM_SET_CLIPBOARD_TEXT);
+        platformIo.PlatformGetClipboardTextFn = (delegate* unmanaged[Cdecl]<ImGuiContext*, byte*>)FunctionPointer(S_PLATFORM_GET_CLIPBOARD_TEXT);
+        platformIo.PlatformSetClipboardTextFn = (delegate* unmanaged[Cdecl]<ImGuiContext*, byte*, void>)FunctionPointer(S_PLATFORM_SET_CLIPBOARD_TEXT);
     }
 
     private void UnregisterClipboardCallbacks()

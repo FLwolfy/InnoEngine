@@ -415,8 +415,8 @@ public sealed partial class PlatformImGuiContext
             return;
         }
 
-        Span<uint> iconGlyphRanges = stackalloc uint[] { 0xE000, 0xF8FF, 0 };
-        fixed (uint* pGlyphRanges = iconGlyphRanges)
+        Span<ushort> iconGlyphRanges = stackalloc ushort[] { 0xE000, 0xF8FF, 0 };
+        fixed (ushort* pGlyphRanges = iconGlyphRanges)
         {
             for (var i = 0; i < iconFontPaths.Count; i++)
             {
@@ -479,7 +479,7 @@ public sealed partial class PlatformImGuiContext
                 if (key != ImGuiKey.None)
                 {
                     io.AddKeyEvent(key, down);
-                    io.SetKeyEventNativeData(key, sdlEvent.Key.Key, (int)sdlEvent.Key.Scancode, (int)sdlEvent.Key.Scancode);
+                    io.SetKeyEventNativeData(key, (int)sdlEvent.Key.Key, (int)sdlEvent.Key.Scancode, (int)sdlEvent.Key.Scancode);
                 }
                 break;
             }
@@ -748,8 +748,7 @@ public sealed partial class PlatformImGuiContext
         float mouseX = 0f;
         float mouseY = 0f;
         var mouseButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
-        var leftMouseMask = 1u << (SDL.SDL_BUTTON_LEFT - 1);
-        if ((mouseButtons & leftMouseMask) == 0)
+        if ((mouseButtons & SDLMouseButtonFlags.Left) == 0)
         {
             m_liveResizeLockedWindowId = 0;
             return;
@@ -961,7 +960,7 @@ public sealed partial class PlatformImGuiContext
         uint pointerFocusSourceWindowId = 0;
         float mouseX = 0f;
         float mouseY = 0f;
-        uint currentButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
+        SDLMouseButtonFlags currentButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
         ReadOnlySpan<byte> sdlButtons =
         [
             SDL.SDL_BUTTON_LEFT,
@@ -976,7 +975,7 @@ public sealed partial class PlatformImGuiContext
             if ((m_mouseButtonsDown & trackedMask) == 0)
                 continue;
 
-            uint sdlMask = 1u << (sdlButtons[button] - 1);
+            SDLMouseButtonFlags sdlMask = (SDLMouseButtonFlags)(1u << (sdlButtons[button] - 1));
             if ((currentButtons & sdlMask) != 0)
                 continue;
 
@@ -1074,9 +1073,8 @@ public sealed partial class PlatformImGuiContext
 
         float mouseX = 0f;
         float mouseY = 0f;
-        uint mouseButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
-        uint leftMouseMask = 1u << (SDL.SDL_BUTTON_LEFT - 1);
-        if ((mouseButtons & leftMouseMask) == 0)
+        SDLMouseButtonFlags mouseButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
+        if ((mouseButtons & SDLMouseButtonFlags.Left) == 0)
             m_liveResizeLockedWindowId = 0;
     }
 
@@ -1171,13 +1169,12 @@ public sealed partial class PlatformImGuiContext
         }
     }
 
-    private static void UpdateKeyModifiers(ImGuiIOPtr io, ushort modifiers)
+    private static void UpdateKeyModifiers(ImGuiIOPtr io, SDLKeymod modifiers)
     {
-        var sdlModifiers = (uint)modifiers;
-        io.AddKeyEvent(ImGuiKey.ModCtrl, (sdlModifiers & (SDL.SDL_KMOD_LCTRL | SDL.SDL_KMOD_RCTRL)) != 0);
-        io.AddKeyEvent(ImGuiKey.ModShift, (sdlModifiers & (SDL.SDL_KMOD_LSHIFT | SDL.SDL_KMOD_RSHIFT)) != 0);
-        io.AddKeyEvent(ImGuiKey.ModAlt, (sdlModifiers & (SDL.SDL_KMOD_LALT | SDL.SDL_KMOD_RALT)) != 0);
-        io.AddKeyEvent(ImGuiKey.ModSuper, (sdlModifiers & (SDL.SDL_KMOD_LGUI | SDL.SDL_KMOD_RGUI)) != 0);
+        io.AddKeyEvent(ImGuiKey.ModCtrl, (modifiers & SDLKeymod.Ctrl) != 0);
+        io.AddKeyEvent(ImGuiKey.ModShift, (modifiers & SDLKeymod.Shift) != 0);
+        io.AddKeyEvent(ImGuiKey.ModAlt, (modifiers & SDLKeymod.Alt) != 0);
+        io.AddKeyEvent(ImGuiKey.ModSuper, (modifiers & SDLKeymod.Gui) != 0);
     }
 
     private static ImGuiKey TranslateKey(SDLScancode scancode)

@@ -8,4 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Inno.Native.LibraryLoading\Inno.Native.LibraryLoading.csproj" PrivateAssets="compile" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />
+  </ItemGroup>
 </Project>

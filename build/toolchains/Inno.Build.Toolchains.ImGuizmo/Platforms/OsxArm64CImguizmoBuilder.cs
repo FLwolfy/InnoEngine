@@ -9,6 +9,7 @@ internal sealed class OsxArm64CImguizmoBuilder : CImguizmoBuilder
 {
     private const string OUTPUT_PLATFORM = "osx-arm64";
     private const string BUILD_DIR_NAME = "osx-arm64";
+    private const string THIRD_PARTY_WARNING_POLICY = "-Werror -Wno-deprecated-declarations";
 
     /// <summary>
     /// Gets the native platform identifier produced by this builder.
@@ -67,7 +68,10 @@ internal sealed class OsxArm64CImguizmoBuilder : CImguizmoBuilder
         var cflags = config == ToolchainLayout.C_DEBUG_CONFIGURATION ? "-O0 -g" : "-O3";
         var rpath = "@loader_path/../cimgui/osx-arm64";
         var installName = $"@rpath/{CImguizmoBuildConstants.OUTPUT_DLL_NAME}.dylib";
-        var args = $"{cflags} -std=c++11 -fPIC -dynamiclib {includeArgs} \"{cimguizmoCpp}\" \"{imguizmoCpp}\" \"{cimguiLib}\" -Wl,-install_name,{installName} -Wl,-rpath,{rpath} -o \"{outputLib}\"";
+        // The published C wrapper intentionally retains ImGuizmo_SetID for ABI compatibility even though
+        // upstream marks the underlying C++ member deprecated. Keep that single third-party diagnostic quiet
+        // while treating every other compiler diagnostic enabled by default as an error.
+        var args = $"{cflags} {THIRD_PARTY_WARNING_POLICY} -std=c++11 -fPIC -dynamiclib {includeArgs} \"{cimguizmoCpp}\" \"{imguizmoCpp}\" \"{cimguiLib}\" -Wl,-install_name,{installName} -Wl,-rpath,{rpath} -o \"{outputLib}\"";
 
         ToolchainEnvironment.Run("clang++", args, cimguizmoDir);
     }

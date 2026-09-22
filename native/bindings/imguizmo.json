@@ -1,0 +1,146 @@
+{
+  "BaseConfig": {
+    "Url": "file://common-function-table.json"
+  },
+  "Namespace": "Inno.Native.ImGuizmo",
+  "ApiName": "ImGuizmo",
+  "LibName": "cimguizmo",
+  "EntryFiles": [
+    "../../extern/cimguizmo/cimguizmo.h"
+  ],
+  "AllowedHeaders": [
+    "../../extern/cimguizmo/cimguizmo.h"
+  ],
+  "IncludeFolders": [
+    "../../extern/cimguizmo",
+    "../../extern/cimgui"
+  ],
+  "Defines": [
+    "CIMGUI_DEFINE_ENUMS_AND_STRUCTS"
+  ],
+  "OutputPath": "../Inno.Native.ImGuizmo/Generated",
+  "Usings": [
+    "System.Numerics",
+    "Inno.Native.ImGui"
+  ],
+  "FunctionPrefixes": [
+    "ImGuizmo_"
+  ],
+  "EnumMappings": [
+    {
+      "ExportedName": "OPERATION",
+      "FriendlyName": "ImGuizmoOperation",
+      "ItemMappings": []
+    },
+    {
+      "ExportedName": "MODE",
+      "FriendlyName": "ImGuizmoMode",
+      "ItemMappings": []
+    },
+    {
+      "ExportedName": "COLOR",
+      "FriendlyName": "ImGuizmoColor",
+      "ItemMappings": []
+    }
+  ],
+  "FunctionMappings": [
+    {
+      "ExportedName": "ImGuizmo_SetDrawlist",
+      "FriendlyName": "SetDrawlist",
+      "Defaults": {
+        "drawlist": "null"
+      },
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_IsOver_Nil",
+      "FriendlyName": "IsOver",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_Manipulate",
+      "FriendlyName": "Manipulate",
+      "Defaults": {
+        "deltaMatrix": "null",
+        "snap": "null",
+        "localBounds": "null",
+        "boundsSnap": "null"
+      },
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_ViewManipulate_Float",
+      "FriendlyName": "ViewManipulate",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_ViewManipulate_FloatPtr",
+      "FriendlyName": "ViewManipulate",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_PushID_Str",
+      "FriendlyName": "PushID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_PushID_StrStr",
+      "FriendlyName": "PushID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_PushID_Ptr",
+      "FriendlyName": "PushID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_PushID_Int",
+      "FriendlyName": "PushID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_GetID_Str",
+      "FriendlyName": "GetID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_GetID_StrStr",
+      "FriendlyName": "GetID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_GetID_Ptr",
+      "FriendlyName": "GetID",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_IsOver_OPERATION",
+      "FriendlyName": "IsOver",
+      "Defaults": {},
+      "CustomVariations": []
+    },
+    {
+      "ExportedName": "ImGuizmo_IsOver_FloatPtr",
+      "FriendlyName": "IsOver",
+      "Defaults": {},
+      "CustomVariations": []
+    }
+  ],
+  "TypeMappings": {
+    "ImVec2": "Vector2",
+    "ImVec2_c": "Vector2",
+    "ImVec4": "Vector4",
+    "ImGuiID": "uint",
+    "ImU32": "uint"
+  }
+}

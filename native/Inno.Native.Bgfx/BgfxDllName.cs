@@ -19,14 +19,15 @@ namespace Inno.Native.Bgfx;
 public static partial class bgfx
 {
 #if DEBUG
-    const string DLL_NAME = "bgfx-shared-lib-debug";
+    internal const string LibName = "bgfx-shared-lib-debug";
 #else
-    const string DLL_NAME = "bgfx-shared-lib-release";
+    internal const string LibName = "bgfx-shared-lib-release";
 #endif
+    private const string DLL_NAME = LibName;
     
     static bgfx()
     {
-        NativeDllLoader.EnsureNativeDll(DLL_NAME);
-        NativeDllLoader.LoadNativeDll(DLL_NAME);
+        NativeDllLoader.EnsureNativeDll(LibName);
+        NativeDllLoader.LoadNativeDll(LibName);
     }
 }

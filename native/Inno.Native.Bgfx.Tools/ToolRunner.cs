@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Inno.Native.LibraryLoading;
@@ -229,7 +230,26 @@ public static class ToolRunner
                 : "linux";
         string fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
         string candidate = Path.Combine(repoRoot, "extern", "bgfx", "tools", "bin", platform, fileName);
-        return File.Exists(candidate) ? candidate : null;
+        if (!File.Exists(candidate))
+        {
+            return null;
+        }
+
+        string architecture = RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X64 => "x64",
+            Architecture.Arm => "arm",
+            Architecture.X86 => "x86",
+            _ => RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()
+        };
+        string outputPlatform = OperatingSystem.IsMacOS()
+            ? $"osx-{architecture}"
+            : OperatingSystem.IsWindows()
+                ? $"windows-{architecture}"
+                : $"linux-{architecture}";
+        string relativeOutputPath = Path.Combine("bgfx", outputPlatform, "tools", fileName);
+        return NativeDllLoader.DeployNativeFile(candidate, relativeOutputPath);
     }
 
     private static string? FindRepoRoot()

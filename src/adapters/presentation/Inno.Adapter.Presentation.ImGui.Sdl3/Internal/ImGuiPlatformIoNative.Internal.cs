@@ -15,14 +15,14 @@ internal static unsafe class ImGuiPlatformIoNative
     internal static void SetPlatformGetWindowPos(ImGuiPlatformIOPtr platformIo, PlatformGetWindowPosCallback callback)
     {
         var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
-        var setterArg = (delegate*<ImGuiPlatformIO*, delegate*<ImGuiViewport*, Vector2*, void>, void>)callbackPtr;
+        var setterArg = (delegate*<ImGuiViewport*, Vector2*, void>)callbackPtr;
         ImGuiNative.PlatformIOSetPlatformGetWindowPos(platformIo, setterArg);
     }
 
     internal static void SetPlatformGetWindowSize(ImGuiPlatformIOPtr platformIo, PlatformGetWindowSizeCallback callback)
     {
         var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
-        var setterArg = (delegate*<ImGuiPlatformIO*, delegate*<ImGuiViewport*, Vector2*, void>, void>)callbackPtr;
+        var setterArg = (delegate*<ImGuiViewport*, Vector2*, void>)callbackPtr;
         ImGuiNative.PlatformIOSetPlatformGetWindowSize(platformIo, setterArg);
     }
 }

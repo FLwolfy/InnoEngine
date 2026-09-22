@@ -16,6 +16,12 @@ namespace Inno.Editor.ImGui;
 /// </summary>
 public static class EditorMenuRenderer
 {
+    private static readonly Dictionary<uint, string> m_contextSearches = [];
+
+    private readonly record struct MenuSection(
+        EditorInteraction interaction,
+        IReadOnlyList<EditorMenuItem> items);
+
     /// <summary>
     /// Draws a resolved right-click menu for the most recently submitted ImGui item.
     /// </summary>
@@ -31,8 +37,12 @@ public static class EditorMenuRenderer
     public static bool ContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        uint popupId = NativeImGui.GetID(id);
         if (!ShouldResolveItemContextMenu(id))
+        {
+            m_contextSearches.Remove(popupId);
             return false;
+        }
         EditorMenuModel menu = interaction.BuildMenu();
         if (menu.items.Count == 0)
             return false;
@@ -40,7 +50,7 @@ public static class EditorMenuRenderer
             return false;
         try
         {
-            DrawItems(interaction, menu.items);
+            DrawContextMenuContents(popupId, [new MenuSection(interaction, menu.items)]);
         }
         finally
         {
@@ -70,8 +80,12 @@ public static class EditorMenuRenderer
         EditorInteraction itemInteraction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        uint popupId = NativeImGui.GetID(id);
         if (!ShouldResolveItemContextMenu(id))
+        {
+            m_contextSearches.Remove(popupId);
             return false;
+        }
         EditorMenuModel scopeMenu = scopeInteraction.BuildMenu();
         EditorMenuModel itemMenu = itemInteraction.BuildMenu();
         if (scopeMenu.items.Count == 0 && itemMenu.items.Count == 0)
@@ -80,40 +94,17 @@ public static class EditorMenuRenderer
             return false;
         try
         {
-            if (scopeMenu.items.Count != 0)
-                DrawItems(scopeInteraction, scopeMenu.items);
-            if (scopeMenu.items.Count != 0 && itemMenu.items.Count != 0)
-                NativeImGui.Separator();
-            if (itemMenu.items.Count != 0)
-                DrawItems(itemInteraction, itemMenu.items);
+            DrawContextMenuContents(
+                popupId,
+                [
+                    new MenuSection(scopeInteraction, scopeMenu.items),
+                    new MenuSection(itemInteraction, itemMenu.items)
+                ]);
         }
         finally
         {
             EditorWidget.EndContextMenu();
         }
-        return true;
-    }
-
-    /// <summary>Draws the shared context menu with a searchable command list, including menus opened explicitly by a pointer gesture.</summary>
-    /// <param name="id">Stable popup identity in the current ImGui scope.</param>
-    /// <param name="interaction">Shared action/menu routing context.</param>
-    /// <param name="search">Transient search text owned by the invoking view.</param>
-    /// <returns>Whether the context popup is currently open.</returns>
-    public static bool ContextMenu(string id, EditorInteraction interaction, ref string search)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        if (!ShouldResolveItemContextMenu(id)) return false;
-        EditorMenuModel menu = interaction.BuildMenu();
-        if (!EditorWidget.BeginContextMenu(id)) return false;
-        try
-        {
-            NativeImGui.SetNextItemWidth(260f);
-            NativeImGui.InputTextWithHint("##command-search", "Search commands…", ref search, 256);
-            NativeImGui.Separator();
-            if (string.IsNullOrWhiteSpace(search)) DrawItems(interaction, menu.items);
-            else if (DrawSearchItems(interaction, menu.items, search)) NativeImGui.CloseCurrentPopup();
-        }
-        finally { EditorWidget.EndContextMenu(); }
         return true;
     }
 
@@ -132,8 +123,12 @@ public static class EditorMenuRenderer
     public static bool WindowContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        uint popupId = NativeImGui.GetID(id);
         if (!ShouldResolveWindowContextMenu(id))
+        {
+            m_contextSearches.Remove(popupId);
             return false;
+        }
         EditorMenuModel menu = interaction.BuildMenu();
         if (menu.items.Count == 0)
             return false;
@@ -141,13 +136,62 @@ public static class EditorMenuRenderer
             return false;
         try
         {
-            DrawItems(interaction, menu.items);
+            DrawContextMenuContents(popupId, [new MenuSection(interaction, menu.items)]);
         }
         finally
         {
             EditorWidget.EndContextMenu();
         }
         return true;
+    }
+
+    private static void DrawContextMenuContents(
+        uint popupId,
+        IReadOnlyList<MenuSection> sections)
+    {
+        string search = NativeImGui.IsWindowAppearing()
+            ? string.Empty
+            : m_contextSearches.GetValueOrDefault(popupId, string.Empty);
+        NativeImGui.PushStyleVar(
+            ImGuiStyleVar.FramePadding,
+            EditorWidget.style.menuSearchFramePadding);
+        NativeImGui.PushStyleColor(ImGuiCol.NavCursor, Vector4.Zero);
+        try
+        {
+            if (NativeImGui.IsWindowAppearing())
+                NativeImGui.SetKeyboardFocusHere();
+            _ = EditorWidget.SearchInput(
+                $"context-menu-{popupId}",
+                "Search commands…",
+                ref search,
+                width: EditorWidget.style.searchPopupWidth);
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor();
+            NativeImGui.PopStyleVar();
+        }
+        m_contextSearches[popupId] = search;
+        NativeImGui.Separator();
+
+        bool searching = !string.IsNullOrWhiteSpace(search);
+        bool drewSection = false;
+        foreach (MenuSection section in sections)
+        {
+            if (section.items.Count == 0)
+                continue;
+            if (!searching && drewSection)
+                NativeImGui.Separator();
+            if (searching)
+            {
+                if (!DrawSearchItems(section.interaction, section.items, search))
+                    continue;
+                NativeImGui.CloseCurrentPopup();
+                return;
+            }
+            DrawItems(section.interaction, section.items);
+            drewSection = true;
+        }
     }
 
     private static bool ShouldResolveItemContextMenu(string id)

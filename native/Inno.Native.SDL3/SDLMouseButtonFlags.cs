@@ -13,17 +13,13 @@ using BGCS.Runtime;
 namespace Inno.Native.Sdl3
 {
     [Flags]
-    public enum SDLMouseButtonFlags : uint
+	public enum SDLMouseButtonFlags : uint
 	{
-		Left = 1,
-		Middle = 2,
-		Right = 3,
-		X1 = 4,
-		X2 = 5,
-		//Lmask = SDL_BUTTON(Left),
-		//Mmask = SDL_BUTTON(Middle),
-		//Rmask = SDL_BUTTON(Right),
-		//X1Mask = SDL_BUTTON(X1),
-		//X2Mask = SDL_BUTTON(X2),
+		None = 0,
+		Left = 1u << 0,
+		Middle = 1u << 1,
+		Right = 1u << 2,
+		X1 = 1u << 3,
+		X2 = 1u << 4,
 	}
 }

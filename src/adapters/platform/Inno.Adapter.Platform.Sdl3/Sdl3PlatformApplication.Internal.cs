@@ -42,7 +42,7 @@ public sealed partial class Sdl3PlatformApplication
             _ = SDL.SetHint(SDL.SDL_HINT_MAC_PRESS_AND_HOLD, "0");
         }
 
-        if (!SDL.Init((uint)(SDLInitFlags.Video | SDLInitFlags.Events)))
+        if (!SDL.Init(SDLInitFlags.Video | SDLInitFlags.Events))
         {
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_Init failed.");
         }
@@ -81,7 +81,7 @@ public sealed partial class Sdl3PlatformApplication
             flags |= SDLWindowFlags.Resizable;
         }
 
-        var windowHandle = SDL.CreateWindow(options.title, options.width, options.height, (ulong)flags);
+        var windowHandle = SDL.CreateWindow(options.title, options.width, options.height, flags);
         if (windowHandle.IsNull)
         {
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_CreateWindow failed.");
@@ -504,7 +504,7 @@ public sealed partial class Sdl3PlatformApplication
         return false;
     }
 
-    private static KeyModifier TranslateModifiers(ushort modifiers)
+    private static KeyModifier TranslateModifiers(SDLKeymod modifiers)
     {
         var sdlModifiers = (uint)modifiers;
         var result = KeyModifier.None;
@@ -557,9 +557,9 @@ public sealed partial class Sdl3PlatformApplication
         }
     }
 
-    private static KeyCode TranslateKey(int sdlKey)
+    private static KeyCode TranslateKey(uint sdlKey)
     {
-        return (uint)sdlKey switch
+        return sdlKey switch
         {
             SDL.SDLK_A => KeyCode.A,
             SDL.SDLK_B => KeyCode.B,

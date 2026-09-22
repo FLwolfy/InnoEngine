@@ -1,0 +1,30 @@
+{
+  "BaseConfig": {
+    "Url": "file://common-function-table.json"
+  },
+  "Namespace": "Inno.Native.MiniAudio",
+  "ApiName": "MiniAudio",
+  "LibName": "miniaudio",
+  "EntryFiles": [
+    "../../extern/miniaudio/extras/miniaudio_split/miniaudio.h"
+  ],
+  "AllowedHeaders": [
+    "../../extern/miniaudio/extras/miniaudio_split/miniaudio.h"
+  ],
+  "IncludeFolders": [
+    "../../extern/miniaudio/extras/miniaudio_split"
+  ],
+  "OutputPath": "../Inno.Native.MiniAudio/Generated",
+  "FunctionPrefixes": [
+    "ma_"
+  ],
+  "IgnoredFunctions": [
+    "ma_log_postf"
+  ],
+  "TypeMappings": {
+    "ma_node": "void"
+  },
+  "IgnoredTypedefs": [
+    "ma_node"
+  ]
+}
