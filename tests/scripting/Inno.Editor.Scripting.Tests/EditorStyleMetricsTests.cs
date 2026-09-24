@@ -5,6 +5,7 @@ using System.Numerics;
 
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using InlineRenameResult = Inno.Editor.ImGui.ImGuiWidget.InlineRenameResult;
 using TreeNodeOptions = Inno.Editor.ImGui.ImGuiWidget.TreeNodeOptions;
@@ -193,8 +194,8 @@ public sealed class EditorStyleMetricsTests
 
             Assert.False(requestFocus);
             Assert.False(inputState.IsNull);
-            Assert.Equal(0, ImGuiP.GetSelectionStart(inputState));
-            Assert.Equal(value.Length, ImGuiP.GetSelectionEnd(inputState));
+            Assert.Equal(0, inputState.GetSelectionStart());
+            Assert.Equal(value.Length, inputState.GetSelectionEnd());
             uint navCursorColor = NativeImGui.GetColorU32(ImGuiCol.NavCursor);
             AssertDrawListDoesNotContainColor(
                 NativeImGui.GetWindowDrawList(),
@@ -374,11 +375,11 @@ public sealed class EditorStyleMetricsTests
                 Assert.True(NativeImGui.GetWindowSize().X >= 240f);
                 string newTag = string.Empty;
                 NativeImGui.SetNextItemWidth(160f);
-                _ = NativeImGui.InputTextWithHint(
+                _ = EditorImGui.InputTextWithHint(
                     "##new_tag",
                     "Add tag...",
                     ref newTag,
-                    (nuint)128);
+                    128);
                 float inputCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
                 NativeImGui.SameLine();
                 _ = EditorWidget.ClickableText(
@@ -595,7 +596,8 @@ public sealed class EditorStyleMetricsTests
             NativeImGui.NewFrame();
             NativeImGui.SetNextWindowSize(new Vector2(480f, 320f), ImGuiCond.Always);
             _ = NativeImGui.Begin("Dragging Tree Guide Test");
-            NativeImGui.GetCurrentContext().DragDropActive = true;
+            ImGuiContextPtr currentContext = NativeImGui.GetCurrentContext();
+            currentContext.DragDropActive = true;
             EditorWidget.SetNextTreeNodeOpen(true);
             TreeNodeResult root = EditorWidget.TreeNode(
                 "drag_root",
@@ -610,7 +612,7 @@ public sealed class EditorStyleMetricsTests
                 NativeImGui.TreePop();
             }
             AssertCurrentDrawListContainsTreeGuideColor();
-            NativeImGui.GetCurrentContext().DragDropActive = false;
+            currentContext.DragDropActive = false;
             NativeImGui.End();
             NativeImGui.Render();
         }

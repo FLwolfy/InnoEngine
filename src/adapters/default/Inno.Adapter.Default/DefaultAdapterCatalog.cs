@@ -11,10 +11,16 @@ using Inno.Adapter.Rendering;
 using Inno.Adapter.Rendering.Bgfx;
 using Inno.Adapter.Storage;
 using Inno.Adapter.Storage.FileSystem;
+using Inno.Adapter.Text;
+using Inno.Adapter.Text.FreeTypeHarfBuzz;
+using Inno.Adapter.UI;
+using Inno.Adapter.UI.RmlUi;
 using Inno.Audio;
 using Inno.Platform;
 using Inno.Rendering;
 using Inno.Storage;
+using Inno.Text;
+using Inno.UI;
 
 namespace Inno.Adapter.Default;
 
@@ -27,16 +33,26 @@ public sealed class DefaultAdapterCatalog :
     IInputBackendFactory,
     IStorageBackendFactory,
     IRenderingBackendFactory,
-    IAudioBackendFactory
+    IAudioBackendFactory,
+    ITextBackendFactory,
+    IUiBackendFactory
 {
     private readonly RenderingBackendCatalog m_rendering;
+    private readonly UiBackendCatalog m_ui;
 
-    /// <summary>Creates the standard adapters with an optional complete rendering provider set.</summary>
+    /// <summary>Creates the standard adapters with optional complete provider sets.</summary>
     /// <param name="renderingProviders">Replacement rendering providers, or null to use bundled BGFX.</param>
-    public DefaultAdapterCatalog(IEnumerable<RenderingBackendProvider>? renderingProviders = null)
-        => m_rendering = new RenderingBackendCatalog(renderingProviders ?? [new BgfxRenderingProvider()]);
+    /// <param name="uiProviders">Replacement UI providers, or null to use bundled RmlUi.</param>
+    public DefaultAdapterCatalog(
+        IEnumerable<RenderingBackendProvider>? renderingProviders = null,
+        IEnumerable<UiBackendProvider>? uiProviders = null)
+    {
+        m_rendering = new RenderingBackendCatalog(renderingProviders ?? [new BgfxRenderingProvider()]);
+        m_ui = new UiBackendCatalog(uiProviders ?? [new RmlUiProvider()]);
+    }
 
     IReadOnlyList<RenderingBackendId> IRenderingBackendFactory.supportedBackends => m_rendering.supportedBackends;
+    IReadOnlyList<UiBackendId> IUiBackendFactory.supportedBackends => m_ui.supportedBackends;
 
     /// <summary>
     /// Gets the built-in platform backend factory.
@@ -62,6 +78,16 @@ public sealed class DefaultAdapterCatalog :
     /// Gets the built-in audio backend factory.
     /// </summary>
     public IAudioBackendFactory audio => this;
+
+    /// <summary>
+    /// Gets the built-in Unicode text backend factory.
+    /// </summary>
+    public ITextBackendFactory text => this;
+
+    /// <summary>
+    /// Gets the built-in retained-mode UI backend factory.
+    /// </summary>
+    public IUiBackendFactory ui => this;
 
     IPlatformApplication IPlatformBackendFactory.CreateApplication(PlatformBackend backend)
         => backend switch
@@ -119,6 +145,22 @@ public sealed class DefaultAdapterCatalog :
             }),
             _ => throw Unsupported(nameof(backend), backend)
         };
+
+    ITextBackend ITextBackendFactory.CreateBackend(TextBackend backend)
+        => backend switch
+        {
+            TextBackend.FreeTypeHarfBuzz => new FreeTypeHarfBuzzTextBackend(),
+            _ => throw Unsupported(nameof(backend), backend)
+        };
+
+    IUiBackend IUiBackendFactory.CreateBackend(UiBackendId backend) => m_ui.CreateBackend(backend);
+
+    private sealed class RmlUiProvider : UiBackendProvider
+    {
+        public override UiBackendId id => UiBackendId.rmlUi;
+
+        public override IUiBackend CreateBackend() => new RmlUiBackend();
+    }
 
     private static NotSupportedException Unsupported<TBackend>(string parameterName, TBackend backend)
         where TBackend : struct, Enum

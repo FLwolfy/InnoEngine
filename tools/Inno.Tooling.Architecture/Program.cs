@@ -636,6 +636,14 @@ internal static partial class Program
                 {
                     failures.Add($"{projectRelative}: miniaudio native code is restricted to the MiniAudio adapter.");
                 }
+                if (targetRelative.Contains("Inno.Native.UI", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Adapter.UI.RmlUi", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Native.UI", StringComparison.Ordinal) &&
+                    !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.UI", StringComparison.Ordinal) &&
+                    !projectRelative.StartsWith("tests/", StringComparison.Ordinal))
+                {
+                    failures.Add($"{projectRelative}: RmlUi native code is restricted to the RmlUi adapter.");
+                }
             }
         }
     }

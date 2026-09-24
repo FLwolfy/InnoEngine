@@ -29,7 +29,7 @@ using Inno.Rendering;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Shaders;
 using Inno.Native.ImGui;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 using Xunit;
 
 namespace Inno.Editor.Scripting.Tests;
@@ -76,8 +76,8 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         m_source = new(m_assets, m_serialization);
         m_artifacts = new(m_assets, m_serialization, m_types, new ShaderCompiler(new WorkflowCompiler()), new BgfxTextureTargetCompiler(), m_reporter);
         m_runtime = CreateRuntime();
-        m_imgui = UI.CreateContext();
-        ImGuiIOPtr io = UI.GetIO();
+        m_imgui = ImGuiApi.CreateContext();
+        ImGuiIOPtr io = ImGuiApi.GetIO();
         io.DisplaySize = new(1200, 800);
         io.DeltaTime = 1f / 60;
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
@@ -138,12 +138,12 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         Assert.False(presentation.canResize);
         for (int frame = 0; frame < 120 && presentation.isVisible; frame++)
         {
-            UI.NewFrame();
-            UI.SetNextWindowPos(new(0, 0));
-            UI.SetNextWindowSize(new(1200, 800));
-            _ = UI.Begin("Shader Check Workflow");
+            ImGuiApi.NewFrame();
+            ImGuiApi.SetNextWindowPos(new(0, 0));
+            ImGuiApi.SetNextWindowSize(new(1200, 800));
+            _ = ImGuiApi.Begin("Shader Check Workflow");
             try { Assert.True(modal.Draw(m_runtime.context)); }
-            finally { UI.End(); UI.Render(); }
+            finally { ImGuiApi.End(); ImGuiApi.Render(); }
             Thread.Sleep(5);
             Assert.True(modal.TryGetPresentation(out presentation));
         }
@@ -234,9 +234,9 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         if (emptyGraph) controller.ReplaceDocument(new GraphDocument(), "Prepare Empty Canvas");
         ulong revision = controller.revision;
         byte[] disk = File.ReadAllBytes(Path.Combine(m_root, "Assets", entry.assetPath.localPath));
-        UI.GetStyle().ItemSpacing = new Vector2(6, 4) * scale;
-        UI.GetStyle().WindowPadding = new Vector2(8, 7) * scale;
-        UI.GetIO().DisplayFramebufferScale = new(scale);
+        ImGuiApi.GetStyle().ItemSpacing = new Vector2(6, 4) * scale;
+        ImGuiApi.GetStyle().WindowPadding = new Vector2(8, 7) * scale;
+        ImGuiApi.GetIO().DisplayFramebufferScale = new(scale);
 
         Vector2[] sizes = [new(1200, 800), new(640, 400), new(280, 220), new(96, 64), new(32, 32),
             new(1200, 32), new(32, 800), new(1200, 800)];
@@ -362,13 +362,13 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         // A single framed summary-only node is centered in the canvas (82 px tall).
         Vector2 start = (m_canvasMinimum + m_canvasMaximum) * 0.5f + new Vector2(0, -25) + m_probeOffset;
         Assert.True(start.X > 0 && start.Y > 0);
-        UI.GetIO().AddMousePosEvent(start.X, start.Y);
+        ImGuiApi.GetIO().AddMousePosEvent(start.X, start.Y);
         Draw();
-        UI.GetIO().AddMouseButtonEvent(0, true);
+        ImGuiApi.GetIO().AddMouseButtonEvent(0, true);
         Draw();
-        UI.GetIO().AddMousePosEvent(start.X + distance.X, start.Y + distance.Y);
+        ImGuiApi.GetIO().AddMousePosEvent(start.X + distance.X, start.Y + distance.Y);
         Draw();
-        UI.GetIO().AddMouseButtonEvent(0, false);
+        ImGuiApi.GetIO().AddMouseButtonEvent(0, false);
         Draw();
         Tick();
         m_probeOffset += distance;
@@ -970,23 +970,23 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
     {
         EditorPanelExtension panel = Assert.Single(m_runtime.panels, panel => panel.id == "rendering.shader-editor");
         panel.isOpen = true;
-        UI.NewFrame();
-        UI.SetNextWindowPos(new(0, 0));
-        UI.SetNextWindowSize(size ?? new(1200, 800));
-        _ = UI.Begin("Shader Editor Workflow");
+        ImGuiApi.NewFrame();
+        ImGuiApi.SetNextWindowPos(new(0, 0));
+        ImGuiApi.SetNextWindowSize(size ?? new(1200, 800));
+        _ = ImGuiApi.Begin("Shader Editor Workflow");
         try
         {
             Assert.True(panel.Draw(m_runtime.context));
-            m_canvasMinimum = UI.GetItemRectMin();
-            m_canvasMaximum = UI.GetItemRectMax();
+            m_canvasMinimum = ImGuiApi.GetItemRectMin();
+            m_canvasMaximum = ImGuiApi.GetItemRectMax();
         }
-        finally { UI.End(); UI.Render(); }
+        finally { ImGuiApi.End(); ImGuiApi.Render(); }
     }
 
     public void Dispose()
     {
         m_runtime.Dispose();
-        UI.DestroyContext(m_imgui);
+        ImGuiApi.DestroyContext(m_imgui);
         m_artifacts.Dispose();
         m_assets.Dispose();
         m_reporter.Dispose();
@@ -1018,9 +1018,9 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         public static Vector2 header;
         public override void Draw(ShaderNodeDrawContext context)
         {
-            float zoom = UI.GetWindowSize().X / 246f;
-            header = UI.GetWindowPos() + new Vector2(60, -24) * zoom;
-            UI.TextUnformatted("Extension controls");
+            float zoom = ImGuiApi.GetWindowSize().X / 246f;
+            header = ImGuiApi.GetWindowPos() + new Vector2(60, -24) * zoom;
+            ImGuiApi.TextUnformatted("Extension controls");
         }
     }
 

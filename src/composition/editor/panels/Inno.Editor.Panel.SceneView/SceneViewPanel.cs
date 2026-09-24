@@ -806,7 +806,8 @@ internal sealed class SceneViewPanel : EditorPanel
         WriteColumnMajor(world, model);
 
         NativeImGuizmo.BeginFrame();
-        NativeImGuizmo.SetDrawlist(NativeImGui.GetWindowDrawList());
+        NativeImGuizmo.SetDrawlist(
+            (Inno.Native.ImGuizmo.ImDrawList*)(nint)NativeImGui.GetWindowDrawList().Handle);
         NativeImGuizmo.SetRect(
             minimum.X,
             minimum.Y,
@@ -821,7 +822,11 @@ internal sealed class SceneViewPanel : EditorPanel
             projection,
             m_operation,
             effectiveMode,
-            model);
+            model,
+            null,
+            null,
+            null,
+            null) != 0;
         bool isUsing = NativeImGuizmo.IsUsing();
         if (isUsing && m_gestureTarget is null)
         {

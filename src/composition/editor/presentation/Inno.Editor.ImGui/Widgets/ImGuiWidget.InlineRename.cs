@@ -85,10 +85,11 @@ public static partial class ImGuiWidget
             NativeImGui.PushStyleColor(ImGuiCol.NavCursor, EditorPalette.transparent);
             try
             {
-                submitted = NativeImGui.InputText(
+                submitted = ImGuiUtf8Buffer.InputText(
                     controlId,
+                    null,
                     ref text,
-                    capacity,
+                    (nuint)capacity,
                     ImGuiInputTextFlags.EnterReturnsTrue | ImGuiInputTextFlags.AutoSelectAll);
             }
             finally
@@ -106,7 +107,7 @@ public static partial class ImGuiWidget
                 ImGuiInputTextStatePtr inputState = ImGuiP.GetInputTextState(inputId);
                 if (!inputState.IsNull)
                 {
-                    ImGuiP.SelectAll(inputState);
+                    inputState.SelectAll();
                     requestFocus = false;
                 }
             }

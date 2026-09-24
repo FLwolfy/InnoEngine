@@ -12,5 +12,7 @@
     <ProjectReference Include="..\..\platform\Inno.Adapter.Platform\Inno.Adapter.Platform.csproj" />
     <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering\Inno.Adapter.Rendering.csproj" />
     <ProjectReference Include="..\..\storage\Inno.Adapter.Storage\Inno.Adapter.Storage.csproj" />
+    <ProjectReference Include="..\..\text\Inno.Adapter.Text\Inno.Adapter.Text.csproj" />
+    <ProjectReference Include="..\..\ui\Inno.Adapter.UI\Inno.Adapter.UI.csproj" />
   </ItemGroup>
 </Project>

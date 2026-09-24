@@ -7,7 +7,7 @@ namespace Inno.Adapter.Rendering.Bgfx;
 internal sealed unsafe class BgfxCommandEncoder : RenderCommandEncoder
 {
     private readonly BgfxDevice m_device;
-    private readonly bgfx.Encoder* m_encoder;
+    private readonly bgfx.Encoder m_encoder;
     private readonly ushort m_viewId;
 
     private BgfxPipelineResource? m_pipeline;
@@ -31,7 +31,7 @@ internal sealed unsafe class BgfxCommandEncoder : RenderCommandEncoder
     /// <param name="viewId">
     /// The view id consumed by bgfx command encoder; ownership remains with the caller unless explicitly stated otherwise.
     /// </param>
-    public BgfxCommandEncoder(BgfxDevice device, bgfx.Encoder* encoder, ushort viewId)
+    public BgfxCommandEncoder(BgfxDevice device, bgfx.Encoder encoder, ushort viewId)
     {
         m_device = device;
         m_encoder = encoder;

@@ -8,6 +8,8 @@ using Inno.Adapter.Platform;
 using Inno.Adapter.Presentation;
 using Inno.Adapter.Rendering;
 using Inno.Adapter.Storage;
+using Inno.Adapter.Text;
+using Inno.Adapter.UI;
 using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Rendering.Assets;
 
@@ -65,6 +67,16 @@ public sealed class DefaultAuthoringAdapterCatalog :
     /// Gets the built-in audio backend factory.
     /// </summary>
     public IAudioBackendFactory audio => m_runtime.audio;
+
+    /// <summary>
+    /// Gets the built-in Unicode text backend factory.
+    /// </summary>
+    public ITextBackendFactory text => m_runtime.text;
+
+    /// <summary>
+    /// Gets the built-in retained-mode UI backend factory.
+    /// </summary>
+    public IUiBackendFactory ui => m_runtime.ui;
 
     /// <summary>
     /// Gets the built-in rendering authoring toolchain factory.

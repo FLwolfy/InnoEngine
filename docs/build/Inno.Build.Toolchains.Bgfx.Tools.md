@@ -10,7 +10,7 @@
 - `BgfxShaderSourceFrontend`：实现 `IShaderSourceFrontend`；`languageId` 为
   `inno.shader-language.bgfx-sc`，`Analyze(ShaderSourceRequest)` 返回函数接口、原始 include 依赖和定位诊断。
 
-这些类型只在 authoring/build 路径使用。Player 通过 `FileRenderTargetArtifactProvider` 读取结果，不引用本项目或 BGFX tools。
+这些类型只在 authoring/build 路径使用。工具进程执行器 `BgfxTool`、`ToolRunner` 和 `ToolRunResult` 归属 `Inno.Native.Bgfx/Tools/`，本项目只负责 Shader/Texture 的离线编译策略。Player 通过 `FileRenderTargetArtifactProvider` 读取结果，不引用本项目或 BGFX tools。
 
 ## 源码函数前端
 

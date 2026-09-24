@@ -400,7 +400,7 @@ InnoEngine
 
 | Solution Folder | 项目 |
 | --- | --- |
-| `native` | `Inno.Native.LibraryLoading`、`Inno.Native.Sdl3`、`Inno.Native.Bgfx`、`Inno.Native.Bgfx.Tools`、`Inno.Native.MiniAudio`、`Inno.Native.ImGui`、`Inno.Native.ImGuizmo` |
+| `native` | `Inno.Native.LibraryLoading`、`Inno.Native.Sdl3`、`Inno.Native.Bgfx`、`Inno.Native.MiniAudio`、`Inno.Native.ImGui`、`Inno.Native.ImGuizmo` |
 | `build/pipeline` | `Inno.Build`、`Inno.Build.Cli`、`Inno.Build.Platform.MacOS`、`Inno.Build.Platform.Windows` |
 | `build/support` | `Inno.Build.SupportPacks` |
 | `build/toolchains` | `Inno.Build.Toolchains`、`Inno.Build.Toolchains.Sdl3`、`Inno.Build.Toolchains.Bgfx`、`Inno.Build.Toolchains.Bgfx.Tools`、`Inno.Build.Toolchains.ImGui`、`Inno.Build.Toolchains.ImGuizmo`、`Inno.Build.Toolchains.MiniAudio` |
@@ -420,7 +420,7 @@ InnoEngine
 | `tests/extensibility` | `Inno.Extensibility.Modules.Tests`、`Inno.Extensibility.Types.Tests`、`Inno.Extensibility.Reload.Tests` |
 | `tests/extensibility/fixtures` | `Inno.Extensibility.Modules.TestDependency`、`Inno.Extensibility.Modules.TestModule.V1`、`Inno.Extensibility.Modules.TestModule.V2`、`Inno.Extensibility.Modules.TestModule.Invalid`、`Inno.Extensibility.Types.TestAssemblyA`、`Inno.Extensibility.Types.TestAssemblyB` |
 | `tests/input` | `Inno.Input.Tests` |
-| `tests/native` | `Inno.Native.Sdl3.Tests`、`Inno.Native.Bgfx.Tests`、`Inno.Native.Bgfx.Tools.Tests`、`Inno.Native.MiniAudio.Tests`、`Inno.Native.ImGui.Tests`、`Inno.Native.ImGuizmo.Tests` |
+| `tests/native` | `Inno.Native.Sdl3.Tests`、`Inno.Native.Bgfx.Tests`、`Inno.Native.MiniAudio.Tests`、`Inno.Native.ImGui.Tests`、`Inno.Native.ImGuizmo.Tests` |
 | `tests/player` | `Inno.Player.E2E` |
 | `tests/plugins` | `Inno.Plugins.Tests` |
 | `tests/references` | `Inno.References.Tests` |

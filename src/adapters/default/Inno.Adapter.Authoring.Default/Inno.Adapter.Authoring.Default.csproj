@@ -9,6 +9,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\common\Inno.Adapter\Inno.Adapter.csproj" />
     <ProjectReference Include="..\Inno.Adapter.Default\Inno.Adapter.Default.csproj" />
+    <ProjectReference Include="..\..\text\Inno.Adapter.Text\Inno.Adapter.Text.csproj" />
+    <ProjectReference Include="..\..\ui\Inno.Adapter.UI\Inno.Adapter.UI.csproj" />
+    <ProjectReference Include="..\..\ui\Inno.Adapter.UI.RmlUi.Authoring\Inno.Adapter.UI.RmlUi.Authoring.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\platform\Inno.Adapter.Platform.Sdl3\Inno.Adapter.Platform.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\presentation\Inno.Adapter.Presentation.ImGui.Bgfx\Inno.Adapter.Presentation.ImGui.Bgfx.csproj" PrivateAssets="compile" />

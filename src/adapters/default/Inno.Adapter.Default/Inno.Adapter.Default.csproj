@@ -13,5 +13,11 @@
     <ProjectReference Include="..\..\platform\Inno.Adapter.Platform.Sdl3\Inno.Adapter.Platform.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\storage\Inno.Adapter.Storage.FileSystem\Inno.Adapter.Storage.FileSystem.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\text\Inno.Adapter.Text.FreeTypeHarfBuzz\Inno.Adapter.Text.FreeTypeHarfBuzz.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\ui\Inno.Adapter.UI.RmlUi\Inno.Adapter.UI.RmlUi.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\text\Inno.Adapter.Text\Inno.Adapter.Text.csproj" />
+    <ProjectReference Include="..\..\ui\Inno.Adapter.UI\Inno.Adapter.UI.csproj" />
+    <ProjectReference Include="..\..\..\services\text\Inno.Text\Inno.Text.csproj" />
+    <ProjectReference Include="..\..\..\services\ui\Inno.UI\Inno.UI.csproj" />
   </ItemGroup>
 </Project>

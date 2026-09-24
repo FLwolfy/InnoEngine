@@ -4,7 +4,7 @@ namespace Inno.Build.Toolchains.ImGui.Platforms;
 
 internal static class CimguiBuilderFactory
 {
-    private const string UNSUPPORTED_PLATFORM_MESSAGE = "Only macos-arm64 and windows-x64 are supported.";
+    private const string UNSUPPORTED_PLATFORM_MESSAGE = "Supported hosts are macos-arm64, windows-x64, linux-x64, and linux-arm64.";
 
     /// <summary>
     /// Creates and validates a caller-owned for current platform value.
@@ -17,7 +17,8 @@ internal static class CimguiBuilderFactory
         var builders = new CimguiBuilder[]
         {
             new OsxArm64CimguiBuilder(),
-            new WindowsX64CimguiBuilder()
+            new WindowsX64CimguiBuilder(),
+            new LinuxCimguiBuilder()
         };
 
         foreach (var builder in builders)

@@ -7,7 +7,7 @@ namespace Inno.Adapter.Presentation.ImGui;
 
 internal static unsafe class Sdl3PlatformWindowAccess
 {
-    internal static SDLWindowPtr GetSdlWindow(this Sdl3PlatformWindow window)
+    internal static SDLWindow GetSdlWindow(this Sdl3PlatformWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
         if (window.sdlWindowHandle == 0)
@@ -15,6 +15,6 @@ internal static unsafe class Sdl3PlatformWindowAccess
             throw new ObjectDisposedException(nameof(window));
         }
 
-        return new SDLWindowPtr((SDLWindow*)window.sdlWindowHandle);
+        return new SDLWindow(window.sdlWindowHandle);
     }
 }

@@ -1,0 +1,36 @@
+{
+  "Preset": "host-c,c-library,function-table",
+  "IncludeTransitivelyReferencedHeaders": false,
+  "GenerateRuntimeSource": false,
+  "MergeGeneratedFilesToSingleFile": true,
+  "SingleFileOutputName": "Bindings.cs",
+  "Namespace": "Inno.Native.Text",
+  "ApiName": "TextNative",
+  "LibName": "inno-text",
+  "EntryFiles": [
+    "../Native/inno_text.h"
+  ],
+  "AllowedHeaders": [
+    "../Native/inno_text.h"
+  ],
+  "IncludeFolders": [
+    "../Native"
+  ],
+  "OutputPath": "../Generated",
+  "MarshallingMappings": {
+    "inno_text_load_font": {
+      "Parameters": {
+        "data": { "Strategy": "Span", "Ownership": "Borrowed", "LengthParameter": "length" }
+      }
+    },
+    "inno_text_result_message": {
+      "Return": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+    }
+  },
+  "FunctionPrefixes": [
+    "inno_text_"
+  ],
+  "TypePrefixes": [
+    "inno_text_"
+  ]
+}

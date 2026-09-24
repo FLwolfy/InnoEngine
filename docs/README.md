@@ -15,6 +15,8 @@
 | [Storage](storage/README.md) | 沙箱化应用持久数据契约、Runtime Subsystem 与文件系统 adapter |
 | [Animation](animation/README.md) | 后端中立 Clip、采样、混合、事件、资产与 Runtime Subsystem |
 | [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产与 MiniAudio adapter |
+| [Text](text/README.md) | 字体资产、Unicode shaping、字形光栅化与 FreeType/HarfBuzz adapter |
+| [UI](ui/README.md) | RML 文档、交互、后端中立帧与 RmlUi adapter |
 | [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
 | [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
 | [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与实施中的统一 Shader 创作层 |
@@ -51,6 +53,8 @@ Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Ed
 新增 [Architecture CLI 测试项目](tooling/Inno.Tooling.Architecture.Tests.md)已纳入 `tests/tooling`、Solution 和项目文档。
 
 ## 当前格式与状态
+
+新增 [Text](text/README.md) 与 [UI](ui/README.md) 内建 Service 分类，分别覆盖契约、资产导入、Session Runtime、adapter、原生桥与测试项目页；[Inno.Canvas](plugins/Inno.Canvas.md) 是独立 Project Plugin，提供 Scene 组件、完整默认 Shader/Material/Pipeline 与 Editor 模板。macOS ARM64 的七套 BGCS 绑定、八个原生依赖/工具构建及相关 Release 验收通过；Linux/Windows Text/UI 目标仍需分别生成绑定并验收，不视为已完成跨平台发行。
 
 新增 [Inno.Editor.Annotations](editor/Inno.Editor.Annotations.md) 已包含独立项目页与 Editor 索引；展示标注不再归属 Core.Serialization。
 新增 [Inno.Rendering.Shaders](render/Inno.Rendering.Shaders.md) 已包含独立项目页与 Rendering 索引；

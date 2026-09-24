@@ -6,7 +6,7 @@ using Inno.Assets.Pipeline;
 using Inno.Editor.Inspection;
 using Inno.Rendering;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Shaders;
 
@@ -29,16 +29,16 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
     {
         if (!TryOpenDrafts(context, target, out MaterialDocuments? documents, out var drafts)) return;
         bool readOnly = drafts.Any(value => value.readOnly);
-        UI.BeginDisabled(readOnly);
+        ImGuiApi.BeginDisabled(readOnly);
         try
         {
-            if (UI.Button("Save Selected"))
+            if (ImGuiApi.Button("Save Selected"))
             {
                 documents!.CommitMany(target.assetIds);
                 foreach (var draft in drafts) _ = context.interactions.documents.Save(draft.documentId);
             }
-            UI.SameLine();
-            if (UI.Button("Revert Selected"))
+            ImGuiApi.SameLine();
+            if (ImGuiApi.Button("Revert Selected"))
             {
                 documents!.CommitMany(target.assetIds);
                 using var transaction = context.interactions.history.BeginTransaction("Revert Materials");
@@ -46,7 +46,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 transaction.Commit();
             }
         }
-        finally { UI.EndDisabled(); }
+        finally { ImGuiApi.EndDisabled(); }
     }
 
     protected override void Draw(InspectionDrawContext context, AssetInspectionSelection target)
@@ -56,8 +56,8 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
         MaterialDocuments owner = documents!;
         var materials = drafts.ToDictionary(value => value.id, value => owner.Read(value.id));
         bool readOnly = drafts.Any(value => value.readOnly);
-        UI.PushID("materials." + string.Join(".", target.assetIds));
-        UI.BeginDisabled(readOnly);
+        ImGuiApi.PushID("materials." + string.Join(".", target.assetIds));
+        ImGuiApi.BeginDisabled(readOnly);
         try
         {
             Widget.Hint("Save runs per document. Unsaved edits do not change Scene/Game.");
@@ -93,11 +93,11 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 {
                     try
                     {
-                        if (UI.Selectable("Automatic", !mixedTechnique && !first.techniqueId.isValid)) SetTechnique(default);
+                        if (ImGuiApi.Selectable("Automatic", !mixedTechnique && !first.techniqueId.isValid)) SetTechnique(default);
                         foreach (ShaderTechniqueId technique in commonTechniques)
-                            if (UI.Selectable(technique.value, !mixedTechnique && first.techniqueId == technique)) SetTechnique(technique);
+                            if (ImGuiApi.Selectable(technique.value, !mixedTechnique && first.techniqueId == technique)) SetTechnique(technique);
                     }
-                    finally { UI.EndCombo(); }
+                    finally { ImGuiApi.EndCombo(); }
         }
     }
 
@@ -112,11 +112,11 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 if (!Widget.BeginBoundedCombo(keyword.id, mixed ? "Mixed values" : selected)) continue;
                 try
                 {
-                    if (UI.Selectable("None", !mixed && selected == "None")) SetOption(null);
+                    if (ImGuiApi.Selectable("None", !mixed && selected == "None")) SetOption(null);
                     foreach (string option in keyword.options)
-                        if (UI.Selectable(option, !mixed && selected == option)) SetOption(option);
+                        if (ImGuiApi.Selectable(option, !mixed && selected == option)) SetOption(option);
                 }
-                finally { UI.EndCombo(); }
+                finally { ImGuiApi.EndCombo(); }
                 void SetOption(string? next)
                 {
                     foreach (MaterialAsset material in materials.Values)
@@ -166,7 +166,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 }
                 if (!groupOpen) continue;
                 bool mixed = values.Skip(1).Any(value => !value.Equals(values[0]));
-                UI.PushID(property.id.value);
+                ImGuiApi.PushID(property.id.value);
                 try
                 {
                     if (mixed) Widget.Hint(property.displayName + " · Mixed values (editing applies to all selected Materials)");
@@ -177,26 +177,26 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                             foreach (MaterialAsset material in materials.Values)
                                 material.Set(property.id, ShaderPropertyInspector.ApplyEdit(property.type, values[0], value, values[selectedIndex++]));
                         }, edits, readOnly, presentation);
-                    if (mixed && UI.SmallButton("Use First Value for Selection"))
+                    if (mixed && ImGuiApi.SmallButton("Use First Value for Selection"))
                     {
                         foreach (MaterialAsset material in materials.Values) material.Set(property.id, values[0]);
                         owner.ReplaceMany(materials);
                     }
-                    if (UI.SmallButton("Reset Selected Overrides"))
+                    if (ImGuiApi.SmallButton("Reset Selected Overrides"))
                     {
                         foreach (MaterialAsset material in materials.Values)
                             material.ReplaceProperties(material.properties.Where(value => value.id != property.id).ToArray());
                         owner.ReplaceMany(materials);
                     }
                 }
-                finally { UI.PopID(); }
+                finally { ImGuiApi.PopID(); }
             }
-            if (parametersOpen && materials.Values.Any(value => value.properties.Count != 0) && UI.Button("Reset All Selected Overrides"))
+            if (parametersOpen && materials.Values.Any(value => value.properties.Count != 0) && ImGuiApi.Button("Reset All Selected Overrides"))
             {
                 foreach (MaterialAsset material in materials.Values) material.ReplaceProperties([]);
                 owner.ReplaceMany(materials);
             }
-            if (!UI.IsAnyItemActive()) owner.CommitMany(target.assetIds);
+            if (!ImGuiApi.IsAnyItemActive()) owner.CommitMany(target.assetIds);
 
             void SetTechnique(ShaderTechniqueId technique)
             {
@@ -204,7 +204,7 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
                 owner.ReplaceMany(materials);
             }
         }
-        finally { UI.EndDisabled(); UI.PopID(); }
+        finally { ImGuiApi.EndDisabled(); ImGuiApi.PopID(); }
     }
 
     private static bool TryOpenDrafts(
@@ -231,6 +231,6 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
     private sealed class SelectionEdits(MaterialDocuments documents, IReadOnlyDictionary<Guid, MaterialAsset> materials) : IInspectionPropertyEditService
     {
         public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
-        { mutation(); documents.ReplaceMany(materials, !UI.IsAnyItemActive()); return true; }
+        { mutation(); documents.ReplaceMany(materials, !ImGuiApi.IsAnyItemActive()); return true; }
     }
 }

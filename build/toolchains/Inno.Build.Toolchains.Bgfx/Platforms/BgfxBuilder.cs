@@ -9,6 +9,10 @@ internal abstract class BgfxBuilder
     /// </summary>
     public abstract string outputPlatform { get; }
     /// <summary>
+    /// Gets the normalized build-tree fragment that owns artifacts for this host target.
+    /// </summary>
+    public abstract string artifactPathToken { get; }
+    /// <summary>
     /// Gets the native make target used for debug output.
     /// </summary>
     protected abstract string debugMakeTarget { get; }

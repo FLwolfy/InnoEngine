@@ -36,7 +36,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     private bool m_resetPending;
 
     private CompiledRenderGraph? m_activeGraph;
-    private bgfx.Encoder* m_activeEncoder;
+    private bgfx.Encoder m_activeEncoder;
     private ulong m_nextPersistentId = 1;
     private ulong m_nextReadbackId = 1;
     private uint m_backendFrame;
@@ -231,7 +231,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             throw new InvalidOperationException("No BGFX frame is open.");
         }
 
-        if (m_activeGraph is not null || m_activeEncoder is not null)
+        if (m_activeGraph is not null || !m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException("All render graphs and encoders must end before BGFX frame submission.");
         }
@@ -812,7 +812,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     public RenderCommandEncoder BeginPass(CompiledRenderPass pass)
     {
         ArgumentNullException.ThrowIfNull(pass);
-        if (m_activeGraph is null || m_activeEncoder is not null)
+        if (m_activeGraph is null || !m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException("Pass execution is outside a valid BGFX graph scope.");
         }
@@ -823,7 +823,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         ApplyViewTransform(viewId, pass.viewTransform);
         ConfigureViewTarget(viewId, pass);
         m_activeEncoder = bgfx.encoder_begin(false);
-        if (m_activeEncoder is null)
+        if (m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException($"BGFX could not acquire an encoder for pass '{pass.name}'.");
         }
@@ -841,13 +841,13 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     public void EndPass(CompiledRenderPass pass)
     {
         ArgumentNullException.ThrowIfNull(pass);
-        if (m_activeEncoder is null)
+        if (m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException("No BGFX encoder is active.");
         }
 
         bgfx.encoder_end(m_activeEncoder);
-        m_activeEncoder = null;
+        m_activeEncoder = bgfx.Encoder.Null;
     }
 
     /// <summary>
@@ -859,7 +859,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     public void EndGraph(CompiledRenderGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        if (!ReferenceEquals(m_activeGraph, graph) || m_activeEncoder is not null)
+        if (!ReferenceEquals(m_activeGraph, graph) || !m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException("BGFX graph cleanup does not match the active graph state.");
         }
@@ -889,7 +889,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         }
 
         EnsureApiThread();
-        if (m_activeEncoder is not null || m_activeGraph is not null)
+        if (!m_activeEncoder.IsNull || m_activeGraph is not null)
         {
             throw new InvalidOperationException("Cannot dispose BGFX while a render graph or encoder is active.");
         }
@@ -1542,7 +1542,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
 
     private string? GetManagedResourceClosureFailure()
     {
-        if (m_activeEncoder is not null
+        if (!m_activeEncoder.IsNull
             || m_activeGraph is not null
             || m_graphFrameBuffers.Count != 0
             || m_graphTextures.Count != 0
@@ -1597,7 +1597,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     {
         EnsureApiThread();
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (!m_frameOpen || m_activeGraph is not null || m_activeEncoder is not null)
+        if (!m_frameOpen || m_activeGraph is not null || !m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException("Operation requires an open frame before graph execution.");
         }

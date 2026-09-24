@@ -61,7 +61,6 @@ public sealed class ArchitectureSymbolTests
 
     [Theory]
     [InlineData("Inno.Native.Bgfx")]
-    [InlineData("Inno.Native.Bgfx.Tools")]
     [InlineData("Inno.Native.Sdl3")]
     [InlineData("Inno.Native.MiniAudio")]
     public async Task NativePolicyUsesAssemblyIdentityRatherThanSourceTypeNames(string assemblyName)

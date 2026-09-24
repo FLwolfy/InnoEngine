@@ -3,4 +3,44 @@
     <AssemblyMetadata Include="Inno.AssemblyDomain" Value="$(InnoAssemblyDomain)" />
     <AssemblyMetadata Include="Inno.AssemblyScope" Value="$(InnoAssemblyScope)" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <Compile Remove="$(MSBuildProjectDirectory)/Bindings/**/*.cs" />
+    <Compile Remove="$(MSBuildProjectDirectory)/Generated/**/*.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)/Generated/Bindings.cs" Link="Generated/Bindings.cs" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <BindGenConfig>$(MSBuildProjectDirectory)/Bindings/bindgen.json</BindGenConfig>
+    <BindGenToolProject>$(BindGenRoot)/src/BGCS.Tool/BGCS.Tool.csproj</BindGenToolProject>
+    <BindGenDotNetHost Condition="'$(BindGenDotNetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</BindGenDotNetHost>
+    <BindGenDotNetHost Condition="'$(BindGenDotNetHost)' == ''">dotnet</BindGenDotNetHost>
+  </PropertyGroup>
+
+  <Target Name="ValidateBindingGenerator" Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <Error Condition="!Exists('$(BindGenConfig)')" Text="Binding config is missing: $(BindGenConfig)" />
+    <Error Condition="!Exists('$(BindGenToolProject)')" Text="BindGen-CS tool is missing: $(BindGenToolProject). Set BindGenRoot to the BindGen-CS checkout." />
+  </Target>
+
+  <Target Name="BuildBindingExtension" Condition="'$(BindGenGeneratedBindings)' == 'true' and '$(BindGenExtensionProject)' != ''">
+    <MSBuild Projects="$(BindGenExtensionProject)" Targets="Restore;Build" Properties="Configuration=Release;BindGenRoot=$(BindGenRoot)" />
+  </Target>
+
+  <Target Name="GenerateBindings" DependsOnTargets="ValidateBindingGenerator;BuildBindingExtension" Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <Exec Condition="'$(BindGenBridgeConfig)' != ''" Command="&quot;$(BindGenDotNetHost)&quot; run --project &quot;$(BindGenToolProject)&quot; --configuration $(Configuration) -- bridge &quot;$(BindGenBridgeConfig)&quot;" />
+    <Exec Command="&quot;$(BindGenDotNetHost)&quot; run --project &quot;$(BindGenToolProject)&quot; --configuration $(Configuration) -- generate &quot;$(BindGenConfig)&quot;" />
+    <CallTarget Targets="ValidateBindGenBindings" />
+  </Target>
+
+  <Target Name="CheckBindings" DependsOnTargets="ValidateBindingGenerator;BuildBindingExtension;ValidateBindGenBindings" Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <Exec Command="&quot;$(BindGenDotNetHost)&quot; run --project &quot;$(BindGenToolProject)&quot; --configuration $(Configuration) -- diff &quot;$(BindGenConfig)&quot;" />
+  </Target>
+
+  <Target Name="ValidateBindGenBindings" BeforeTargets="CoreCompile" Condition="'$(BindGenGeneratedBindings)' == 'true'">
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/Generated/Bindings.cs')" Text="Generated bindings are missing from '$(MSBuildProjectDirectory)/Generated'. Run dotnet build this project -t:GenerateBindings." />
+    <ItemGroup>
+      <_BindGenExtraSources Include="$(MSBuildProjectDirectory)/Generated/**/*.cs" Exclude="$(MSBuildProjectDirectory)/Generated/Bindings.cs" />
+    </ItemGroup>
+    <Error Condition="'@(_BindGenExtraSources)' != ''" Text="Generated must contain only Bindings.cs: @(_BindGenExtraSources)" />
+  </Target>
 </Project>

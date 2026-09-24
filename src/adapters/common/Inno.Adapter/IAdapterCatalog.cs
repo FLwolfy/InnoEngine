@@ -3,6 +3,8 @@ using Inno.Adapter.Input;
 using Inno.Adapter.Platform;
 using Inno.Adapter.Rendering;
 using Inno.Adapter.Storage;
+using Inno.Adapter.Text;
+using Inno.Adapter.UI;
 
 namespace Inno.Adapter;
 
@@ -35,5 +37,15 @@ public interface IAdapterCatalog
     /// Gets the audio backend factory.
     /// </summary>
     IAudioBackendFactory audio { get; }
+
+    /// <summary>
+    /// Gets the Unicode text backend factory.
+    /// </summary>
+    ITextBackendFactory text { get; }
+
+    /// <summary>
+    /// Gets the retained-mode UI backend factory.
+    /// </summary>
+    IUiBackendFactory ui { get; }
 
 }

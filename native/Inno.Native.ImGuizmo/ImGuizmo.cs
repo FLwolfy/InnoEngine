@@ -1,3 +1,7 @@
+using System.Runtime.CompilerServices;
+
+[assembly: DisableRuntimeMarshalling]
+
 namespace Inno.Native.ImGuizmo
 {
     using BGCS.Runtime;
@@ -43,15 +47,5 @@ public static unsafe partial class ImGuizmo
             InitApi(new NativeLibraryContext(handle));
         }
 
-        /// <summary>
-        /// Retrieves the requested library name value from current authoritative state.
-        /// </summary>
-        /// <returns>
-        /// The validated text representation owned by the caller.
-        /// </returns>
-public static string GetLibraryName()
-        {
-            return "cimguizmo";
-        }
     }
 }

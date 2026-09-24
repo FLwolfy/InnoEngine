@@ -18,10 +18,10 @@ Shell
 | API | 语义 |
 | --- | --- |
 | `EngineSessionComposition` | 显式绑定 session、adapters、selection、input、artifacts、audioSettings 和可选 audioOverride；不查找隐藏全局状态 |
-| `DefaultEngine.CreateSessionSubsystems(context)` | 生成 Input、Storage、Animation、Audio 的 factory 集合；Scene 模拟由 RuntimeSession 自身的 Scene bridge 加入 |
+| `DefaultEngine.CreateSessionSubsystems(context)` | 生成 Input、Storage、Animation、Audio、Text、UI 的 factory 集合；Scene 模拟由 RuntimeSession 自身的 Scene bridge 加入 |
 | `DefaultEngine.CreateHostSubsystems(renderRuntime)` | 生成 Host 范围的 Rendering factory；Editor 与 Play 不各自提交一次同一 GPU device frame |
 
-内部 `Audio/`、`Input/`、`Storage/`、`Animation/`、`Rendering/` 文件各声明本领域装配。Audio 初始化失败明确报告 muted，Animation 创建 TypeCatalog-driven binding runtime；Reporter 和辅助 registration 转交 context.resources，最终由 pipeline 逆序释放。
+内部 `Audio/`、`Input/`、`Storage/`、`Animation/`、`Text/`、`UI/`、`Rendering/` 文件各声明本领域装配。UI 依赖 Input 和 Text；Audio 初始化失败明确报告 muted，Animation 创建 TypeCatalog-driven binding runtime；Reporter 和辅助 registration 转交 context.resources，最终由 pipeline 逆序释放。
 
 Session 级 Reporter 的 source ID 必须包含实际 owner 范围。Animation 使用 `RuntimeSubsystemContext.identities.domainId`，因此共用一个 DiagnosticHub 的 Edit、Play 和其他并存 Session 不会互相撤销 Reporter。这个 domain ID 只区分运行期诊断所有权，不写入资产或 History。相同 source 的新 Reporter 仍会撤销旧代，过期发布仍明确失败；不能通过吞掉异常或取消代际检查来处理会话冲突。资源顺序保持为先创建 Reporter、再创建借用它的 binding owner，退出时先释放 bindings、最后释放 Reporter。
 

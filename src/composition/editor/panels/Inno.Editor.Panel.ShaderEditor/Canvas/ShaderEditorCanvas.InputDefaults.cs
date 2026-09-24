@@ -3,7 +3,7 @@ using System.Linq;
 using Inno.Core.Graphs;
 using Inno.Rendering.Shaders;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
@@ -13,7 +13,7 @@ internal sealed partial class ShaderEditorCanvas
     {
         var endpoint = new GraphEndpoint(node.id, new(port.id));
         GraphEdgeRecord? edge = Controller.document.edges.FirstOrDefault(value => value.input == endpoint);
-        UI.PushID(port.id);
+        ImGuiApi.PushID(port.id);
         try
         {
             if (edge is not null)
@@ -50,7 +50,7 @@ internal sealed partial class ShaderEditorCanvas
         }
         finally
         {
-            UI.PopID();
+            ImGuiApi.PopID();
         }
     }
 

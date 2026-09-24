@@ -19,3 +19,12 @@
 [submodule "extern/miniaudio"]
 	path = extern/miniaudio
 	url = https://github.com/mackron/miniaudio.git
+[submodule "extern/RmlUi"]
+	path = extern/RmlUi
+	url = https://github.com/mikke89/RmlUi.git
+[submodule "extern/freetype"]
+	path = extern/freetype
+	url = https://github.com/freetype/freetype.git
+[submodule "extern/harfbuzz"]
+	path = extern/harfbuzz
+	url = https://github.com/harfbuzz/harfbuzz.git

@@ -5,6 +5,7 @@ using Inno.Editor.Inspection;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Interactions;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
 using Inno.Adapter.Presentation.ImGui;
@@ -17,7 +18,7 @@ namespace Inno.Editor.Panel.Inspector;
 /// </summary>
 internal sealed class InspectorTargetHeader
 {
-    private const nuint C_NAME_BUFFER_SIZE = 512;
+    private const int C_NAME_BUFFER_SIZE = 512;
 
     private readonly InspectorLockControl m_lock = new();
 
@@ -99,7 +100,7 @@ internal sealed class InspectorTargetHeader
         if (nameSetter is not null)
         {
             NativeImGui.SetNextItemWidth(nameWidth);
-            if (NativeImGui.InputText(
+            if (EditorImGui.InputText(
                     $"##inspector_target_name_{GetTargetId(context.target)}",
                     ref name,
                     C_NAME_BUFFER_SIZE,

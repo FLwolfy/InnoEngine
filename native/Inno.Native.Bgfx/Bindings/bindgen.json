@@ -1,0 +1,87 @@
+{
+  "BaseConfig": {
+    "Url": "file://bgfx-macro-enums.json"
+  },
+  "Preset": "host-c,c-library,opaque-callbacks",
+  "Namespace": "Inno.Native.Bgfx",
+  "ApiName": "bgfx",
+  "LibName": "bgfx-shared-lib",
+  "BoolType": "Byte",
+  "ParseMacros": true,
+  "GenerateDelegates": false,
+  "NestGeneratedTypesInApi": true,
+  "EmitLibraryNameConstant": false,
+  "EntryFiles": [
+    "../../../extern/bgfx/include/bgfx/c99/bgfx.h"
+  ],
+  "AllowedHeaders": [
+    "../../../extern/bgfx/include/bgfx/c99/bgfx.h",
+    "../../../extern/bgfx/include/bgfx/defines.h"
+  ],
+  "IncludeFolders": [
+    "../../../extern/bgfx/include",
+    "../../../extern/bx/include",
+    "../../../extern/bx/include/compat/osx"
+  ],
+  "OutputPath": "../Generated",
+  "MarshallingMappings": {
+    "bgfx_encoder_begin": {
+      "Return": {
+        "Ownership": "Owned", "AllocatorKind": "NativeFunction",
+        "AllocatorFunction": "bgfx_encoder_begin", "CleanupFunction": "bgfx_encoder_end"
+      }
+    },
+    "bgfx_vertex_layout_add": {
+      "Return": { "Ownership": "Borrowed" }
+    }
+  },
+  "FunctionPrefixes": [
+    "bgfx_"
+  ],
+  "IgnoredFunctions": [
+    "bgfx_dbg_text_printf"
+  ],
+  "FunctionNamingConvention": "Unknown",
+  "MemberNamingConvention": "Unknown",
+  "NameMappings": {
+    "Bgfx": ""
+  },
+  "TypeMappings": {
+    "bgfx_allocator_interface_s": "AllocatorInterface",
+    "bgfx_allocator_vtbl_s": "AllocatorVtbl",
+    "bgfx_attachment_s": "Attachment",
+    "bgfx_callback_interface_s": "CallbackInterface",
+    "bgfx_callback_vtbl_s": "CallbackVtbl",
+    "bgfx_caps_gpu_s": "CapsGpu",
+    "bgfx_caps_limits_s": "CapsLimits",
+    "bgfx_caps_s": "Caps",
+    "bgfx_dynamic_index_buffer_handle_s": "DynamicIndexBufferHandle",
+    "bgfx_dynamic_vertex_buffer_handle_s": "DynamicVertexBufferHandle",
+    "bgfx_encoder_stats_s": "EncoderStats",
+    "bgfx_frame_buffer_handle_s": "FrameBufferHandle",
+    "bgfx_index_buffer_handle_s": "IndexBufferHandle",
+    "bgfx_indirect_buffer_handle_s": "IndirectBufferHandle",
+    "bgfx_init_limits_s": "InitLimits",
+    "bgfx_init_s": "Init",
+    "bgfx_instance_data_buffer_s": "InstanceDataBuffer",
+    "bgfx_internal_data_s": "InternalData",
+    "bgfx_memory_s": "Memory",
+    "bgfx_occlusion_query_handle_s": "OcclusionQueryHandle",
+    "bgfx_platform_data_s": "PlatformData",
+    "bgfx_program_handle_s": "ProgramHandle",
+    "bgfx_resolution_s": "Resolution",
+    "bgfx_shader_handle_s": "ShaderHandle",
+    "bgfx_stats_s": "Stats",
+    "bgfx_texture_handle_s": "TextureHandle",
+    "bgfx_texture_info_s": "TextureInfo",
+    "bgfx_transform_s": "Transform",
+    "bgfx_transient_index_buffer_s": "TransientIndexBuffer",
+    "bgfx_transient_vertex_buffer_s": "TransientVertexBuffer",
+    "bgfx_uniform_handle_s": "UniformHandle",
+    "bgfx_uniform_info_s": "UniformInfo",
+    "bgfx_vertex_buffer_handle_s": "VertexBufferHandle",
+    "bgfx_vertex_layout_handle_s": "VertexLayoutHandle",
+    "bgfx_vertex_layout_s": "VertexLayout",
+    "bgfx_view_stats_s": "ViewStats"
+  }
+}

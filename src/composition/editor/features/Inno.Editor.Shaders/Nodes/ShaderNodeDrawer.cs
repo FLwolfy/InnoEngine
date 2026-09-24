@@ -3,7 +3,7 @@ using Inno.Core.Graphs;
 using Inno.Core.Serialization;
 using Inno.Editor.Rendering;
 using Inno.Editor.Inspection;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Shaders;
 
@@ -136,7 +136,7 @@ public sealed class ShaderNodeDrawContext
         T value = Read(key, defaultValue);
         m_inspection.properties.DrawValue(m_inspection.editorContext, m_node, "shader.node." + key, label, typeof(T),
             () => value, edited => value = (T)edited!, new Edits(mutation =>
-            { mutation(); Write(key, value, UI.IsAnyItemActive()); }), m_readOnly);
+            { mutation(); Write(key, value, ImGuiApi.IsAnyItemActive()); }), m_readOnly);
     }
 
     private sealed class Edits(Action<Action> apply) : IInspectionPropertyEditService

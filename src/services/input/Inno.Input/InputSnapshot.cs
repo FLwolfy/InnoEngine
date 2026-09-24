@@ -18,6 +18,7 @@ public sealed class InputSnapshot
     private readonly HashSet<MouseButton> m_mouseButtonsDown;
     private readonly HashSet<MouseButton> m_mouseButtonsPressed;
     private readonly HashSet<MouseButton> m_mouseButtonsReleased;
+    private readonly string[] m_textInput;
 
     /// <summary>
     /// Creates a complete immutable input snapshot.
@@ -52,6 +53,12 @@ public sealed class InputSnapshot
     /// <param name="scrollDelta">
     /// Wheel movement accumulated since the previous snapshot.
     /// </param>
+    /// <param name="modifiers">
+    /// Active keyboard modifiers at the frame boundary.
+    /// </param>
+    /// <param name="textInput">
+    /// Ordered Unicode text commits captured since the previous snapshot.
+    /// </param>
     public InputSnapshot(
         long frameIndex,
         IEnumerable<KeyCode>? keysDown = null,
@@ -62,7 +69,9 @@ public sealed class InputSnapshot
         IEnumerable<MouseButton>? mouseButtonsReleased = null,
         Vector2 mousePosition = default,
         Vector2 mouseDelta = default,
-        Vector2 scrollDelta = default)
+        Vector2 scrollDelta = default,
+        KeyModifier modifiers = KeyModifier.None,
+        IEnumerable<string>? textInput = null)
     {
         if (frameIndex < 0)
             throw new ArgumentOutOfRangeException(nameof(frameIndex));
@@ -73,9 +82,11 @@ public sealed class InputSnapshot
         m_mouseButtonsDown = Copy(mouseButtonsDown);
         m_mouseButtonsPressed = Copy(mouseButtonsPressed);
         m_mouseButtonsReleased = Copy(mouseButtonsReleased);
+        m_textInput = textInput?.Where(static value => !string.IsNullOrEmpty(value)).ToArray() ?? [];
         this.mousePosition = mousePosition;
         this.mouseDelta = mouseDelta;
         this.scrollDelta = scrollDelta;
+        this.modifiers = modifiers;
     }
 
     /// <summary>
@@ -102,6 +113,36 @@ public sealed class InputSnapshot
     /// Gets wheel movement accumulated since the previous snapshot.
     /// </summary>
     public Vector2 scrollDelta { get; }
+
+    /// <summary>
+    /// Gets the active keyboard modifier mask at this frame boundary.
+    /// </summary>
+    public KeyModifier modifiers { get; }
+
+    /// <summary>
+    /// Gets the ordered UTF-8 text commits captured during this frame.
+    /// </summary>
+    public IReadOnlyList<string> textInput => m_textInput;
+
+    /// <summary>
+    /// Gets the physical keys newly pressed during this frame.
+    /// </summary>
+    public IReadOnlyCollection<KeyCode> keysPressed => m_keysPressed;
+
+    /// <summary>
+    /// Gets the physical keys newly released during this frame.
+    /// </summary>
+    public IReadOnlyCollection<KeyCode> keysReleased => m_keysReleased;
+
+    /// <summary>
+    /// Gets the pointer buttons newly pressed during this frame.
+    /// </summary>
+    public IReadOnlyCollection<MouseButton> mouseButtonsPressed => m_mouseButtonsPressed;
+
+    /// <summary>
+    /// Gets the pointer buttons newly released during this frame.
+    /// </summary>
+    public IReadOnlyCollection<MouseButton> mouseButtonsReleased => m_mouseButtonsReleased;
 
     /// <summary>
     /// Determines whether a key is currently held.

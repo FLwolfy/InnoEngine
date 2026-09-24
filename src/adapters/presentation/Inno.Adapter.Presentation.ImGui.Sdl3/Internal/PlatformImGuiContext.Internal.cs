@@ -31,12 +31,12 @@ public sealed partial class PlatformImGuiContext
     private readonly ImGuiContextPtr m_context;
     private readonly PlatformImGuiViewportBackend? m_viewports;
     private readonly IPlatformImGuiRenderer m_renderer;
-    private readonly Dictionary<ImGuiMouseCursor, SDLCursorPtr> m_cursors = [];
+    private readonly Dictionary<ImGuiMouseCursor, SDLCursor> m_cursors = [];
     private readonly HashSet<uint> m_pendingLiveResizeWindowIds = [];
     private readonly Stopwatch m_frameTimer = Stopwatch.StartNew();
 
     private ImGuiMouseCursor m_currentCursor = ImGuiMouseCursor.None;
-    private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
+    private SDLWindow m_textInputWindow = SDLWindow.Null;
     private TimeSpan m_lastFrameTime;
     private TimeSpan m_lastLiveResizeLockTime;
     private IntPtr m_iniFilename;
@@ -186,7 +186,7 @@ public sealed partial class PlatformImGuiContext
         }
 
         ImGuiNative.Image(
-            new ImTextureRef(texId: new ImTextureID(texture.value)),
+            new ImTextureRef(texID: new ImTextureID(texture.value)),
             size,
             uv0,
             uv1);
@@ -215,7 +215,7 @@ public sealed partial class PlatformImGuiContext
             return false;
         }
 
-        settings = ImGuiNative.SaveIniSettingsToMemoryS();
+        settings = ImGuiNative.SaveIniSettingsToMemory() ?? string.Empty;
         io.WantSaveIniSettings = false;
         return true;
     }
@@ -797,7 +797,7 @@ public sealed partial class PlatformImGuiContext
         {
             var textInputWindow = m_textInputWindow.IsNull ? m_window.GetSdlWindow() : m_textInputWindow;
             _ = SDL.StopTextInput(textInputWindow);
-            m_textInputWindow = SDLWindowPtr.Null;
+            m_textInputWindow = SDLWindow.Null;
             m_textInputActive = false;
         }
 
@@ -840,7 +840,7 @@ public sealed partial class PlatformImGuiContext
     {
         var windowWidth = 0;
         var windowHeight = 0;
-        SDLWindowPtr sdlWindow = m_window.GetSdlWindow();
+        SDLWindow sdlWindow = m_window.GetSdlWindow();
         SDL.GetWindowSize(sdlWindow, ref windowWidth, ref windowHeight);
 
         var pixelWidth = 0;
@@ -882,7 +882,7 @@ public sealed partial class PlatformImGuiContext
         {
             var textInputWindow = m_textInputWindow.IsNull ? targetWindow : m_textInputWindow;
             _ = SDL.StopTextInput(textInputWindow);
-            m_textInputWindow = SDLWindowPtr.Null;
+            m_textInputWindow = SDLWindow.Null;
             m_textInputActive = false;
         }
     }
@@ -893,7 +893,7 @@ public sealed partial class PlatformImGuiContext
     }
 
     private static unsafe ImFontPtr LoadFont(ImFontAtlasPtr fonts, string filePath, float fontSizePixels) =>
-        fonts.AddFontFromFileTTF(filePath, fontSizePixels);
+        fonts.AddFontFromFileTTF(filePath, fontSizePixels, ImFontConfigPtr.Null, null);
 
     private static unsafe ImFontPtr LoadDefaultFont(ImFontAtlasPtr fonts) => fonts.AddFontDefault();
 
@@ -902,7 +902,7 @@ public sealed partial class PlatformImGuiContext
 
     private static unsafe IntPtr GetDrawDataAddress(ImDrawDataPtr drawData) => new(drawData);
 
-    private SDLWindowPtr ResolveTextInputWindow()
+    private SDLWindow ResolveTextInputWindow()
     {
         var keyboardFocus = SDL.GetKeyboardFocus();
         if (keyboardFocus.IsNull)
@@ -919,7 +919,7 @@ public sealed partial class PlatformImGuiContext
         return m_window.GetSdlWindow();
     }
 
-    private static void UpdateMouseData(ImGuiIOPtr io, SDLWindowPtr window)
+    private static void UpdateMouseData(ImGuiIOPtr io, SDLWindow window)
     {
         // Mouse position is fed from SDL mouse events (per-window coordinates).
         // Polling here would overwrite secondary viewport coordinates with the wrong window space.
@@ -1018,7 +1018,7 @@ public sealed partial class PlatformImGuiContext
             return position;
         }
 
-        SDLWindowPtr window = SDL.GetWindowFromID(windowId);
+        SDLWindow window = SDL.GetWindowFromID(windowId);
         if (window.IsNull)
         {
             return position;
@@ -1116,7 +1116,7 @@ public sealed partial class PlatformImGuiContext
         _ = SDL.ShowCursor();
     }
 
-    private SDLCursorPtr GetOrCreateCursor(ImGuiMouseCursor cursor)
+    private SDLCursor GetOrCreateCursor(ImGuiMouseCursor cursor)
     {
         if (m_cursors.TryGetValue(cursor, out var cachedCursor))
         {

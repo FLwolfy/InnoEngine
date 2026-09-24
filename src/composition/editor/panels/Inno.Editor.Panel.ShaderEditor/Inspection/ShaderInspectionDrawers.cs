@@ -7,7 +7,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.Inspection;
 using Inno.Editor.Shaders;
 using Inno.Rendering;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.ShaderEditor;
@@ -28,7 +28,7 @@ internal sealed class ShaderSourceDrawer(IInspectionIconProvider<AssetFileEntry>
             if (documents!.TryOpen(target, out ShaderEditorDocuments.Draft draft))
                 new ShaderEditorCanvas(documents, draft).DrawInspector(context, []);
             else
-                UI.TextDisabled("Waiting for Shader asset import…");
+                ImGuiApi.TextDisabled("Waiting for Shader asset import…");
         }
     }
 }
@@ -72,11 +72,11 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null) return;
         if (!documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) || info is null
             || !documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry))
-        { UI.TextWrapped("Shader source unavailable. Selection identities are retained."); return; }
+        { ImGuiApi.TextWrapped("Shader source unavailable. Selection identities are retained."); return; }
         if (documents.TryOpen(entry, out ShaderEditorDocuments.Draft draft))
             new ShaderEditorCanvas(documents, draft).DrawInspector(context, target.nodes);
         else
-            UI.TextDisabled("Waiting for Shader asset import…");
+            ImGuiApi.TextDisabled("Waiting for Shader asset import…");
     }
 }
 
@@ -95,6 +95,6 @@ internal sealed class ShaderAssetDrawer(IInspectionIconProvider<AssetFileEntry> 
         if (documents.TryOpen(entry, out ShaderEditorDocuments.Draft draft))
             new ShaderEditorCanvas(documents, draft).DrawInspector(context, []);
         else
-            UI.TextDisabled("Waiting for Shader asset import…");
+            ImGuiApi.TextDisabled("Waiting for Shader asset import…");
     }
 }

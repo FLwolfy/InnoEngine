@@ -5,6 +5,14 @@ namespace Inno.Native.Sdl3.Tests;
 
 public sealed class Sdl3InitTests
 {
+    [Fact]
+    public unsafe void GeneratedFlagWidthsMatchSdlHeaders()
+    {
+        Assert.Equal(8, sizeof(SDLWindowFlags));
+        Assert.Equal(4, sizeof(SDLMouseButtonFlags));
+        Assert.Equal(2, sizeof(SDLKeymod));
+    }
+
     private readonly ITestOutputHelper output;
 
     public Sdl3InitTests(ITestOutputHelper output)
@@ -18,12 +26,11 @@ public sealed class Sdl3InitTests
         var initResult = SDL.Init(SDLInitFlags.Events);
         if (!initResult)
         {
-            var error = SDL.GetErrorAsException();
-            var message = error?.Message ?? "SDL.Init returned false.";
+            var message = SDL.GetError() ?? "SDL.Init returned false.";
             Assert.True(initResult, message);
         }
 
-        var platform = SDL.GetPlatformS();
+        var platform = SDL.GetPlatform();
         output.WriteLine($"SDL.GetPlatform: {platform}");
         Assert.False(string.IsNullOrWhiteSpace(platform));
 

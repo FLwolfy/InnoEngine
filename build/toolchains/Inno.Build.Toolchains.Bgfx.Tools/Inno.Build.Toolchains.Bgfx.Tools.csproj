@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx.Tools\Inno.Native.Bgfx.Tools.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\pipeline\Inno.Build\Inno.Build.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />

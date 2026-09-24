@@ -7,7 +7,7 @@ using Inno.Editor.Assets;
 using Inno.Editor.Inspection;
 using Inno.Rendering;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Rendering;
 
@@ -61,14 +61,14 @@ internal static class PipelineInspector
     internal static void DrawHeader(InspectionDrawContext context, PipelineDocuments documents, Guid id)
     {
         AssetDraftDocuments<RenderPipelineAsset>.Draft draft = documents.drafts.GetDraft(id);
-        UI.BeginDisabled(draft.readOnly);
+        ImGuiApi.BeginDisabled(draft.readOnly);
         try
         {
-            if (UI.Button("Save")) _ = context.interactions.documents.Save(draft.documentId);
-            UI.SameLine();
-            if (UI.Button("Revert")) _ = context.interactions.documents.Revert(draft.documentId);
+            if (ImGuiApi.Button("Save")) _ = context.interactions.documents.Save(draft.documentId);
+            ImGuiApi.SameLine();
+            if (ImGuiApi.Button("Revert")) _ = context.interactions.documents.Revert(draft.documentId);
         }
-        finally { UI.EndDisabled(); }
+        finally { ImGuiApi.EndDisabled(); }
     }
 
     internal static void Draw(InspectionDrawContext context, PipelineDocuments documents, Guid id)
@@ -77,7 +77,7 @@ internal static class PipelineInspector
         documents.drafts.TouchInspection(id);
         RenderPipelineAsset pipeline = documents.Read(id);
         var edits = new DraftEdits(documents, id, pipeline);
-        UI.PushID(id.ToString("N"));
+        ImGuiApi.PushID(id.ToString("N"));
         try
         {
             if (Widget.SectionHeader("Render Pipeline", "This source is the configuration authority. Unsaved settings do not change Scene, Game or Player content."))
@@ -94,7 +94,7 @@ internal static class PipelineInspector
             for (int index = 0; featuresOpen && index < features.Length; index++)
             {
                 int slot = index;
-                UI.PushID(slot);
+                ImGuiApi.PushID(slot);
                 try
                 {
                     RenderFeatureConfiguration feature = features[slot];
@@ -103,26 +103,26 @@ internal static class PipelineInspector
                         value => { features[slot].enabled = (bool)value!; pipeline.features = features; }, edits, draft.readOnly);
                     DrawSettings("pipeline.features." + slot, feature.state, value =>
                     { features[slot].state = value; pipeline.features = features; });
-                    UI.BeginDisabled(draft.readOnly);
+                    ImGuiApi.BeginDisabled(draft.readOnly);
                     try
                     {
-                        if (slot > 0 && UI.SmallButton("Move Up"))
+                        if (slot > 0 && ImGuiApi.SmallButton("Move Up"))
                         { (features[slot - 1], features[slot]) = (features[slot], features[slot - 1]); pipeline.features = features; documents.Replace(id, pipeline); break; }
                         if (slot + 1 < features.Length)
                         {
-                            if (slot > 0) UI.SameLine();
-                            if (UI.SmallButton("Move Down"))
+                            if (slot > 0) ImGuiApi.SameLine();
+                            if (ImGuiApi.SmallButton("Move Down"))
                             { (features[slot + 1], features[slot]) = (features[slot], features[slot + 1]); pipeline.features = features; documents.Replace(id, pipeline); break; }
                         }
                     }
-                    finally { UI.EndDisabled(); }
+                    finally { ImGuiApi.EndDisabled(); }
                 }
-                finally { UI.PopID(); }
+                finally { ImGuiApi.PopID(); }
             }
             if (featuresOpen && features.Length == 0) Widget.Hint("No additional features");
-            if (!UI.IsAnyItemActive()) documents.Commit(id);
+            if (!ImGuiApi.IsAnyItemActive()) documents.Commit(id);
         }
-        finally { UI.PopID(); }
+        finally { ImGuiApi.PopID(); }
 
         void DrawSettings(string path, SerializedRenderExtensionState state, Action<SerializedRenderExtensionState> assign)
         {
@@ -142,7 +142,7 @@ internal static class PipelineInspector
     private sealed class DraftEdits(PipelineDocuments documents, Guid id, RenderPipelineAsset pipeline) : IInspectionPropertyEditService
     {
         public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
-        { mutation(); documents.Replace(id, pipeline, !UI.IsAnyItemActive()); return true; }
+        { mutation(); documents.Replace(id, pipeline, !ImGuiApi.IsAnyItemActive()); return true; }
     }
 
     private sealed class SettingsEdits(DraftEdits edits, Action capture) : IInspectionPropertyEditService

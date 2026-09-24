@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Inno.Build.Toolchains.Bgfx.Platforms;
@@ -14,7 +15,6 @@ internal static class BgfxNativeBuild
         BgfxBuildConstants.BX_DIR_NAME,
         BgfxBuildConstants.BIMG_DIR_NAME,
     };
-    private static readonly string[] BUILD_PATH_TOKENS = { "/bin/", "/lib/" };
     private static readonly string[] SHARED_EXTENSIONS = { ".dll", ".dylib", ".so" };
 
     /// <summary>
@@ -47,7 +47,7 @@ internal static class BgfxNativeBuild
 
             builder.Build(bgfxDir, options.config, options.makeTargetOverride);
 
-            CopyArtifacts(bgfxDir, outputDir, options.includeStatic, options.config);
+            CopyArtifacts(bgfxDir, outputDir, builder, options.includeStatic, options.config);
             Console.WriteLine($"bgfx build complete. Output: {outputDir}");
             return 0;
         }
@@ -58,20 +58,52 @@ internal static class BgfxNativeBuild
         }
     }
 
-    private static void CopyArtifacts(string bgfxDir, string outputDir, bool includeStatic, string config)
+    private static void CopyArtifacts(
+        string bgfxDir,
+        string outputDir,
+        BgfxBuilder builder,
+        bool includeStatic,
+        string config)
     {
         var extensions = includeStatic
             ? SHARED_EXTENSIONS.Concat(new[] { ".a", ".lib" }).ToArray()
             : SHARED_EXTENSIONS;
 
+        DeleteExistingConfigurationArtifacts(outputDir, extensions, config);
+
         var options = new BuildArtifactOptions(
             BgfxBuildConstants.BUILD_DIR_NAME,
             LIBRARY_TOKENS,
             extensions,
-            BUILD_PATH_TOKENS,
+            new[] { builder.artifactPathToken },
             ToolchainEnvironment.NormalizeOutputName);
 
         BuildArtifactCopier.CopyArtifacts(bgfxDir, outputDir, config, options);
+    }
+
+    private static void DeleteExistingConfigurationArtifacts(
+        string outputDir,
+        IReadOnlyCollection<string> extensions,
+        string config)
+    {
+        if (!Directory.Exists(outputDir))
+        {
+            return;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(outputDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            if (!extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (Path.GetFileNameWithoutExtension(path)
+                .EndsWith($"-{config}", StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
 }

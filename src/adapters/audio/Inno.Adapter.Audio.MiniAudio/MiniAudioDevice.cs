@@ -65,7 +65,7 @@ public sealed unsafe class MiniAudioDevice : AudioDevice, IAudioDevice
             config.SampleRate = checked((uint)m_options.sampleRate);
             config.ListenerCount = checked((uint)m_options.listenerCount);
             config.NoDevice = m_options.noDevice ? 1u : 0u;
-            MaResult result = NativeApi.EngineInit(in config, new MaEnginePtr(m_engine));
+            MaResult result = NativeApi.EngineInit(new MaEngineConfigPtr(&config), new MaEnginePtr(m_engine));
             if (result != MaResult.Success)
                 throw new InvalidOperationException($"MiniAudio engine initialization failed with result '{result}'.");
 
@@ -653,7 +653,7 @@ public sealed unsafe class MiniAudioDevice : AudioDevice, IAudioDevice
                 decay);
             MaResult result = NativeApi.DelayNodeInit(
                 NativeApi.EngineGetNodeGraph(new MaEnginePtr(m_engine)),
-                in config,
+                new MaDelayNodeConfigPtr(&config),
                 MaAllocationCallbacksPtr.Null,
                 new MaDelayNodePtr(node));
             if (result != MaResult.Success)
@@ -687,7 +687,7 @@ public sealed unsafe class MiniAudioDevice : AudioDevice, IAudioDevice
             coefficients.a2);
         MaResult biquadResult = NativeApi.BiquadNodeInit(
             NativeApi.EngineGetNodeGraph(new MaEnginePtr(m_engine)),
-            in biquadConfig,
+            new MaBiquadNodeConfigPtr(&biquadConfig),
             MaAllocationCallbacksPtr.Null,
             new MaBiquadNodePtr(biquad));
         if (biquadResult != MaResult.Success)
@@ -755,9 +755,9 @@ public sealed unsafe class MiniAudioDevice : AudioDevice, IAudioDevice
             ulong read = 0;
             MaResult result = NativeApi.EngineReadPcmFrames(
                 new MaEnginePtr(m_engine),
-                (nint)m_processBuffer,
+                m_processBuffer,
                 requested,
-                ref read);
+                &read);
             if (result != MaResult.Success)
             {
                 m_state = AudioDeviceState.Lost;

@@ -1,9 +1,0 @@
-{
-  "Configs": [
-    "cimgui.json",
-    "imguizmo.json",
-    "miniaudio.json",
-    "sdl3.json",
-    "bgfx.json"
-  ]
-}

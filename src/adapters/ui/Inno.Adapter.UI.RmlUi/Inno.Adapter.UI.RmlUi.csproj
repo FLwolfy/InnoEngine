@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Adapter.UI\Inno.Adapter.UI.csproj" />
+    <ProjectReference Include="..\..\..\services\ui\Inno.UI\Inno.UI.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
+    <ProjectReference Include="..\..\..\..\native\Inno.Native.UI\Inno.Native.UI.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

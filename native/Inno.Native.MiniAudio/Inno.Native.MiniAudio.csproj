@@ -4,11 +4,13 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <BindGenGeneratedBindings>true</BindGenGeneratedBindings>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Native.LibraryLoading\Inno.Native.LibraryLoading.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="$(BGCSRuntimeProject)" Condition="'$(BGCSRuntimeProject)' != ''" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />
+    <PackageReference Include="BGCS.Runtime" Version="1.0.1" Condition="'$(BGCSRuntimeProject)' == ''" />
   </ItemGroup>
 </Project>

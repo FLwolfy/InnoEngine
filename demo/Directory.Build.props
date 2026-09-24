@@ -1,8 +1,0 @@
-<Project>
-  <PropertyGroup Condition="'$(InnoAssemblyDomain)' == ''">
-    <InnoAssemblyDomain>InnoInternal</InnoAssemblyDomain>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(InnoAssemblyScope)' == ''">
-    <InnoAssemblyScope>Runtime</InnoAssemblyScope>
-  </PropertyGroup>
-</Project>

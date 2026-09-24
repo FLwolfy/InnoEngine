@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 
 using Inno.Native.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -20,7 +21,7 @@ namespace Inno.Editor.Inspection;
 [PropertyDrawer(typeof(decimal))]
 internal sealed class NumericPropertyDrawer : IPropertyDrawer
 {
-    private const nuint C_BUFFER_SIZE = 128;
+    private const int C_BUFFER_SIZE = 128;
     private const string C_TEXT_STATE = "numeric";
 
     /// <summary>
@@ -69,12 +70,10 @@ internal sealed class NumericPropertyDrawer : IPropertyDrawer
             return;
         }
 
-        if (!context.TryGetTextState(C_TEXT_STATE, out string? text))
-        {
-            text = Convert.ToString(rawValue, CultureInfo.InvariantCulture) ?? "0";
-        }
+        _ = context.TryGetTextState(C_TEXT_STATE, out string? text);
+        text ??= Convert.ToString(rawValue, CultureInfo.InvariantCulture) ?? "0";
 
-        if (NativeImGui.InputText(
+        if (EditorImGui.InputText(
                 $"##{context.path}",
                 ref text,
                 C_BUFFER_SIZE,

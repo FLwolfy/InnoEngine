@@ -240,8 +240,7 @@ _pkginfo.txt
 !?*.[Cc]ache/
 
 # Native binding generation scratch output
-/native/bindings/.scratch/
-/native/bindings/.bindgen-cache/
+**/.bindgen-cache/
 
 # Others
 ClientBin/

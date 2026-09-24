@@ -10,6 +10,8 @@
     <ProjectReference Include="../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../default/Inno.Engine.Default/Inno.Engine.Default.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\adapters\common\Inno.Adapter\Inno.Adapter.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\adapters\text\Inno.Adapter.Text\Inno.Adapter.Text.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\adapters\ui\Inno.Adapter.UI\Inno.Adapter.UI.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\adapters\default\Inno.Adapter.Default\Inno.Adapter.Default.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\shell\Inno.Shell\Inno.Shell.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\content\animation\Inno.Animation.Runtime\Inno.Animation.Runtime.csproj" PrivateAssets="compile" />
@@ -26,6 +28,10 @@
     <ProjectReference Include="..\..\..\content\references\Inno.References\Inno.References.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\text\Inno.Text\Inno.Text.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\text\Inno.Text.Runtime\Inno.Text.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\ui\Inno.UI\Inno.UI.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\ui\Inno.UI.Runtime\Inno.UI.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\runtime\engine\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\content\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\services\storage\Inno.Storage.Runtime\Inno.Storage.Runtime.csproj" PrivateAssets="compile" />

@@ -9,7 +9,7 @@ namespace Inno.Adapter.Platform.Sdl3;
 /// </summary>
 public sealed partial class Sdl3PlatformWindow
 {
-    private SDLWindowPtr m_window;
+    private SDLWindow m_window;
     private readonly uint m_windowId;
     private readonly string m_title;
     private readonly bool m_ownsNativeWindow;
@@ -22,14 +22,14 @@ public sealed partial class Sdl3PlatformWindow
     private readonly PlatformNativeHandles m_nativeHandles;
     private readonly nint m_sdlWindowHandle;
     private bool m_disposed;
-    internal SDLWindowPtr sdlWindow => m_window;
+    internal SDLWindow sdlWindow => m_window;
 
-    internal unsafe Sdl3PlatformWindow(SDLWindowPtr window, string title)
+    internal unsafe Sdl3PlatformWindow(SDLWindow window, string title)
         : this(window, title, ownsNativeWindow: true)
     {
     }
 
-    internal unsafe Sdl3PlatformWindow(SDLWindowPtr window, string title, bool ownsNativeWindow)
+    internal unsafe Sdl3PlatformWindow(SDLWindow window, string title, bool ownsNativeWindow)
     {
         m_window = window;
         m_sdlWindowHandle = (nint)window.Handle;
@@ -102,13 +102,13 @@ public sealed partial class Sdl3PlatformWindow
             SDL.DestroyWindow(m_window);
         }
 
-        m_window = SDLWindowPtr.Null;
+        m_window = SDLWindow.Null;
         m_isClosed = true;
         m_isFocused = false;
         m_disposed = true;
     }
 
-    private static unsafe PlatformNativeHandles GetNativeHandles(SDLWindowPtr window)
+    private static unsafe PlatformNativeHandles GetNativeHandles(SDLWindow window)
     {
         var props = SDL.GetWindowProperties(window);
         var kind = PlatformNativeHandleKind.Unknown;

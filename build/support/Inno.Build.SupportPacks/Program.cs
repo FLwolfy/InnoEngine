@@ -227,7 +227,10 @@ internal static class SupportPackPublisher
         string nativePlatform = command.target == BuildTargetId.macOSArm64
             ? "osx-arm64"
             : "windows-x64";
-        string[] components = ["bgfx", "sdl3", "miniaudio"];
+        string nativeExtension = command.target == BuildTargetId.macOSArm64
+            ? ".dylib"
+            : ".dll";
+        string[] components = ["bgfx", "sdl3", "miniaudio", "text", "ui"];
         string destination = Path.Combine(staging, "native");
         foreach (string component in components)
         {
@@ -237,7 +240,9 @@ internal static class SupportPackPublisher
                 throw new DirectoryNotFoundException(
                     $"Release native runtime output for '{component}' and '{command.target}' does not exist at '{source}'.");
             }
-            string[] files = Directory.EnumerateFiles(source, "*release*", SearchOption.TopDirectoryOnly).ToArray();
+            string[] files = Directory.EnumerateFiles(source, "*release*", SearchOption.TopDirectoryOnly)
+                .Where(file => string.Equals(Path.GetExtension(file), nativeExtension, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
             if (files.Length == 0)
             {
                 throw new InvalidDataException(

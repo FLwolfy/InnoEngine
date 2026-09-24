@@ -224,6 +224,13 @@ internal static partial class ArchitectureRules
                 string? include = reference.Attribute("Include")?.Value;
                 if (string.IsNullOrWhiteSpace(include))
                     continue;
+                if (node.relative == "native/Inno.Native.ImGui/Bindings/Extension/Inno.Native.ImGui.BindingExtension.csproj" &&
+                    (include is "$(BindGenRoot)/src/BGCS/BGCS.csproj" or "$(BindGenRoot)/src/BGCS.Core/BGCS.Core.csproj"))
+                    continue;
+                if (node.relative.StartsWith("native/Inno.Native.", StringComparison.Ordinal) &&
+                    include == "$(BGCSRuntimeProject)" &&
+                    (string?)reference.Attribute("Condition") == "'$(BGCSRuntimeProject)' != ''")
+                    continue;
                 string normalizedInclude = include
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
@@ -326,6 +333,11 @@ internal static partial class ArchitectureRules
             !IsAllowedMiniAudioConsumer(project.name))
         {
             failures.Add($"{sourcePath}: miniaudio native code is restricted to the MiniAudio adapter and toolchain.");
+        }
+        if (target.name.Contains("Inno.Native.UI", StringComparison.Ordinal) &&
+            !IsAllowedUiNativeConsumer(project.name))
+        {
+            failures.Add($"{sourcePath}: RmlUi native code is restricted to the RmlUi adapter and UI toolchain.");
         }
         if (IsAdapterContract(project.name) && IsConcreteAdapter(target.name))
         {
@@ -490,6 +502,8 @@ internal static partial class ArchitectureRules
            string.Equals(name, "Inno.Adapter.Storage", StringComparison.Ordinal) ||
            string.Equals(name, "Inno.Adapter.Rendering", StringComparison.Ordinal) ||
            string.Equals(name, "Inno.Adapter.Audio", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Text", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.UI", StringComparison.Ordinal) ||
            string.Equals(name, "Inno.Adapter.Presentation", StringComparison.Ordinal);
 
     private static bool IsConcreteAdapter(string name)
@@ -499,6 +513,8 @@ internal static partial class ArchitectureRules
            name.StartsWith("Inno.Adapter.Rendering.", StringComparison.Ordinal) &&
            !string.Equals(name, "Inno.Adapter.Rendering.Authoring", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Adapter.Audio.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Text.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.UI.", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Adapter.Presentation.", StringComparison.Ordinal);
 
     private static bool IsAllowedBgfxConsumer(string name)
@@ -519,6 +535,12 @@ internal static partial class ArchitectureRules
         => name.StartsWith("Inno.Adapter.Audio.MiniAudio", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Native.MiniAudio", StringComparison.Ordinal);
+
+    private static bool IsAllowedUiNativeConsumer(string name)
+        => name.StartsWith("Inno.Adapter.UI.RmlUi", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Build.Toolchains.UI", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Native.UI", StringComparison.Ordinal) ||
+           name.EndsWith(".Tests", StringComparison.Ordinal);
 
     private static IEnumerable<string> EnumerateFiles(string root, string pattern)
     {

@@ -1,5 +1,9 @@
 #nullable disable
 
+using System.Runtime.CompilerServices;
+
+[assembly: DisableRuntimeMarshalling]
+
 namespace Inno.Native.MiniAudio
 {
     using BGCS.Runtime;
@@ -41,15 +45,5 @@ namespace Inno.Native.MiniAudio
             InitApi(new NativeLibraryContext(handle));
         }
 
-        /// <summary>
-        /// Gets the platform-independent native library stem used by miniaudio.
-        /// </summary>
-        /// <returns>
-        /// The constant library stem <c>miniaudio</c>.
-        /// </returns>
-        public static string GetLibraryName()
-        {
-            return "miniaudio";
-        }
     }
 }

@@ -9,6 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="$(BGCSRuntimeProject)" Condition="'$(BGCSRuntimeProject)' != ''" />
     <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
@@ -22,6 +23,9 @@
     <ProjectReference Include="..\..\..\..\content\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(BGCSRuntimeProject)' == ''">
+    <PackageReference Include="BGCS.Runtime" Version="1.0.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../../content/references/Inno.References/Inno.References.csproj" />

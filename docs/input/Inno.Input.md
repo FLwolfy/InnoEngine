@@ -10,7 +10,7 @@
 | --- | --- |
 | `IInputBackend.Capture(frameIndex)` | 在帧边界产生完整不可变快照，并消费瞬时 pressed/released/delta。 |
 | `IInputService.snapshot` | 当前 Session 当前帧的唯一输入状态。 |
-| `InputSnapshot` | 键鼠 down/pressed/released、位置、delta、wheel 与 frame index。 |
+| `InputSnapshot` | 键鼠 down/pressed/released、位置、delta、wheel、按顺序提交的 Unicode 文本与 frame index。 |
 | `InputExecutionContext` | `AsyncLocal` 隔离、严格 LIFO 的服务绑定。 |
 | `Input` | 游戏脚本使用的无状态 façade。 |
 
@@ -23,6 +23,6 @@ if (Input.WasKeyPressed(KeyCode.Space))
 }
 ```
 
-无活动 scope 时 façade 明确抛出异常。Snapshot 不受查询顺序影响；状态 owner 是 Runtime Subsystem，而不是静态类。Gamepad、text/IME 与 touch 尚未进入当前稳定契约。
+无活动 scope 时 façade 明确抛出异常。Snapshot 不受查询顺序影响；状态 owner 是 Runtime Subsystem，而不是静态类。SDL3 的 UTF-8 文本提交通过 `TextInputEvent` 进入 `textInput`，供 UI Context 消费；IME 预编辑/候选区、Gamepad 与 touch 尚未进入当前稳定契约。
 
 [下一页：Inno.Input.Runtime](Inno.Input.Runtime.md)

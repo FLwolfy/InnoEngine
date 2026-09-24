@@ -4,7 +4,7 @@
 
 `Inno.Player` 是标准游戏产品的 Composition Root，不提供脚本稳定 API。`GamePlayerHost : Shell` 负责读取已冻结 runtime manifest、创建 EngineHost/RuntimeSession、装配中立 Runtime Subsystems 并加载 startup Scene。
 
-Player 通过 `DefaultAdapterCatalog` 与 `AdapterSelection` 选择默认后端。Host 源码和公开/protected surface 不包含 SDL3、BGFX、MiniAudio、FileSystem 或 ImGui implementation 类型。
+Player 通过 `DefaultAdapterCatalog` 与 `AdapterSelection` 选择默认后端，Session 同时装配 Text 与 UI。Host 源码和公开/protected surface 不包含 SDL3、BGFX、MiniAudio、FreeType、HarfBuzz、RmlUi、FileSystem 或 ImGui implementation 类型。
 
 Player closure 必须保持 source-free：不得包含 Editor、Build、AssetPipeline、Scripting Compiler/Reload、Plugin Authoring 或 Toolchain。原生 Release 文件只由 Support Pack 放入最终 `native/` 目录。
 

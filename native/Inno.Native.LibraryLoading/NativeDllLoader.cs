@@ -35,7 +35,7 @@ public static class NativeDllLoader
         {
             foreach (var name in candidateNames)
             {
-                var match = Directory.EnumerateFiles(root, name, SearchOption.AllDirectories).FirstOrDefault();
+                var match = FindPreferredTargetFile(root, name);
                 if (match != null)
                 {
                     return NativeLibrary.Load(match);
@@ -59,7 +59,7 @@ public static class NativeDllLoader
     {
         foreach (var root in GetSearchRoots())
         {
-            var match = Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories).FirstOrDefault();
+            var match = FindPreferredTargetFile(root, fileName);
             if (match != null)
             {
                 return match;
@@ -191,7 +191,7 @@ public static class NativeDllLoader
         var nativeRoot = Path.Combine(AppContext.BaseDirectory, NativeDllConstants.NATIVE_DIR_NAME);
         Directory.CreateDirectory(nativeRoot);
 
-        var srcFile = Directory.EnumerateFiles(libRoot, fileName, SearchOption.AllDirectories).FirstOrDefault();
+        var srcFile = FindPreferredTargetFile(libRoot, fileName);
         if (srcFile == null)
         {
             if (deployed is not null)
@@ -241,9 +241,7 @@ public static class NativeDllLoader
     {
         foreach (string root in GetSearchRoots())
         {
-            string? match = Directory
-                .EnumerateFiles(root, fileName, SearchOption.AllDirectories)
-                .FirstOrDefault();
+            string? match = FindPreferredTargetFile(root, fileName);
             if (match is not null)
                 return match;
         }
@@ -270,7 +268,7 @@ public static class NativeDllLoader
         {
             foreach (var name in candidateNames)
             {
-                var match = Directory.EnumerateFiles(root, name, SearchOption.AllDirectories).FirstOrDefault();
+                var match = FindPreferredTargetFile(root, name);
                 if (match != null)
                 {
                     return NativeLibrary.Load(match);
@@ -320,6 +318,58 @@ public static class NativeDllLoader
             yield return nativeRoot;
         }
     }
+
+    private static string? FindPreferredTargetFile(string root, string fileName)
+    {
+        var candidates = Directory
+            .EnumerateFiles(root, fileName, SearchOption.AllDirectories)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        string targetSegment = $"/{GetTargetPlatformIdentifier()}/";
+        string? targetMatch = candidates.FirstOrDefault(path =>
+            NormalizePath(path).Contains(targetSegment, StringComparison.OrdinalIgnoreCase));
+        if (targetMatch is not null)
+        {
+            return targetMatch;
+        }
+
+        return candidates.FirstOrDefault(path => !HasPlatformScope(NormalizePath(path)));
+    }
+
+    private static string GetTargetPlatformIdentifier()
+    {
+        string operatingSystem = OperatingSystem.IsMacOS()
+            ? "osx"
+            : OperatingSystem.IsWindows()
+                ? "windows"
+                : OperatingSystem.IsLinux()
+                    ? "linux"
+                    : throw new PlatformNotSupportedException("Native library loading supports Windows, macOS, and Linux.");
+        string architecture = RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.Arm64 => "arm64",
+            Architecture.X86 => "x86",
+            Architecture.Arm => "arm",
+            _ => throw new PlatformNotSupportedException(
+                $"Unsupported native architecture: {RuntimeInformation.OSArchitecture}.")
+        };
+        return $"{operatingSystem}-{architecture}";
+    }
+
+    private static bool HasPlatformScope(string normalizedPath)
+    {
+        return normalizedPath.Contains("/windows-", StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.Contains("/osx-", StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.Contains("/linux-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Replace('\\', '/');
 
     private static string? FindRepoRoot(string startDir)
     {

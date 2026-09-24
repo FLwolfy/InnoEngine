@@ -4,7 +4,7 @@ namespace Inno.Build.Toolchains.MiniAudio.Platforms;
 
 internal static class MiniAudioBuilderFactory
 {
-    private const string UNSUPPORTED_PLATFORM_MESSAGE = "Only macos-arm64 and windows-x64 are supported.";
+    private const string UNSUPPORTED_PLATFORM_MESSAGE = "Supported hosts are macos-arm64, windows-x64, linux-x64, and linux-arm64.";
 
     /// <summary>
     /// Creates the miniaudio builder matching the current host platform.
@@ -20,7 +20,8 @@ internal static class MiniAudioBuilderFactory
         MiniAudioBuilder[] builders =
         [
             new OsxArm64MiniAudioBuilder(),
-            new WindowsX64MiniAudioBuilder()
+            new WindowsX64MiniAudioBuilder(),
+            new LinuxMiniAudioBuilder()
         ];
 
         foreach (MiniAudioBuilder builder in builders)

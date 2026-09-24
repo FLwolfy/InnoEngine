@@ -1,0 +1,43 @@
+{
+  "Preset": "host-c,c-library,function-table",
+  "IncludeTransitivelyReferencedHeaders": false,
+  "GenerateRuntimeSource": false,
+  "MergeGeneratedFilesToSingleFile": true,
+  "SingleFileOutputName": "Bindings.cs",
+  "Namespace": "Inno.Native.MiniAudio",
+  "ApiName": "MiniAudio",
+  "LibName": "miniaudio",
+  "EntryFiles": [
+    "../../../extern/miniaudio/extras/miniaudio_split/miniaudio.h"
+  ],
+  "AllowedHeaders": [
+    "../../../extern/miniaudio/extras/miniaudio_split/miniaudio.h"
+  ],
+  "IncludeFolders": [
+    "../../../extern/miniaudio/extras/miniaudio_split"
+  ],
+  "OutputPath": "../Generated",
+  "MarshallingMappings": {
+    "ma_version_string": {
+      "Return": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+    },
+    "ma_resource_manager_data_source_init": {
+      "Parameters": {
+        "pName": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true },
+        "pDataSource": { "Ownership": "Borrowed" }
+      }
+    }
+  },
+  "FunctionPrefixes": [
+    "ma_"
+  ],
+  "IgnoredFunctions": [
+    "ma_log_postf"
+  ],
+  "TypeMappings": {
+    "ma_node": "void"
+  },
+  "IgnoredTypedefs": [
+    "ma_node"
+  ]
+}

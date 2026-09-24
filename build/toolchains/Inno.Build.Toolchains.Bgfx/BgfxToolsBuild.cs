@@ -39,7 +39,7 @@ internal static class BgfxToolsBuild
 
             EnsureBgfxBuilt(outputDir, options.Config);
             builder.BuildTools(bgfxDir, options.Config);
-            CopyTools(bgfxDir, outputDir, options.Config);
+            CopyTools(bgfxDir, outputDir, builder, options.Config);
 
             Console.WriteLine($"bgfx tools build complete. Output: {outputDir}");
             return 0;
@@ -51,7 +51,7 @@ internal static class BgfxToolsBuild
         }
     }
 
-    private static void CopyTools(string bgfxDir, string outputDir, string config)
+    private static void CopyTools(string bgfxDir, string outputDir, BgfxBuilder builder, string config)
     {
         var buildDir = Path.Combine(bgfxDir, BgfxBuildConstants.BUILD_DIR_NAME);
         if (!Directory.Exists(buildDir))
@@ -61,6 +61,7 @@ internal static class BgfxToolsBuild
 
         var toolDir = Path.Combine(outputDir, "tools");
         Directory.CreateDirectory(toolDir);
+        DeleteExistingTools(toolDir, config);
 
         var toolNames = new[]
         {
@@ -82,7 +83,7 @@ internal static class BgfxToolsBuild
                 }
 
                 var normalized = path.Replace('\\', '/');
-                return normalized.Contains("/bin/");
+                return normalized.Contains(builder.artifactPathToken, StringComparison.OrdinalIgnoreCase);
             })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -92,6 +93,18 @@ internal static class BgfxToolsBuild
             var destName = NormalizeToolName(Path.GetFileName(src), config);
             var dest = Path.Combine(toolDir, destName);
             File.Copy(src, dest, overwrite: true);
+        }
+    }
+
+    private static void DeleteExistingTools(string toolDir, string config)
+    {
+        foreach (var path in Directory.EnumerateFiles(toolDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            if (Path.GetFileNameWithoutExtension(path)
+                .EndsWith($"-{config}", StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(path);
+            }
         }
     }
 

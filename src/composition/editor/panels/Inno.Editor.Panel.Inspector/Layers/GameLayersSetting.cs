@@ -10,6 +10,7 @@ using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
 using Inno.Scene.Layers;
 using Inno.Native.ImGui;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -17,7 +18,7 @@ namespace Inno.Editor.Panel.Inspector;
 [ProjectSettingPath("Project/Scene/Layers")]
 internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerCatalog>
 {
-    private const nuint C_LAYER_NAME_BUFFER_SIZE = 128;
+    private const int C_LAYER_NAME_BUFFER_SIZE = 128;
 
     private readonly string[] m_nameBuffers = new string[GameLayer.C_MAX_COUNT];
     private string m_error = string.Empty;
@@ -158,7 +159,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerCatalog>
         NativeImGui.PushStyleColor(ImGuiCol.FrameBgActive, EditorPalette.transparent);
         try
         {
-            bool submitted = NativeImGui.InputTextWithHint(
+            bool submitted = EditorImGui.InputTextWithHint(
                 id,
                 hint,
                 ref value,

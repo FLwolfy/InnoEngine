@@ -740,7 +740,7 @@ public sealed unsafe partial class BgfxDevice
             AddVertexLayoutPadding(&native, attribute.byteOffset - currentOffset);
             (byte count, bgfx.AttribType type, bool normalized, bool asInteger) = AttributeFormat(attribute.format);
             bgfx.vertex_layout_add(
-                &native,
+                ref native,
                 ToNativeAttribute(attribute.semantic),
                 count,
                 type,

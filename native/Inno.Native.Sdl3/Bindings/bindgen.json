@@ -1,0 +1,269 @@
+{
+  "Preset": "host-c,c-library,function-table",
+  "GenerateRuntimeSource": false,
+  "MergeGeneratedFilesToSingleFile": true,
+  "SingleFileOutputName": "Bindings.cs",
+  "Namespace": "Inno.Native.Sdl3",
+  "ApiName": "SDL",
+  "LibName": "SDL3",
+  "BoolType": "Byte",
+  "DelegatesAsVoidPointer": false,
+  "EntryFiles": [
+    "../../../extern/SDL/include/SDL3/SDL.h"
+  ],
+  "AllowedHeaders": [],
+  "IncludeTransitivelyReferencedHeaders": true,
+  "IncludeFolders": [
+    "../../../extern/SDL/include"
+  ],
+  "OutputPath": "../Generated",
+  "FunctionPrefixes": [
+    "SDL_"
+  ],
+  "IgnoredFunctions": [
+    "SDL_sscanf",
+    "SDL_snprintf",
+    "SDL_swprintf",
+    "SDL_asprintf",
+    "SDL_SetError",
+    "SDL_IOprintf",
+    "SDL_Log",
+    "SDL_LogTrace",
+    "SDL_LogVerbose",
+    "SDL_LogDebug",
+    "SDL_LogInfo",
+    "SDL_LogWarn",
+    "SDL_LogError",
+    "SDL_LogCritical",
+    "SDL_LogMessage",
+    "SDL_RenderDebugTextFormat"
+  ],
+  "TypeMappings": {
+    "SDL_GPUColorComponentFlags": "SDLGPUColorComponentFlags",
+    "SDL_InitFlags": "SDLInitFlags",
+    "SDL_Keymod": "SDLKeymod",
+    "SDL_MessageBoxFlags": "SDLMessageBoxFlags",
+    "SDL_MouseButtonFlags": "SDLMouseButtonFlags",
+    "SDL_WindowFlags": "SDLWindowFlags"
+  },
+  "CustomEnums": [
+    {
+      "CppName": "SDL_GPUColorComponentFlags", "Name": "SDLGPUColorComponentFlags", "BaseType": "byte", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_GPU_COLORCOMPONENT_R", "Name": "R", "CppValue": "1", "Value": "1" },
+        { "CppName": "SDL_GPU_COLORCOMPONENT_G", "Name": "G", "CppValue": "2", "Value": "2" },
+        { "CppName": "SDL_GPU_COLORCOMPONENT_B", "Name": "B", "CppValue": "4", "Value": "4" },
+        { "CppName": "SDL_GPU_COLORCOMPONENT_A", "Name": "A", "CppValue": "8", "Value": "8" }
+      ]
+    },
+    {
+      "CppName": "SDL_InitFlags", "Name": "SDLInitFlags", "BaseType": "uint", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_INIT_TIMER", "Name": "Timer", "CppValue": "0x00000001", "Value": "0x00000001" },
+        { "CppName": "SDL_INIT_AUDIO", "Name": "Audio", "CppValue": "0x00000010", "Value": "0x00000010" },
+        { "CppName": "SDL_INIT_VIDEO", "Name": "Video", "CppValue": "0x00000020", "Value": "0x00000020" },
+        { "CppName": "SDL_INIT_JOYSTICK", "Name": "Joystick", "CppValue": "0x00000200", "Value": "0x00000200" },
+        { "CppName": "SDL_INIT_HAPTIC", "Name": "Haptic", "CppValue": "0x00001000", "Value": "0x00001000" },
+        { "CppName": "SDL_INIT_GAMEPAD", "Name": "Gamepad", "CppValue": "0x00002000", "Value": "0x00002000" },
+        { "CppName": "SDL_INIT_EVENTS", "Name": "Events", "CppValue": "0x00004000", "Value": "0x00004000" },
+        { "CppName": "SDL_INIT_SENSOR", "Name": "Sensor", "CppValue": "0x00008000", "Value": "0x00008000" },
+        { "CppName": "SDL_INIT_CAMERA", "Name": "Camera", "CppValue": "0x00010000", "Value": "0x00010000" }
+      ]
+    },
+    {
+      "CppName": "SDL_Keymod", "Name": "SDLKeymod", "BaseType": "ushort", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_KMOD_NONE", "Name": "None", "CppValue": "0", "Value": "0" },
+        { "CppName": "SDL_KMOD_LSHIFT", "Name": "Lshift", "CppValue": "0x0001", "Value": "0x0001" },
+        { "CppName": "SDL_KMOD_RSHIFT", "Name": "Rshift", "CppValue": "0x0002", "Value": "0x0002" },
+        { "CppName": "SDL_KMOD_LEVEL5", "Name": "Level5", "CppValue": "0x0004", "Value": "0x0004" },
+        { "CppName": "SDL_KMOD_LCTRL", "Name": "Lctrl", "CppValue": "0x0040", "Value": "0x0040" },
+        { "CppName": "SDL_KMOD_RCTRL", "Name": "Rctrl", "CppValue": "0x0080", "Value": "0x0080" },
+        { "CppName": "SDL_KMOD_LALT", "Name": "Lalt", "CppValue": "0x0100", "Value": "0x0100" },
+        { "CppName": "SDL_KMOD_RALT", "Name": "Ralt", "CppValue": "0x0200", "Value": "0x0200" },
+        { "CppName": "SDL_KMOD_LGUI", "Name": "Lgui", "CppValue": "0x0400", "Value": "0x0400" },
+        { "CppName": "SDL_KMOD_RGUI", "Name": "Rgui", "CppValue": "0x0800", "Value": "0x0800" },
+        { "CppName": "SDL_KMOD_NUM", "Name": "Num", "CppValue": "0x1000", "Value": "0x1000" },
+        { "CppName": "SDL_KMOD_CAPS", "Name": "Caps", "CppValue": "0x2000", "Value": "0x2000" },
+        { "CppName": "SDL_KMOD_MODE", "Name": "Mode", "CppValue": "0x4000", "Value": "0x4000" },
+        { "CppName": "SDL_KMOD_SCROLL", "Name": "Scroll", "CppValue": "0x8000", "Value": "0x8000" },
+        { "CppName": "SDL_KMOD_CTRL", "Name": "Ctrl", "CppValue": "0x00c0", "Value": "0x00c0" },
+        { "CppName": "SDL_KMOD_SHIFT", "Name": "Shift", "CppValue": "0x0003", "Value": "0x0003" },
+        { "CppName": "SDL_KMOD_ALT", "Name": "Alt", "CppValue": "0x0300", "Value": "0x0300" },
+        { "CppName": "SDL_KMOD_GUI", "Name": "Gui", "CppValue": "0x0c00", "Value": "0x0c00" }
+      ]
+    },
+    {
+      "CppName": "SDL_MessageBoxFlags", "Name": "SDLMessageBoxFlags", "BaseType": "uint", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_MESSAGEBOX_ERROR", "Name": "Error", "CppValue": "0x10", "Value": "0x10" },
+        { "CppName": "SDL_MESSAGEBOX_WARNING", "Name": "Warning", "CppValue": "0x20", "Value": "0x20" },
+        { "CppName": "SDL_MESSAGEBOX_INFORMATION", "Name": "Information", "CppValue": "0x40", "Value": "0x40" }
+      ]
+    },
+    {
+      "CppName": "SDL_MouseButtonFlags", "Name": "SDLMouseButtonFlags", "BaseType": "uint", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_BUTTON_NONE", "Name": "None", "CppValue": "0", "Value": "0" },
+        { "CppName": "SDL_BUTTON_LMASK", "Name": "Left", "CppValue": "1", "Value": "1" },
+        { "CppName": "SDL_BUTTON_MMASK", "Name": "Middle", "CppValue": "2", "Value": "2" },
+        { "CppName": "SDL_BUTTON_RMASK", "Name": "Right", "CppValue": "4", "Value": "4" },
+        { "CppName": "SDL_BUTTON_X1MASK", "Name": "X1", "CppValue": "8", "Value": "8" },
+        { "CppName": "SDL_BUTTON_X2MASK", "Name": "X2", "CppValue": "16", "Value": "16" }
+      ]
+    },
+    {
+      "CppName": "SDL_WindowFlags", "Name": "SDLWindowFlags", "BaseType": "ulong", "Attributes": ["[Flags]"],
+      "Items": [
+        { "CppName": "SDL_WINDOW_FULLSCREEN", "Name": "Fullscreen", "CppValue": "0x1", "Value": "0x1" },
+        { "CppName": "SDL_WINDOW_OPENGL", "Name": "Opengl", "CppValue": "0x2", "Value": "0x2" },
+        { "CppName": "SDL_WINDOW_OCCLUDED", "Name": "Occluded", "CppValue": "0x4", "Value": "0x4" },
+        { "CppName": "SDL_WINDOW_HIDDEN", "Name": "Hidden", "CppValue": "0x8", "Value": "0x8" },
+        { "CppName": "SDL_WINDOW_BORDERLESS", "Name": "Borderless", "CppValue": "0x10", "Value": "0x10" },
+        { "CppName": "SDL_WINDOW_RESIZABLE", "Name": "Resizable", "CppValue": "0x20", "Value": "0x20" },
+        { "CppName": "SDL_WINDOW_MINIMIZED", "Name": "Minimized", "CppValue": "0x40", "Value": "0x40" },
+        { "CppName": "SDL_WINDOW_MAXIMIZED", "Name": "Maximized", "CppValue": "0x80", "Value": "0x80" },
+        { "CppName": "SDL_WINDOW_MOUSE_GRABBED", "Name": "MouseGrabbed", "CppValue": "0x100", "Value": "0x100" },
+        { "CppName": "SDL_WINDOW_INPUT_FOCUS", "Name": "InputFocus", "CppValue": "0x200", "Value": "0x200" },
+        { "CppName": "SDL_WINDOW_MOUSE_FOCUS", "Name": "MouseFocus", "CppValue": "0x400", "Value": "0x400" },
+        { "CppName": "SDL_WINDOW_EXTERNAL", "Name": "External", "CppValue": "0x800", "Value": "0x800" },
+        { "CppName": "SDL_WINDOW_MODAL", "Name": "Modal", "CppValue": "0x1000", "Value": "0x1000" },
+        { "CppName": "SDL_WINDOW_HIGH_PIXEL_DENSITY", "Name": "HighPixelDensity", "CppValue": "0x2000", "Value": "0x2000" },
+        { "CppName": "SDL_WINDOW_MOUSE_CAPTURE", "Name": "MouseCapture", "CppValue": "0x4000", "Value": "0x4000" },
+        { "CppName": "SDL_WINDOW_MOUSE_RELATIVE_MODE", "Name": "MouseRelativeMode", "CppValue": "0x8000", "Value": "0x8000" },
+        { "CppName": "SDL_WINDOW_ALWAYS_ON_TOP", "Name": "AlwaysOnTop", "CppValue": "0x10000", "Value": "0x10000" },
+        { "CppName": "SDL_WINDOW_UTILITY", "Name": "Utility", "CppValue": "0x20000", "Value": "0x20000" },
+        { "CppName": "SDL_WINDOW_TOOLTIP", "Name": "Tooltip", "CppValue": "0x40000", "Value": "0x40000" },
+        { "CppName": "SDL_WINDOW_POPUP_MENU", "Name": "PopupMenu", "CppValue": "0x80000", "Value": "0x80000" },
+        { "CppName": "SDL_WINDOW_KEYBOARD_GRABBED", "Name": "KeyboardGrabbed", "CppValue": "0x100000", "Value": "0x100000" },
+        { "CppName": "SDL_WINDOW_VULKAN", "Name": "Vulkan", "CppValue": "0x10000000", "Value": "0x10000000" },
+        { "CppName": "SDL_WINDOW_METAL", "Name": "Metal", "CppValue": "0x20000000", "Value": "0x20000000" },
+        { "CppName": "SDL_WINDOW_TRANSPARENT", "Name": "Transparent", "CppValue": "0x40000000", "Value": "0x40000000" },
+        { "CppName": "SDL_WINDOW_NOT_FOCUSABLE", "Name": "NotFocusable", "CppValue": "0x80000000", "Value": "0x80000000" }
+      ]
+    }
+  ],
+  "MarshallingMappings": {
+    "SDL_CreateTextureWithProperties": {
+      "Return": {
+        "Ownership": "Owned",
+        "AllocatorKind": "NativeFunction",
+        "AllocatorFunction": "SDL_CreateTextureWithProperties",
+        "CleanupFunction": "SDL_DestroyTexture"
+      }
+    },
+    "SDL_CreateWindow": {
+      "Return": {
+        "Ownership": "Owned",
+        "AllocatorKind": "NativeFunction",
+        "AllocatorFunction": "SDL_CreateWindow",
+        "CleanupFunction": "SDL_DestroyWindow"
+      },
+      "Parameters": {
+        "title": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+      }
+    },
+    "SDL_GetError": {
+      "Return": {
+        "Strategy": "String",
+        "Ownership": "Borrowed",
+        "Encoding": "Utf8",
+        "NullTerminated": true
+      }
+    },
+    "SDL_GetPlatform": {
+      "Return": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+    },
+    "SDL_GetPointerProperty": {
+      "Return": { "Ownership": "Borrowed" },
+      "Parameters": {
+        "name": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+      }
+    },
+    "SDL_GetWindowTitle": {
+      "Return": { "Strategy": "String", "Ownership": "Borrowed", "Encoding": "Utf8", "NullTerminated": true }
+    },
+    "SDL_GetClipboardText": {
+      "Return": {
+        "Strategy": "String",
+        "Ownership": "Owned",
+        "Encoding": "Utf8",
+        "CleanupFunction": "SDL_free",
+        "AllocatorKind": "NativeFunction",
+        "AllocatorFunction": "SDL_malloc",
+        "RequiresCleanup": true,
+        "NullTerminated": true
+      }
+    }
+  },
+  "ClassMappings": [
+    {
+      "ExportedName": "SDL_WindowEvent",
+      "FriendlyName": "SDLWindowEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    },
+    {
+      "ExportedName": "SDL_KeyboardEvent",
+      "FriendlyName": "SDLKeyboardEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    },
+    {
+      "ExportedName": "SDL_TextInputEvent",
+      "FriendlyName": "SDLTextInputEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    },
+    {
+      "ExportedName": "SDL_MouseMotionEvent",
+      "FriendlyName": "SDLMouseMotionEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    },
+    {
+      "ExportedName": "SDL_MouseButtonEvent",
+      "FriendlyName": "SDLMouseButtonEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    },
+    {
+      "ExportedName": "SDL_MouseWheelEvent",
+      "FriendlyName": "SDLMouseWheelEvent",
+      "FieldMappings": [
+        {
+          "ExportedName": "windowID",
+          "DisplayName": "WindowID"
+        }
+      ]
+    }
+  ],
+  "IgnoredTypedefs": [
+    "SDL_GPUColorComponentFlags",
+    "SDL_InitFlags",
+    "SDL_Keymod",
+    "SDL_MessageBoxFlags",
+    "SDL_MouseButtonFlags",
+    "SDL_WindowFlags"
+  ]
+}

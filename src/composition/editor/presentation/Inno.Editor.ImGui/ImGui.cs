@@ -87,7 +87,30 @@ public static class ImGui
         ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
-        return RawImGui.InputText(label, ref value, (nuint)capacity, flags);
+        return ImGuiUtf8Buffer.InputText(label, null, ref value, (nuint)capacity, flags);
+    }
+
+    /// <summary>
+    /// Draws and edits a bounded UTF-8 text value with placeholder text.
+    /// </summary>
+    /// <param name="label">The control label.</param>
+    /// <param name="hint">The placeholder shown while the value is empty.</param>
+    /// <param name="value">The managed string to display and update.</param>
+    /// <param name="capacity">The positive maximum UTF-8 buffer capacity, including the terminator.</param>
+    /// <param name="flags">Text editing behavior.</param>
+    /// <returns><see langword="true"/> when the control reports an edit or submit event.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="capacity"/> is not positive.
+    /// </exception>
+    public static bool InputTextWithHint(
+        string label,
+        string hint,
+        ref string value,
+        int capacity = 1024,
+        ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
+        return ImGuiUtf8Buffer.InputText(label, hint, ref value, (nuint)capacity, flags);
     }
 
     /// <summary>
@@ -191,11 +214,14 @@ public static class ImGui
     /// <returns>
     /// <see langword="true"/> when the value changes.
     /// </returns>
-    public static bool ColorEdit4(
+    public static unsafe bool ColorEdit4(
         string label,
         ref Vector4 value,
         ImGuiColorEditFlags flags = ImGuiColorEditFlags.None)
-        => RawImGui.ColorEdit4(label, ref value, flags);
+    {
+        fixed (Vector4* nativeValue = &value)
+            return RawImGui.ColorEdit4(label, (float*)nativeValue, flags);
+    }
 
     /// <summary>
     /// Begins a child region.
@@ -425,11 +451,16 @@ public static class ImGui
     /// <returns>
     /// <see langword="true"/> when tab contents should be submitted.
     /// </returns>
-    public static bool BeginTabItem(
+    public static unsafe bool BeginTabItem(
         string label,
         ref bool isOpen,
         ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
-        => RawImGui.BeginTabItem(label, ref isOpen, flags);
+    {
+        byte nativeOpen = isOpen ? (byte)1 : (byte)0;
+        bool visible = RawImGui.BeginTabItem(label, &nativeOpen, flags);
+        isOpen = nativeOpen != 0;
+        return visible;
+    }
 
     /// <summary>
     /// Ends the current tab item.

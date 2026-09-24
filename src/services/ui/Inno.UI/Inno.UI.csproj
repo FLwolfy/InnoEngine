@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\..\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\text\Inno.Text\Inno.Text.csproj" />
+    <ProjectReference Include="..\..\input\Inno.Input\Inno.Input.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Execution\Inno.Core.Execution.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

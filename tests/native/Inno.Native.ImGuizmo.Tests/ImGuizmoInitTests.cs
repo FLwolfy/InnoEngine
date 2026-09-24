@@ -15,8 +15,8 @@ public sealed class ImGuizmoInitTests
     [Fact]
     public void Init_ShouldLoad()
     {
-        var libraryName = ImGuizmo.GetLibraryName();
-        output.WriteLine($"ImGuizmo.GetLibraryName: {libraryName}");
-        Assert.Equal("cimguizmo", libraryName);
+        bool isUsing = ImGuizmo.IsUsing();
+        output.WriteLine($"ImGuizmo.IsUsing: {isUsing}");
+        Assert.False(isUsing);
     }
 }

@@ -16,6 +16,7 @@ internal sealed class OsxArm64BgfxBuilder : BgfxBuilder
     /// Gets the native platform identifier produced by this builder.
     /// </summary>
     public override string outputPlatform => OUTPUT_PLATFORM;
+    public override string artifactPathToken => "/osx-arm64/bin/";
     /// <summary>
     /// Gets the native make target used for debug output.
     /// </summary>

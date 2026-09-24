@@ -10,7 +10,7 @@ namespace Inno.Adapter.Presentation.ImGui;
 
 internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
 {
-    private SDLRendererPtr m_renderer;
+    private SDLRenderer m_renderer;
     private SDLTexturePtr m_fontTexture;
     private SDLVertex[] m_vertexScratch = [];
     private int[] m_indexScratch = [];
@@ -21,7 +21,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
         m_renderer = SDL.CreateRenderer(window.GetSdlWindow(), (byte*)0);
         if (m_renderer.IsNull)
         {
-            throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_CreateRenderer failed.");
+            throw new InvalidOperationException(SDL.GetError() ?? "SDL_CreateRenderer failed.");
         }
 
         _ = SDL.SetRenderDrawBlendMode(m_renderer, SDL.SDL_BLENDMODE_BLEND);
@@ -165,7 +165,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
                     w: (int)(clipRectZ - clipRectX),
                     h: (int)(clipRectW - clipRectY));
 
-                if (!SDL.SetRenderClipRect(m_renderer, clipRect))
+                if (!SDL.SetRenderClipRect(m_renderer, ref clipRect))
                 {
                     continue;
                 }
@@ -252,7 +252,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
         if (!m_renderer.IsNull)
         {
             SDL.DestroyRenderer(m_renderer);
-            m_renderer = SDLRendererPtr.Null;
+            m_renderer = SDLRenderer.Null;
         }
 
         m_disposed = true;
@@ -379,8 +379,8 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
         var props = SDL.CreateProperties();
         try
         {
-            _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, (long)SDLPixelFormat.Rgba32);
-            _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, (long)SDLTextureAccess.Static);
+            _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, (long)SDLPixelFormat.PixelformatRgba32);
+            _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, (long)SDLTextureAccess.TextureaccessStatic);
             _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_WIDTH_NUMBER, width);
             _ = SDL.SetNumberProperty(props, SDL.SDL_PROP_TEXTURE_CREATE_HEIGHT_NUMBER, height);
 
@@ -391,7 +391,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
             }
 
             _ = SDL.SetTextureBlendMode(texture, SDL.SDL_BLENDMODE_BLEND);
-            _ = SDL.SetTextureScaleMode(texture, SDLScaleMode.Linear);
+            _ = SDL.SetTextureScaleMode(texture, SDLScaleMode.ScalemodeLinear);
             return texture;
         }
         finally

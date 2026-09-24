@@ -1,5 +1,9 @@
 #nullable disable
 
+using System.Runtime.CompilerServices;
+
+[assembly: DisableRuntimeMarshalling]
+
 namespace Inno.Native.ImGui
 {
     using BGCS.Runtime;
@@ -41,20 +45,5 @@ public static partial class ImGui
             InitApi(new NativeLibraryContext(handle));
         }
 
-        /// <summary>
-        /// Retrieves the requested library name value from current authoritative state.
-        /// </summary>
-        /// <returns>
-        /// The validated text representation owned by the caller.
-        /// </returns>
-public static string GetLibraryName()
-        {
-            return "cimgui";
-        }
-
-        /// <summary>
-        /// The im draw callback reset render state value used as part of this type's public representation.
-        /// </summary>
-public const nint ImDrawCallbackResetRenderState = -8;
     }
 }

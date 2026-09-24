@@ -163,7 +163,6 @@ InnoEngine/
 │   ├── Inno.Native.LibraryLoading
 │   ├── Inno.Native.Sdl3
 │   ├── Inno.Native.Bgfx
-│   ├── Inno.Native.Bgfx.Tools
 │   ├── Inno.Native.ImGui
 │   └── Inno.Native.ImGuizmo
 │

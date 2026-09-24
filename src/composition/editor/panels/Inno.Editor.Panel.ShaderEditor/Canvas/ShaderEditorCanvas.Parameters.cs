@@ -5,8 +5,9 @@ using Inno.Native.ImGui;
 using Inno.Rendering;
 using Inno.Rendering.Shaders;
 using Inno.Editor.Shaders;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
@@ -14,14 +15,14 @@ internal sealed partial class ShaderEditorCanvas
 {
     private bool StoragePopup(ref ShaderGraphType type)
     {
-        UI.SetNextWindowSize(new(490, 390), ImGuiCond.Appearing);
-        if (!UI.BeginPopup("##storage")) return false;
+        ImGuiApi.SetNextWindowSize(new(490, 390), ImGuiCond.Appearing);
+        if (!ImGuiApi.BeginPopup("##storage")) return false;
         bool changed = false;
         try
         {
             bool image = type.isImage;
             bool imageChanged = false;
-            InspectorRow("storage.image", "Storage Image", () => imageChanged = UI.Checkbox("##image", ref image));
+            InspectorRow("storage.image", "Storage Image", () => imageChanged = ImGuiApi.Checkbox("##image", ref image));
             if (imageChanged)
             {
                 type.isImage = image;
@@ -40,7 +41,7 @@ internal sealed partial class ShaderEditorCanvas
                 if (EnumControl("Dimension", ref dimension)) { type.dimension = dimension; changed = true; }
                 bool array = type.isArray;
                 bool arrayChanged = false;
-                InspectorRow("storage.array", "Array Layers", () => arrayChanged = UI.Checkbox("##array", ref array));
+                InspectorRow("storage.array", "Array Layers", () => arrayChanged = ImGuiApi.Checkbox("##array", ref array));
                 if (arrayChanged) { type.isArray = array; changed = true; }
             }
             else
@@ -53,15 +54,15 @@ internal sealed partial class ShaderEditorCanvas
                     try
                     {
                         foreach (string candidate in new[] { "float", "float2", "float3", "float4", "int", "int2", "int3", "int4", "uint", "uint2", "uint3", "uint4" })
-                            if (UI.Selectable(candidate, current == candidate)) selected = candidate;
+                            if (ImGuiApi.Selectable(candidate, current == candidate)) selected = candidate;
                     }
-                    finally { UI.EndCombo(); }
+                    finally { ImGuiApi.EndCombo(); }
                 });
                 if (selected != current) { type.storageElement = new() { id = selected }; changed = true; }
             }
-            UI.TextWrapped("Storage resources are bound by the render pass. The graph declares types and access; the Render Graph owns resource lifetime and synchronization.");
+            ImGuiApi.TextWrapped("Storage resources are bound by the render pass. The graph declares types and access; the Render Graph owns resource lifetime and synchronization.");
         }
-        finally { UI.EndPopup(); }
+        finally { ImGuiApi.EndPopup(); }
         return changed;
     }
 
@@ -77,7 +78,7 @@ internal sealed partial class ShaderEditorCanvas
         {
             string displayName = property.displayName;
             bool changed = false;
-            InspectorRow("parameter.display-name", "Display Name", () => changed = UI.InputText("##display-name", ref displayName, 256));
+            InspectorRow("parameter.display-name", "Display Name", () => changed = EditorImGui.InputText("##display-name", ref displayName, 256));
             Gesture();
             if (changed) { property.displayName = displayName; Save(property, true); }
             ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
@@ -87,7 +88,7 @@ internal sealed partial class ShaderEditorCanvas
                 bool color = property.type == ShaderPropertyType.Color;
                 InspectorRow("parameter.color", "Color", () =>
                 {
-                    if (UI.Checkbox("##color", ref color))
+                    if (ImGuiApi.Checkbox("##color", ref color))
                     {
                         property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
                         MaterialValue converted = property.defaultValue;
@@ -113,25 +114,25 @@ internal sealed partial class ShaderEditorCanvas
             return;
         string group = presentation.group;
         bool groupChanged = false;
-        InspectorRow("parameter.group", "Group", () => groupChanged = UI.InputText("##group", ref group, 256));
+        InspectorRow("parameter.group", "Group", () => groupChanged = EditorImGui.InputText("##group", ref group, 256));
         if (groupChanged) { presentation.group = group; SavePresentation(true); }
         Gesture();
         string description = presentation.description;
         bool descriptionChanged = false;
-        InspectorRow("parameter.description", "Description", () => descriptionChanged = UI.InputText("##description", ref description, 2048));
+        InspectorRow("parameter.description", "Description", () => descriptionChanged = EditorImGui.InputText("##description", ref description, 2048));
         if (descriptionChanged) { presentation.description = description; SavePresentation(true); }
         Gesture();
         bool visible = presentation.visible;
         InspectorRow("parameter.visible", "Visible in Material", () =>
         {
-            if (UI.Checkbox("##visible", ref visible)) { presentation.visible = visible; SavePresentation(false); }
+            if (ImGuiApi.Checkbox("##visible", ref visible)) { presentation.visible = visible; SavePresentation(false); }
         });
         if (property.type == ShaderPropertyType.Float)
         {
             bool range = presentation.hasRange;
             InspectorRow("parameter.range", "Range", () =>
             {
-                if (UI.Checkbox("##range", ref range)) { presentation.hasRange = range; SavePresentation(false); }
+                if (ImGuiApi.Checkbox("##range", ref range)) { presentation.hasRange = range; SavePresentation(false); }
             });
             if (range)
             {
@@ -161,13 +162,13 @@ internal sealed partial class ShaderEditorCanvas
             Gesture();
             GraphDocument candidate = Controller.document.Clone();
             ShaderParameterPresentation.Write(candidate, property.id, presentation, owner.serialization, owner.context);
-            Controller.ReplaceDocument(candidate, "Edit Parameter Presentation", continuous && UI.IsAnyItemActive() ? draft.valueGesture : null);
+            Controller.ReplaceDocument(candidate, "Edit Parameter Presentation", continuous && ImGuiApi.IsAnyItemActive() ? draft.valueGesture : null);
             owner.Changed(draft);
         }
         void Save(ShaderPropertyDefinition value, bool continuous)
         {
             definition.properties[index] = value;
-            CommitDefinition(definition, "Edit Shader Parameter", continuous && UI.IsAnyItemActive());
+            CommitDefinition(definition, "Edit Shader Parameter", continuous && ImGuiApi.IsAnyItemActive());
         }
     }
 

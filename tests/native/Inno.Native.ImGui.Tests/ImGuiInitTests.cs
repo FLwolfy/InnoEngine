@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 
 namespace Inno.Native.ImGui.Tests;
 
-public sealed class ImGuiInitTests
+public sealed unsafe class ImGuiInitTests
 {
     private readonly ITestOutputHelper output;
 
@@ -17,13 +17,13 @@ public sealed class ImGuiInitTests
     public void CreateAndDestroyContext_ShouldSucceed()
     {
         var context = ImGui.CreateContext();
-        Assert.False(context.IsNull);
+        Assert.True(context != null);
 
-        var version = ImGui.GetVersionS();
+        var version = ImGui.GetVersion();
         output.WriteLine($"ImGui.GetVersion: {version}");
         Assert.False(string.IsNullOrWhiteSpace(version));
 
-        ImGui.DestroyContext(context);
+        ImGui.DestroyContext(new ImGuiContextPtr(context));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class ImGuiInitTests
         }
         finally
         {
-            ImGui.DestroyContext(context);
+            ImGui.DestroyContext(new ImGuiContextPtr(context));
         }
     }
 

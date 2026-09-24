@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Build;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -22,7 +23,7 @@ internal enum BuildSettingsKey
 
 internal sealed class BuildSettingsField
 {
-    private const nuint C_TEXT_CAPACITY = 4096;
+    private const int C_TEXT_CAPACITY = 4096;
 
     internal BuildSettingsField(
         BuildSettingsKey key,
@@ -142,7 +143,7 @@ internal sealed class BuildSettingsField
         Action<string> apply)
     {
         NativeImGui.SetNextItemWidth(-1f);
-        if (!NativeImGui.InputText("##value", ref value, C_TEXT_CAPACITY))
+        if (!EditorImGui.InputText("##value", ref value, C_TEXT_CAPACITY))
             return false;
 
         apply(value);

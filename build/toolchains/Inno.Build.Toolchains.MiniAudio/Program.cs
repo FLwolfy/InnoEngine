@@ -117,6 +117,7 @@ internal static class Program
         {
             "osx-arm64" => $"libminiaudio-{config}.dylib",
             "windows-x64" => $"miniaudio-{config}.dll",
+            "linux-x64" or "linux-arm64" => $"libminiaudio-{config}.so",
             _ => throw new PlatformNotSupportedException(
                 $"No miniaudio output name is defined for '{outputPlatform}'.")
         };

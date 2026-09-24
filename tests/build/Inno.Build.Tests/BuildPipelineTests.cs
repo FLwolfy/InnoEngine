@@ -174,6 +174,15 @@ public sealed class BuildPipelineTests : IDisposable
             ? Path.Combine(outputPath, "Contents", "MacOS", "Test Game")
             : Path.Combine(outputPath, "Test Game.exe");
         Assert.True(File.Exists(executable));
+        string deployedNative = target == BuildTargetId.macOSArm64
+            ? Path.Combine(outputPath, "Contents", "MacOS", "native")
+            : Path.Combine(outputPath, "native");
+        Assert.True(File.Exists(Path.Combine(deployedNative, target == BuildTargetId.macOSArm64
+            ? "libinno-text-release.dylib"
+            : "inno-text-release.dll")));
+        Assert.True(File.Exists(Path.Combine(deployedNative, target == BuildTargetId.macOSArm64
+            ? "libinno-ui-release.dylib"
+            : "inno-ui-release.dll")));
         Assert.Equal(
             ["catalog.inno", $"content-{contentHash}.pack", "runtime.manifest"],
             Directory.EnumerateFiles(packagedContent)
@@ -497,6 +506,34 @@ public sealed class BuildPipelineTests : IDisposable
     }
 
     [Fact]
+    public void SupportPackRejectsForeignNativeRuntime()
+    {
+        string supportPack = Path.Combine(m_supportPackRoot, BuildTargetId.macOSArm64.value);
+        File.WriteAllBytes(Path.Combine(supportPack, "native", "SDL3-release.so"), [0x49, 0x4E, 0x4E, 0x4F]);
+        var catalog = new PlayerSupportPackCatalog(m_supportPackRoot);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => catalog.Resolve(BuildTargetId.macOSArm64));
+
+        Assert.Contains("foreign native runtime", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("libinno-text-release.dylib")]
+    [InlineData("libinno-ui-release.dylib")]
+    public void SupportPackRejectsMissingTextOrUiRuntime(string nativeRuntime)
+    {
+        string supportPack = Path.Combine(m_supportPackRoot, BuildTargetId.macOSArm64.value);
+        File.Delete(Path.Combine(supportPack, "native", nativeRuntime));
+        var catalog = new PlayerSupportPackCatalog(m_supportPackRoot);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => catalog.Resolve(BuildTargetId.macOSArm64));
+
+        Assert.Contains(nativeRuntime, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PluginBuildIsDeterministicSourceOnlyAndUsesTheInstallContract()
     {
         m_assets.CreateDirectory(AssetPath.Project("Content"));
@@ -602,8 +639,10 @@ public sealed class BuildPipelineTests : IDisposable
         string native = Path.Combine(directory, "native");
         Directory.CreateDirectory(native);
         string[] required = target == BuildTargetId.macOSArm64
-            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib", "libminiaudio-release.dylib"]
-            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll", "miniaudio-release.dll"];
+            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib", "libminiaudio-release.dylib",
+                "libinno-text-release.dylib", "libinno-ui-release.dylib"]
+            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll", "miniaudio-release.dll",
+                "inno-text-release.dll", "inno-ui-release.dll"];
         foreach (string file in required)
             File.WriteAllBytes(Path.Combine(native, file), [0x49, 0x4E, 0x4E, 0x4F]);
     }

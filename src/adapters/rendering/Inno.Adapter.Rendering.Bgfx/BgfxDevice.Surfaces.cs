@@ -165,7 +165,7 @@ public sealed unsafe partial class BgfxDevice
     {
         EnsureApiThread();
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (m_activeGraph is not null || m_activeEncoder is not null)
+        if (m_activeGraph is not null || !m_activeEncoder.IsNull)
         {
             throw new InvalidOperationException(
                 "Window surface changes require an API-thread point outside graph execution.");

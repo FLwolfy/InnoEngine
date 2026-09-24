@@ -3,6 +3,8 @@ using Inno.Adapter.Input;
 using Inno.Adapter.Platform;
 using Inno.Adapter.Rendering;
 using Inno.Adapter.Storage;
+using Inno.Adapter.Text;
+using Inno.Adapter.UI;
 
 namespace Inno.Adapter;
 
@@ -40,4 +42,14 @@ public readonly struct AdapterSelection()
     /// Gets the selected audio backend.
     /// </summary>
     public AudioBackend audio { get; init; } = AudioBackend.MiniAudio;
+
+    /// <summary>
+    /// Gets the selected Unicode text backend.
+    /// </summary>
+    public TextBackend text { get; init; } = TextBackend.FreeTypeHarfBuzz;
+
+    /// <summary>
+    /// Gets the selected retained-mode UI backend.
+    /// </summary>
+    public UiBackendId ui { get; init; } = UiBackendId.rmlUi;
 }

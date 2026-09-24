@@ -4,6 +4,7 @@ using Inno.Core.Settings;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Settings;
@@ -33,7 +34,7 @@ internal sealed class ProjectIdentitySettingsEditor : ProjectSettingEditor<Proje
     protected override void OnDraw(ProjectIdentitySettings setting)
     {
         string value = setting.projectId;
-        if (NativeImGui.InputText("Project ID", ref value, 129))
+        if (EditorImGui.InputText("Project ID", ref value, 129))
         {
             try
             {

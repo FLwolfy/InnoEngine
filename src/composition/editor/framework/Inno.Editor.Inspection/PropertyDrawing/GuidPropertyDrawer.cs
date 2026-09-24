@@ -1,13 +1,13 @@
 using System;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using Inno.Native.ImGui;
-using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Inspection;
 
 [PropertyDrawer(typeof(Guid))]
 internal sealed class GuidPropertyDrawer : IPropertyDrawer
 {
-    private const nuint C_BUFFER_SIZE = 64;
+    private const int C_BUFFER_SIZE = 64;
     private const string C_TEXT_STATE = "guid";
 
     /// <summary>
@@ -22,7 +22,7 @@ internal sealed class GuidPropertyDrawer : IPropertyDrawer
         string text = context.TryGetTextState(C_TEXT_STATE, out string? editing)
             ? editing!
             : value.ToString("D");
-        if (NativeImGui.InputText(
+        if (EditorImGui.InputText(
                 $"##{context.path}",
                 ref text,
                 C_BUFFER_SIZE,

@@ -8,7 +8,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Rendering;
 using Inno.Extensibility.Types;
 using Inno.Rendering;
-using UI = Inno.Native.ImGui.ImGui;
+using ImGuiApi = Inno.Native.ImGui.ImGui;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Shaders;
@@ -59,14 +59,14 @@ public sealed class ShaderPreviews : EditorModule
                 .Select(value => value.contract.value).Distinct(StringComparer.Ordinal).Where(m_registry.providers.ContainsKey).ToArray();
             if (contracts.Length == 0) { Widget.Hint("No preview provider for this Shader contract."); return; }
             if (contracts.Length != 1) { Widget.Hint("Select a Technique to choose an unambiguous preview contract."); return; }
-            int pixels = Math.Clamp((int)MathF.Ceiling(logicalSize * UI.GetWindowDpiScale()), 1, 2048);
+            int pixels = Math.Clamp((int)MathF.Ceiling(logicalSize * ImGuiApi.GetWindowDpiScale()), 1, 2048);
             var context = new ShaderPreviewContext(new(state.viewportId), material, artifact, definition, state, pixels, pixels);
             EditorViewportLayer layer = m_registry.providers[contracts[0]].CreateLayer(context);
             if (m_previews.TryRender(new(state.viewportId, pixels, pixels, RenderTextureFormat.RGBA8, [layer]), out var handle))
                 m_previews.Draw(handle, new(logicalSize, logicalSize));
-            else UI.Dummy(new(logicalSize, logicalSize));
+            else ImGuiApi.Dummy(new(logicalSize, logicalSize));
             Widget.Hint(compilation.usingLastGood ? "Draft preview · last-good candidate · Scene/Game unchanged" : "Isolated preview · Scene/Game unchanged");
-            foreach (Diagnostic error in state.errors.Values) UI.TextWrapped(error.message);
+            foreach (Diagnostic error in state.errors.Values) ImGuiApi.TextWrapped(error.message);
         }
         catch (Exception error) when (Recoverable(error)) { Widget.Hint("Preview: " + error.Message); }
     }

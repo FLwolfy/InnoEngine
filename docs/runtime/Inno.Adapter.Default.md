@@ -3,7 +3,7 @@
 [Runtime 索引](README.md) · [Adapter contract](Inno.Adapter.md) · [Shell](Inno.Shell.md)
 
 该项目是标准发行版的 runtime implementation catalog。`DefaultAdapterCatalog` 实现 `IAdapterCatalog`，
-提供 SDL3 platform/input、FileSystem storage、BGFX rendering 与 MiniAudio audio。
+提供 SDL3 platform/input、FileSystem storage、BGFX rendering、MiniAudio audio、FreeType/HarfBuzz text 与 RmlUi UI。
 Rendering 使用开放的 `RenderingBackendId` 与 provider snapshot，其他 family 的选择协议不变。
 
 具体类型只出现在该程序集内部的 factory 实现中。公开 surface 只有 `DefaultAdapterCatalog` 及其返回的中立 factory interface；创建方法通过 interface 调用。
@@ -17,5 +17,5 @@ IRenderingBackendFactory rendering = catalog.rendering;
 
 `DefaultAdapterCatalog(IEnumerable<RenderingBackendProvider>? renderingProviders = null)` 可接收完整替换
 provider 集合，null 才使用内置 BGFX。它不是向默认列表追加项；重复/空 ID 在构造时失败，选择未注册
-ID 在 Shell 创建窗口前失败。`platform`、`input`、`storage`、`rendering`、`audio` 属性仍返回中立工厂。
+ID 在 Shell 创建窗口前失败。`platform`、`input`、`storage`、`rendering`、`audio`、`text`、`ui` 属性返回中立工厂。
 Provider 由 composition owner 持有，不参与 gameplay 插件热替换。

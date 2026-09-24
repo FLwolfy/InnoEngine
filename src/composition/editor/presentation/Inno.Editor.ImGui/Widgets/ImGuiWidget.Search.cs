@@ -40,7 +40,7 @@ public static partial class ImGuiWidget
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         NativeImGui.SetNextItemWidth(width);
-        return NativeImGui.InputTextWithHint($"##search_{id}", hint, ref query, capacity);
+        return ImGuiUtf8Buffer.InputText($"##search_{id}", hint, ref query, capacity, ImGuiInputTextFlags.None);
     }
 
     /// <summary>

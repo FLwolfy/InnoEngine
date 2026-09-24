@@ -8,6 +8,9 @@
   <PropertyGroup Condition="'$(InnoScriptApi)' == ''">
     <InnoScriptApi>None</InnoScriptApi>
   </PropertyGroup>
+  <PropertyGroup>
+    <BGCSRuntimeProject Condition="'$(BGCSRuntimeProject)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\BindGen-CS\src\BGCS.Runtime\BGCS.Runtime.csproj')">$(MSBuildThisFileDirectory)..\..\BindGen-CS\src\BGCS.Runtime\BGCS.Runtime.csproj</BGCSRuntimeProject>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Inno.Core.Serialization.Generators'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1570;CS1572;CS1573;CS1591</WarningsAsErrors>

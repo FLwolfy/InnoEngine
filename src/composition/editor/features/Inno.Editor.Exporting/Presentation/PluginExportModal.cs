@@ -3,6 +3,7 @@ using System.Numerics;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
+using EditorImGui = Inno.Editor.ImGui.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -11,7 +12,7 @@ namespace Inno.Editor.Exporting;
 [EditorModal("export.plugin", "Export as Plugin", order: 300)]
 internal sealed class PluginExportModal(ExportWindowModule window) : EditorModal
 {
-    private const nuint C_TEXT_CAPACITY = 4096;
+    private const int C_TEXT_CAPACITY = 4096;
 
     /// <summary>
     /// Gets whether this implementation is visible.
@@ -109,7 +110,7 @@ internal sealed class PluginExportModal(ExportWindowModule window) : EditorModal
     {
         NativeImGui.TextUnformatted(label);
         NativeImGui.SetNextItemWidth(-1f);
-        if (NativeImGui.InputText($"##{id}", ref value, C_TEXT_CAPACITY))
+        if (EditorImGui.InputText($"##{id}", ref value, C_TEXT_CAPACITY))
             apply(value);
         else
             apply(value);

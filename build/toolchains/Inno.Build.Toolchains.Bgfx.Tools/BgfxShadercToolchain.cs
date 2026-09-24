@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Inno.Native.Bgfx.Tools;
+using Inno.Native.Bgfx;
 using Inno.Rendering.Assets;
 using Inno.Rendering;
 

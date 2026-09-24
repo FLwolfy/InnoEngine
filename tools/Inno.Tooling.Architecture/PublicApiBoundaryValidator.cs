@@ -15,6 +15,8 @@ internal static class PublicApiBoundaryValidator
         Project[] projects = new[] { "src", "native", "build" }
             .SelectMany(folder => Directory.EnumerateFiles(Path.Combine(root, folder), "*.csproj", SearchOption.AllDirectories))
             .Where(path => !path.Split(Path.DirectorySeparatorChar).Any(segment => segment is "bin" or "obj"))
+            // Binding extensions run only while generating source; they are not runtime or solution assemblies.
+            .Where(path => !path.Split(Path.DirectorySeparatorChar).Contains("Bindings", StringComparer.Ordinal))
             .Select(Project.Read).ToArray();
         var byName = projects.ToDictionary(project => project.name, StringComparer.Ordinal);
         var references = new Dictionary<string, PortableExecutableReference>(StringComparer.OrdinalIgnoreCase);
