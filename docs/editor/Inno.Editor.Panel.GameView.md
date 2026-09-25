@@ -4,6 +4,8 @@
 
 Game View 是开放 kind `inno.editor.viewport.game` 的通用 viewport host。每个活动 Plugin Contributor 自行选择参与的 Scene、Pipeline 和帧数据；Panel 不查找内建 Camera，也不解释 Scene。Panel 只依赖 `IEditorGameScenePresentation`，每帧把其中原子捕获的有序 Scene 与 active Scene 转为 `RenderContentScope`。Editor Rendering 将所有适用 Contributor 确定性排序并合成到同一 target；各模型内部的 Camera stack 仍由对应 Plugin 决定。
 
+Canvas Plugin 自行贡献 screen-space UI 层，不需要 2D/3D Camera 或 Rendering2D Scene System。只有 Canvas 内容时，它初始化 Game View 的目标背景；与其他渲染模型并存时按贡献顺序叠加。
+
 `IEditorGameScenePresentation` 的 owner 是 `Inno.Editor.Scene`。Editing、Compiling 和尚未提交完成的 Preparing 阶段返回 Edit Session；Play Scene 全部物化成功后一次切换到隔离 Runtime Session；停止时先切回 Edit Session，再释放 Play 世界。Game View、Scene View、Hierarchy、Inspector、Selection 与 Gizmo 因此观察并操作同一个脚本驱动 runtime graph。Play workspace 禁止持久化且使用独立 History 分支，所以这些临时修改不会污染 Edit 文档；Panel 不访问 `RuntimeSession`，PlayMode 也不依赖 Rendering。
 
 内容尺寸变化会在渲染安全点 resize `RenderTexture`。输出直接作为 BGFX ImGui texture 合成，不做 CPU 回读。`Editor/Appearance/Viewports/Game Background` 是 Game View 的默认背景色，并通过中立 `EditorViewportPresentation` 交给全部 Contributor；第一层可初始化目标，后续重叠层通过 `preservePresentationTarget` 明确保留已有颜色。

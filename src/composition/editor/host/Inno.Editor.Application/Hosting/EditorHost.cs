@@ -16,6 +16,7 @@ using Inno.Audio;
 using Inno.Build;
 using Inno.Build.Platform.MacOS;
 using Inno.Build.Platform.Windows;
+using Inno.UI.Runtime;
 using Inno.Core.Events;
 using Inno.Core.Layers;
 using Inno.Core.Logging;
@@ -196,6 +197,7 @@ internal sealed class EditorHost : ShellHost
             authoring.Update();
             editSession.Tick(frame.deltaTime);
             using (editSession.EnterExecutionScope())
+            using (editSession.subsystems.GetRequiredSubsystem<UiRuntime>().EnterExecutionScope())
             {
                 layers.OnUpdate(frame.deltaTime);
                 layers.OnLateUpdate(frame.deltaTime);
@@ -244,6 +246,7 @@ internal sealed class EditorHost : ShellHost
     protected override void OnPresentation(ShellFrame frame)
     {
         using IDisposable scope = editSession.EnterExecutionScope();
+        using IDisposable uiScope = editSession.subsystems.GetRequiredSubsystem<UiRuntime>().EnterExecutionScope();
         layers.RenderFrame(frame.deltaTime);
     }
 

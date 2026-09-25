@@ -8,7 +8,7 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 namespace Inno.Editor.Panel.Global;
 
 /// <summary>
-/// Applies the configured actual UI size and manages transient zoom multiples around it.
+/// Applies the configured actual UI size and preserves project-local zoom multiples around it.
 /// </summary>
 /// <param name="settings">
 /// The validated configuration that controls this operation.
@@ -62,12 +62,34 @@ internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
         settings.changed -= ApplyActualSize;
     }
 
+    /// <summary>
+    /// Captures the zoom step relative to the configured actual UI size.
+    /// </summary>
+    /// <param name="state">
+    /// The project-local module state that receives the zoom step.
+    /// </param>
+    protected override void Capture(EditorState state)
+    {
+        state.Set("step", m_zoomStep);
+    }
+
+    /// <summary>
+    /// Restores the bounded project-local zoom step after settings initialize.
+    /// </summary>
+    /// <param name="state">
+    /// The persisted project-local module state.
+    /// </param>
+    protected override void Restore(EditorState state)
+    {
+        m_zoomStep = Math.Clamp(state.Get("step", 0), -10, 10);
+        _ = EditorWidget.style.SetZoom(ResolveZoom(m_zoomStep));
+    }
+
     private void ApplyActualSize(EditorSettings changedSettings)
     {
         m_actualSize = NormalizeActualSize(
             changedSettings.Get(C_ACTUAL_SIZE_PATH).GetAsSingle("value", 1f));
-        m_zoomStep = 0;
-        _ = EditorWidget.style.SetZoom(m_actualSize);
+        _ = EditorWidget.style.SetZoom(ResolveZoom(m_zoomStep));
         _ = EditorWidget.style.SetCompactMode(
             changedSettings.Get(C_DENSITY_PATH).GetAsBoolean("compact", false));
     }

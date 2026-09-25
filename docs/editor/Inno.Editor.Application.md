@@ -25,6 +25,8 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 `EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、Editor Audio、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Audio → Session → EngineHost → Window → Platform 的逆序释放。
 
+默认 authoring adapter 会把 RML importer/frontend 随自身部署给 Editor；TypeCatalog 因而能通过宿主依赖闭包发现它们。Editor presentation 绘制期间绑定 Edit Session 的 UI service，让 Canvas 等 Game View contributor 能在独立视口建立 UI context。
+
 EditorLayer 的 runtime/diagnostics 通过 Core LifetimeScope 统一拥有，Core LayerStack 在 Attach 失败后调用 Detach 补偿。
 Pending 从 extension Stop/Detach 经 interaction runtime、ImGui runtime、Layer 和 Shell 原样传播；未退休 owner 不移出资源栈，
 不销毁下层 native adapter。最外层 Play quiesce 仍作为产品前置阶段，但不替代通用扩展退出协议。

@@ -60,7 +60,7 @@ Editor 脚本导出 Drawer、预览 Provider、标记、帧内 Context、Materia
 
 ## 实际渲染预览
 
-Material Inspector 的 Material Preview 与 Shader Inspector 中始终可见的 Preview 共用此模块。输出预览表示整个 Shader 的结果，不冒充任意中间节点的数值可视化。
+Material Inspector 顶部独立的 Preview 区域与 Shader Inspector 中始终可见的 Preview 共用此模块。没有可编辑属性与关键词时，Parameters 区域显示空状态说明。输出预览表示整个 Shader 的结果，不冒充任意中间节点的数值可视化。
 Rendering2D 的 `SpriteShaderPreview`/`SpritePreviewPipeline` 是独立的 Editor-only 消费者：使用中性的未受光 Sprite 平面、白色实例纹理和独立材质覆盖，通过普通 Render Graph 绘制。
 不同领域通过自己的 Contract 提供网格、环境与 Pass 参数，通用引擎没有 Sprite 分支。若多种可预览 Contract 同时匹配，要求选择 Technique，不按发现顺序猜测。
 

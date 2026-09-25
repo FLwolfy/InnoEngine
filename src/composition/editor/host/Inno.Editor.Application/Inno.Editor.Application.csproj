@@ -48,6 +48,7 @@
     <ProjectReference Include="..\..\..\..\services\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\text\Inno.Text.Assets\Inno.Text.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\ui\Inno.UI.Assets\Inno.UI.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\services\ui\Inno.UI.Runtime\Inno.UI.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\runtime\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />

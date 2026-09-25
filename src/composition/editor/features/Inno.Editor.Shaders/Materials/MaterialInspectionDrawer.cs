@@ -75,6 +75,16 @@ internal static class MaterialInspector
         NativeImGui.PushID(draft.id.ToString("N"));
         try
         {
+            if (EditorWidget.SectionHeader("Preview", "Shows an isolated preview of the current Material draft."))
+            {
+                if (material.shader is null || material.shader.isMissing)
+                    EditorWidget.Hint("Choose an available Shader to preview this Material.");
+                else if (context.interactions.TryGetModule<ShaderPreviews>(out var shaderPreviews) && shaderPreviews is not null)
+                    shaderPreviews.DrawMaterial(draft.id, material, MathF.Max(1f, MathF.Min(256f, NativeImGui.GetContentRegionAvail().X)));
+                else
+                    EditorWidget.Hint("Material preview is unavailable.");
+            }
+
             bool materialOpen = EditorWidget.SectionHeader("Material", "Edits stay in this draft. Save publishes through normal asset import; Revert reloads the source.");
             if (materialOpen)
             {
@@ -102,10 +112,6 @@ internal static class MaterialInspector
                     context.interactions.SetSelection(shaderEntry);
             }
 
-            if (materialOpen && NativeImGui.CollapsingHeader("Material Preview")
-                && context.interactions.TryGetModule<ShaderPreviews>(out var shaderPreviews) && shaderPreviews is not null)
-                shaderPreviews.DrawMaterial(draft.id, material, MathF.Max(1f, MathF.Min(256f, NativeImGui.GetContentRegionAvail().X)));
-
             if (materialOpen && (definition.techniques.Length > 1 || material.techniqueId.isValid))
             {
                 if (EditorWidget.BeginBoundedCombo("##technique", material.techniqueId.isValid ? material.techniqueId.value : "Automatic"))
@@ -125,11 +131,13 @@ internal static class MaterialInspector
             bool parametersOpen = EditorWidget.SectionHeader("Parameters", "Inherited values follow Shader defaults. Changing a field creates a Material override; Reset restores inheritance.");
             bool groupOpen = parametersOpen;
             string currentGroup = "";
+            int visibleParameters = 0;
             foreach (ShaderPropertyDefinition property in definition.properties.Where(IsEditable))
             {
                 ShaderParameterPresentation presentation = documents.Presentation(material.shader, property.id, out string presentationError);
                 if (presentationError.Length != 0) EditorWidget.Hint("Parameter presentation unavailable: " + presentationError);
                 if (!presentation.visible) continue;
+                visibleParameters++;
                 if (presentation.group != currentGroup)
                 {
                     currentGroup = presentation.group;
@@ -160,6 +168,9 @@ internal static class MaterialInspector
                 }
                 finally { NativeImGui.PopID(); }
             }
+
+            if (parametersOpen && visibleParameters == 0 && definition.keywords.Length == 0)
+                EditorWidget.Hint("No editable parameters.");
 
             if (parametersOpen && material.properties.Count != 0 && !draft.readOnly && NativeImGui.Button("Reset all overrides"))
             { material.ReplaceProperties([]); documents.Edit(draft, material, true); }

@@ -68,7 +68,7 @@ Editor ImGui context 默认启用 Inno overlay scrollbar 扩展。纵横滚动�
 | `View/Zoom Out` | Command/Ctrl + `-` | 在 actual size 基础上减少一个 `0.10` 倍率步长。 |
 | `View/Actual Size` | Command/Ctrl + `0` | 恢复 Settings 中配置的 actual size。 |
 
-有效范围固定为 `0.75..1.50`；持久值使用完整路径 `Editor/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/Settings.Editor.inno`。Zoom In/Out 是 session 内的临时倍率，不改持久设置，也不制造 History。
+有效范围固定为 `0.75..1.50`；Actual Size 使用完整路径 `Editor/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/Settings.Editor.inno`。Zoom In/Out 的相对步数通过 `EditorZoomModule` 的项目状态保存到 `<ProjectRoot>/editor.ini`，不改 Settings，也不制造 History。
 
 ## Modal renderer
 
