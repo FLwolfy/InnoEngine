@@ -14,8 +14,12 @@ public readonly record struct FontMetadata
     /// <summary>
     /// Creates validated imported font metadata.
     /// </summary>
-    /// <param name="faceCount">The number of faces in the source collection.</param>
-    /// <param name="encodedByteLength">The encoded source length in bytes.</param>
+    /// <param name="faceCount">
+    /// The number of faces in the source collection.
+    /// </param>
+    /// <param name="encodedByteLength">
+    /// The encoded source length in bytes.
+    /// </param>
     public FontMetadata(int faceCount, long encodedByteLength)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(faceCount);
@@ -46,8 +50,12 @@ public static class FontMetadataCodec
     /// <summary>
     /// Encodes validated metadata into a deterministic runtime payload.
     /// </summary>
-    /// <param name="metadata">The metadata to encode.</param>
-    /// <returns>The compact runtime payload.</returns>
+    /// <param name="metadata">
+    /// The metadata to encode.
+    /// </param>
+    /// <returns>
+    /// The compact runtime payload.
+    /// </returns>
     public static byte[] Encode(FontMetadata metadata)
     {
         byte[] output = new byte[C_SIZE];
@@ -60,8 +68,12 @@ public static class FontMetadataCodec
     /// <summary>
     /// Decodes and validates a compact font runtime payload.
     /// </summary>
-    /// <param name="payload">The complete runtime payload.</param>
-    /// <returns>The decoded metadata.</returns>
+    /// <param name="payload">
+    /// The complete runtime payload.
+    /// </param>
+    /// <returns>
+    /// The decoded metadata.
+    /// </returns>
     public static FontMetadata Decode(ReadOnlySpan<byte> payload)
     {
         if (payload.Length != C_SIZE || BinaryPrimitives.ReadUInt32LittleEndian(payload) != C_MAGIC)
@@ -95,8 +107,12 @@ public sealed class FontAsset : AssetObject
     /// <summary>
     /// Refreshes imported metadata after an artifact commit.
     /// </summary>
-    /// <param name="previousPayload">The previous compact runtime payload.</param>
-    /// <param name="currentPayload">The current compact runtime payload.</param>
+    /// <param name="previousPayload">
+    /// The previous compact runtime payload.
+    /// </param>
+    /// <param name="currentPayload">
+    /// The current compact runtime payload.
+    /// </param>
     protected override void OnRuntimePayloadChanged(
         ReadOnlyMemory<byte> previousPayload,
         ReadOnlyMemory<byte> currentPayload)

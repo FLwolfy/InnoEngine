@@ -18,7 +18,10 @@ internal sealed class StatsPanel : EditorPanel
 {
     private readonly FrameStatisticsSampler m_statistics = new();
 
-    public override bool useWindowPadding => false;
+    /// <summary>
+    /// Gets whether use window padding is active for the current instance.
+    /// </summary>
+public override bool useWindowPadding => false;
 
     /// <summary>
     /// Creates the panel.

@@ -4,8 +4,10 @@ using System.Collections.Generic;
 using System.Numerics;
 
 using Inno.Core.Settings;
+using Inno.Core.Input;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
+using Inno.Editor.PlayMode;
 using Inno.Editor.Rendering;
 using Inno.Editor.Scene;
 using Inno.Editor.Settings;
@@ -29,6 +31,7 @@ internal sealed class GameViewPanel : EditorPanel
 
     private readonly EditorRenderingModule m_rendering;
     private readonly IEditorGameScenePresentation m_scenePresentation;
+    private readonly IEditorPlayMode m_playMode;
     private readonly EditorSettings m_editorSettings;
     private readonly ProjectSettingsStore m_projectSettings;
     private Vector4 m_backgroundColor;
@@ -38,11 +41,13 @@ internal sealed class GameViewPanel : EditorPanel
     internal GameViewPanel(
         EditorRenderingModule rendering,
         IEditorGameScenePresentation scenePresentation,
+        IEditorPlayMode playMode,
         EditorSettings editorSettings,
         ProjectSettingsStore projectSettings)
     {
         m_rendering = rendering ?? throw new ArgumentNullException(nameof(rendering));
         m_scenePresentation = scenePresentation ?? throw new ArgumentNullException(nameof(scenePresentation));
+        m_playMode = playMode ?? throw new ArgumentNullException(nameof(playMode));
         m_editorSettings = editorSettings ?? throw new ArgumentNullException(nameof(editorSettings));
         m_projectSettings = projectSettings ?? throw new ArgumentNullException(nameof(projectSettings));
     }
@@ -70,15 +75,40 @@ internal sealed class GameViewPanel : EditorPanel
         if (available.X <= 0f || available.Y <= 0f)
             return;
         RefreshPresentationSettings();
-        GameViewportLayout layout = CalculateLayout(available, m_presentation);
+        float framebufferScale = NativeImGui.GetIO().DisplayFramebufferScale.X;
+        if (!float.IsFinite(framebufferScale) || framebufferScale <= 0f)
+            framebufferScale = 1f;
+        GameViewportLayout layout = CalculateLayout(available, m_presentation, framebufferScale);
         m_rendering.SetPresentation(
             C_VIEWPORT_ID,
             new EditorViewportPresentation(new Inno.Core.Mathematics.Color(
                 m_backgroundColor.X,
                 m_backgroundColor.Y,
                 m_backgroundColor.Z,
-                m_backgroundColor.W)));
+                m_backgroundColor.W), framebufferScale));
         m_rendering.SetContentScope(C_VIEWPORT_ID, CreateContentScope());
+        Vector2 outputOrigin = NativeImGui.GetCursorScreenPos() + layout.offset;
+        Vector2 mouse = NativeImGui.GetMousePos();
+        Vector2 local = mouse - outputOrigin;
+        bool inside = local.X >= 0f && local.Y >= 0f
+            && local.X < layout.size.X && local.Y < layout.size.Y;
+        var io = NativeImGui.GetIO();
+        KeyModifier modifiers = KeyModifier.None;
+        if (io.KeyAlt) modifiers |= KeyModifier.Alt;
+        if (io.KeyCtrl) modifiers |= KeyModifier.Control;
+        if (io.KeyShift) modifiers |= KeyModifier.Shift;
+        if (io.KeySuper) modifiers |= KeyModifier.Super;
+        m_rendering.SetOutputInput(C_VIEWPORT_ID, m_playMode.isPlaying ? new RenderOutputInput(
+            new Inno.Core.Mathematics.Vector2(
+                local.X * layout.pixelWidth / layout.size.X,
+                local.Y * layout.pixelHeight / layout.size.Y),
+            inside,
+            inside ? new Inno.Core.Mathematics.Vector2(0f, io.MouseWheel) : default,
+            modifiers,
+            [], [],
+            inside && NativeImGui.IsMouseClicked(ImGuiMouseButton.Left) ? [MouseButton.Left] : [],
+            NativeImGui.IsMouseReleased(ImGuiMouseButton.Left) ? [MouseButton.Left] : [],
+            []) : RenderOutputInput.suspended);
         if (!m_rendering.TrySubmit(
                 S_KIND,
                 C_VIEWPORT_ID,
@@ -152,7 +182,8 @@ internal sealed class GameViewPanel : EditorPanel
 
     private static GameViewportLayout CalculateLayout(
         Vector2 available,
-        GamePresentationSettings presentation)
+        GamePresentationSettings presentation,
+        float framebufferScale)
     {
         int availableWidth = Math.Max(1, (int)MathF.Floor(available.X));
         int availableHeight = Math.Max(1, (int)MathF.Floor(available.Y));
@@ -162,8 +193,8 @@ internal sealed class GameViewPanel : EditorPanel
         return new GameViewportLayout(
             new Vector2(viewport.x, viewport.y),
             new Vector2(viewport.width, viewport.height),
-            viewport.width,
-            viewport.height);
+            Math.Max(1, (int)MathF.Ceiling(viewport.width * framebufferScale)),
+            Math.Max(1, (int)MathF.Ceiling(viewport.height * framebufferScale)));
     }
 
     private ContentReadScope CreateContentScope()

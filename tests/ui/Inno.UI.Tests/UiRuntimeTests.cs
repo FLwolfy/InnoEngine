@@ -80,6 +80,7 @@ public sealed class UiRuntimeTests
         public bool SetClass(UiContextHandle context, UiDocumentHandle document, string elementId, string className, bool active) => true;
         public void RegisterFont(UiFontRegistration registration) { }
         public void RegisterTexture(UiContextHandle context, string source, UiTextureData texture) { }
+        public bool HasElementAtPoint(UiContextHandle context, Inno.Core.Mathematics.Vector2 position) => false;
         public void Update(UiContextHandle context, UiInputSnapshot input) => lastInput = input;
         public UiRenderFrame Render(UiContextHandle context) => UiRenderFrame.empty;
         public IReadOnlyList<UiEvent> DrainEvents(UiContextHandle context) => [];

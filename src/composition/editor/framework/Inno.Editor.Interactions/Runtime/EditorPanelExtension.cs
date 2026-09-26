@@ -72,7 +72,9 @@ public sealed class EditorPanelExtension
     /// <param name="allowScrolling">
     /// The requested scrolling policy, or the safe default when the panel is quarantined.
     /// </param>
-    /// <param name="initialSize">The preferred first-use floating size, or zero when native sizing is requested.</param>
+    /// <param name="initialSize">
+    /// The preferred first-use floating size, or zero when native sizing is requested.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the policy was read without quarantining the panel.
     /// </returns>

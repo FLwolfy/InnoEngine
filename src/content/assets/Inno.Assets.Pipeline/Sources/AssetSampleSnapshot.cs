@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using Inno.Assets;
+using Inno.Core.Serialization;
 
 namespace Inno.Assets.Pipeline;
 
@@ -19,6 +21,52 @@ internal static class AssetSampleSnapshot
         if (File.Exists(sourceMeta))
             CopyStableFile(sourceMeta, target + ".imeta");
         return copied;
+    }
+
+    internal static void RemapIdentities(
+        string stagedSource,
+        AssetPath source,
+        AssetPath target,
+        SerializationRegistry serialization,
+        Action<AssetSampleTransformContext> transform)
+    {
+        var identities = new Dictionary<Guid, Guid>();
+        var paths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sourceIdentities = new Dictionary<string, (Guid oldId, Guid newId)>(StringComparer.Ordinal);
+        string[] metadata = Directory.GetFiles(stagedSource, "*.imeta", SearchOption.AllDirectories);
+        if (File.Exists(stagedSource + ".imeta"))
+            metadata = [.. metadata, stagedSource + ".imeta"];
+        foreach (string path in metadata.Order(StringComparer.Ordinal))
+        {
+            AssetSourceMeta meta = serialization.Deserialize<AssetSourceMeta>(File.ReadAllBytes(path));
+            if (meta.persistentId == Guid.Empty)
+                throw new InvalidDataException($"Sample metadata '{path}' has no persistent identity.");
+            if (!identities.TryAdd(meta.persistentId, Guid.NewGuid()))
+                throw new InvalidDataException($"Sample contains duplicate persistent identity '{meta.persistentId:D}'.");
+            Guid oldId = meta.persistentId;
+            meta.persistentId = identities[oldId];
+            File.WriteAllBytes(path, serialization.Serialize(meta));
+            string relative = Path.GetRelativePath(stagedSource, path);
+            string suffix = string.Equals(path, stagedSource + ".imeta", StringComparison.Ordinal)
+                ? string.Empty
+                : relative[..^".imeta".Length].Replace('\\', '/');
+            sourceIdentities.Add(suffix, (oldId, meta.persistentId));
+            string oldLocal = string.IsNullOrEmpty(suffix)
+                ? source.localPath : source.localPath + "/" + suffix;
+            string newLocal = string.IsNullOrEmpty(suffix)
+                ? target.localPath : target.localPath + "/" + suffix;
+            paths[new AssetPath(source.source, oldLocal).ToString()] = newLocal;
+            paths[oldLocal] = newLocal;
+        }
+        transform(new AssetSampleTransformContext(stagedSource, source, target, identities, sourceIdentities));
+        foreach (string path in Directory.GetFiles(stagedSource, "*", SearchOption.AllDirectories)
+                     .Where(static path => !path.EndsWith(".imeta", StringComparison.OrdinalIgnoreCase)))
+        {
+            byte[] original = File.ReadAllBytes(path);
+            byte[] rewritten = SerializedIdentityRemapper.Rewrite(original, identities, paths);
+            if (!original.AsSpan().SequenceEqual(rewritten))
+                File.WriteAllBytes(path, rewritten);
+        }
     }
 
     private static List<string> CopyDirectory(

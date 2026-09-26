@@ -8,13 +8,26 @@ using Inno.Core.Serialization;
 
 namespace Inno.Assets.Pipeline;
 
+/// <summary>
+/// Resolves import settings and dependency invalidation for the asset loader.
+/// </summary>
 public sealed partial class AssetLoader
 {
-    /// <summary>Reads a detached importer settings value without changing source metadata.</summary>
-    /// <param name="path">The isolated source path, not its sidecar path.</param>
-    /// <returns>The current settings and the metadata fingerprint required for a subsequent save.</returns>
-    /// <exception cref="NotSupportedException">The source has no registered importer.</exception>
-    /// <exception cref="InvalidDataException">The persisted settings cannot be restored by the current importer.</exception>
+    /// <summary>
+    /// Reads a detached importer settings value without changing source metadata.
+    /// </summary>
+    /// <param name="path">
+    /// The isolated source path, not its sidecar path.
+    /// </param>
+    /// <returns>
+    /// The current settings and the metadata fingerprint required for a subsequent save.
+    /// </returns>
+    /// <exception cref="NotSupportedException">
+    /// The source has no registered importer.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// The persisted settings cannot be restored by the current importer.
+    /// </exception>
     public AssetImportSettingsSnapshot GetImportSettings(AssetPath path)
         => Execute(() =>
         {
@@ -31,13 +44,27 @@ public sealed partial class AssetLoader
     /// Atomically saves importer settings and reimports the source. Failed imports retain both the saved settings
     /// and the previous successful artifact; callers must inspect the returned import status separately from saving.
     /// </summary>
-    /// <param name="path">The writable isolated source path.</param>
-    /// <param name="settings">A value of the current importer's settings type, or null to reset to defaults.</param>
-    /// <param name="expectedFingerprint">The fingerprint returned when the settings were read.</param>
-    /// <returns>True when reimport succeeds; false when settings were saved but reimport failed.</returns>
-    /// <exception cref="IOException">The sidecar changed externally or could not be written.</exception>
-    /// <exception cref="InvalidOperationException">The source is read-only or belongs to an isolated candidate.</exception>
-    /// <exception cref="ArgumentException">The settings have a different type from the current importer.</exception>
+    /// <param name="path">
+    /// The writable isolated source path.
+    /// </param>
+    /// <param name="settings">
+    /// A value of the current importer's settings type, or null to reset to defaults.
+    /// </param>
+    /// <param name="expectedFingerprint">
+    /// The fingerprint returned when the settings were read.
+    /// </param>
+    /// <returns>
+    /// True when reimport succeeds; false when settings were saved but reimport failed.
+    /// </returns>
+    /// <exception cref="IOException">
+    /// The sidecar changed externally or could not be written.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The source is read-only or belongs to an isolated candidate.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The settings have a different type from the current importer.
+    /// </exception>
     public bool SaveImportSettings(AssetPath path, ISerializable? settings, string expectedFingerprint)
         => Execute(() =>
         {

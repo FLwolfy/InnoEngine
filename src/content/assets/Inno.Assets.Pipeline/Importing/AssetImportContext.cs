@@ -54,7 +54,9 @@ public sealed class AssetImportContext
     /// <param name="sourceReader">
     /// Reader for controlled source dependencies in the current mount snapshot.
     /// </param>
-    /// <param name="artifacts">Named artifact lookup bound to the same owner generation.</param>
+    /// <param name="artifacts">
+    /// Named artifact lookup bound to the same owner generation.
+    /// </param>
     internal AssetImportContext(
         string relativePath,
         string absolutePath,
@@ -89,10 +91,18 @@ public sealed class AssetImportContext
 
     private readonly IAssetArtifactLookup m_artifacts;
 
-    /// <summary>Acquires an immutable dependency output and records its invalidation dependency automatically.</summary>
-    /// <param name="assetId">Persistent dependency identity.</param>
-    /// <param name="outputName">Stable named output protocol.</param>
-    /// <returns>A caller-owned lease that must be disposed after reading.</returns>
+    /// <summary>
+    /// Acquires an immutable dependency output and records its invalidation dependency automatically.
+    /// </summary>
+    /// <param name="assetId">
+    /// Persistent dependency identity.
+    /// </param>
+    /// <param name="outputName">
+    /// Stable named output protocol.
+    /// </param>
+    /// <returns>
+    /// A caller-owned lease that must be disposed after reading.
+    /// </returns>
     public ArtifactLease AcquireArtifact(Guid assetId, string outputName)
     {
         DependsOnArtifact(assetId);

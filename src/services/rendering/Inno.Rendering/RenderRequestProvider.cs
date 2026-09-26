@@ -68,6 +68,12 @@ public sealed class RenderRequestProviderContext
     /// <param name="deltaTime">
     /// Elapsed frame time in seconds.
     /// </param>
+    /// <param name="viewContent">
+    /// Collector for model-independent world items.
+    /// </param>
+    /// <param name="input">
+    /// Viewport-local input for the primary output.
+    /// </param>
     public RenderRequestProviderContext(
         IRenderRequestSink requests,
         ContentReadScope content,
@@ -75,7 +81,9 @@ public sealed class RenderRequestProviderContext
         RenderPresentationSize primaryPresentationSize,
         RenderViewport primaryPresentationViewport,
         ulong frameIndex,
-        float deltaTime)
+        float deltaTime,
+        IViewContentCollector viewContent,
+        RenderOutputInput? input = null)
     {
         this.requests = requests ?? throw new ArgumentNullException(nameof(requests));
         this.content = content ?? throw new ArgumentNullException(nameof(content));
@@ -91,6 +99,8 @@ public sealed class RenderRequestProviderContext
         this.primaryPresentationViewport = primaryPresentationViewport;
         this.frameIndex = frameIndex;
         this.deltaTime = deltaTime;
+        this.viewContent = viewContent ?? throw new ArgumentNullException(nameof(viewContent));
+        this.input = input ?? RenderOutputInput.empty;
     }
 
     /// <summary>
@@ -127,6 +137,15 @@ public sealed class RenderRequestProviderContext
     /// Gets the elapsed frame time in seconds.
     /// </summary>
     public float deltaTime { get; }
+
+    /// <summary>
+    /// Gets the active generation's world-content collector.
+    /// </summary>
+    public IViewContentCollector viewContent { get; }
+    /// <summary>
+    /// Gets viewport-local input for the primary output.
+    /// </summary>
+    public RenderOutputInput input { get; }
 }
 
 /// <summary>

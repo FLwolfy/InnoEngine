@@ -74,6 +74,16 @@ public readonly record struct EditorViewportOutput
 public interface IEditorRenderingHost
 {
     /// <summary>
+    /// Gets the active generation's model-independent world-content collector.
+    /// </summary>
+    IViewContentCollector viewContent { get; }
+
+    /// <summary>
+    /// Gets the current output frame index shared by Editor views.
+    /// </summary>
+    ulong currentFrameIndex { get; }
+
+    /// <summary>
     /// Submits or updates one composed offscreen editor viewport.
     /// </summary>
     /// <param name="composition">

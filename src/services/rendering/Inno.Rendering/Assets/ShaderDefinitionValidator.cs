@@ -5,14 +5,26 @@ using Inno.Core.Diagnostics;
 
 namespace Inno.Rendering;
 
-/// <summary>Validates the source-free material, pass and technique contract shared by graph compilation and deployed shaders.</summary>
+/// <summary>
+/// Validates the source-free material, pass and technique contract shared by graph compilation and deployed shaders.
+/// </summary>
 public static class ShaderDefinitionValidator
 {
-    /// <summary>Checks declaration identities, resource kinds, stage visibility and open technique mappings without mutating the candidate.</summary>
-    /// <param name="definition">The candidate runtime contract.</param>
-    /// <param name="capabilities">Optional device capabilities; unsupported optional passes produce warnings.</param>
-    /// <returns>Immutable diagnostics; an empty collection indicates a valid declaration contract.</returns>
-    /// <exception cref="ArgumentNullException">The definition is null.</exception>
+    /// <summary>
+    /// Checks declaration identities, resource kinds, stage visibility and open technique mappings without mutating the candidate.
+    /// </summary>
+    /// <param name="definition">
+    /// The candidate runtime contract.
+    /// </param>
+    /// <param name="capabilities">
+    /// Optional device capabilities; unsupported optional passes produce warnings.
+    /// </param>
+    /// <returns>
+    /// Immutable diagnostics; an empty collection indicates a valid declaration contract.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// The definition is null.
+    /// </exception>
     public static IReadOnlyList<ShaderDiagnostic> Validate(ShaderDefinition definition, GraphicsCapabilities? capabilities = null)
     {
         ArgumentNullException.ThrowIfNull(definition);

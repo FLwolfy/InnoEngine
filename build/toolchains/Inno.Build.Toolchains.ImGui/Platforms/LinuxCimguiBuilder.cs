@@ -7,18 +7,36 @@ namespace Inno.Build.Toolchains.ImGui.Platforms;
 
 internal sealed class LinuxCimguiBuilder : CimguiBuilder
 {
-    public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
+    /// <summary>
+    /// Gets the native platform identifier produced by this builder.
+    /// </summary>
+public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
     {
         Architecture.X64 => "linux-x64",
         Architecture.Arm64 => "linux-arm64",
         _ => throw new PlatformNotSupportedException("cimgui supports Linux x64 and ARM64 hosts.")
     };
 
-    public override bool IsSupported() =>
+    /// <summary>
+    /// Determines whether the current host can execute this implementation.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+public override bool IsSupported() =>
         OperatingSystem.IsLinux() &&
         RuntimeInformation.ProcessArchitecture is Architecture.X64 or Architecture.Arm64;
 
-    public override void Build(string cimguiDir, string config)
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="cimguiDir">
+    /// The cimgui dir text validated by the build operation.
+    /// </param>
+    /// <param name="config">
+    /// The validated configuration that controls this operation.
+    /// </param>
+public override void Build(string cimguiDir, string config)
     {
         string buildDir = Path.Combine(cimguiDir, CimguiBuildConstants.BUILD_DIR_NAME, "inno", outputPlatform);
         string buildType = GetBuildType(config);

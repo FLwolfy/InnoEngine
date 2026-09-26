@@ -43,21 +43,21 @@ Save/Revert 使用共享文档服务，保存与导入/激活状态分开呈现�
 | `EditorViewportContributor` | 一个渲染模型对 viewport 的可选贡献；负责 participation、frame data、Pipeline，以及可选导航/工具/pointer。 |
 | `EditorViewportContribution` | 单个模型提供的 frame data、可选 Pipeline、共享目标格式与 manipulation space。 |
 | `EditorViewportLayer` | Host 接受后的中立模型层；只含 Stable ID、Pipeline、frame data 与 order。 |
-| `EditorViewportComposition` | 一个 viewport 的非空层集合；按 `order`、Contributor Stable ID 确定性排序并冻结结构。 |
+| `EditorViewportComposition` | 一个 viewport 的非空模型输出；多模型时先各自绘制，再按 route 合成。 |
 | `EditorViewportContext` | 当前 Editor、交互服务、viewport ID、物理尺寸、导航状态、显式内容作用域与呈现偏好。 |
 | `EditorViewportNavigationState` | Host 持有的 position/rotation、正交/透视参数、pivot、focus distance、移动速度与 Planar/Orbit/Fly 模式。 |
 | `EditorViewportNavigationProfile` | 当前交互控制者声明的 Pan、Zoom、Orbit、Fly、Frame Selection 能力与边界。 |
 | `RenderContentScope` | Host 显式选择的有序、frame-scoped 内容集合；Contributor 不扫描全局 Loaded Scene。 |
-| `EditorViewportPresentation` | Host 提供的呈现偏好；当前包含线性背景色。 |
+| `EditorViewportPresentation` | Host 提供的呈现偏好；包含线性背景色及物理渲染像素与逻辑显示单位的比例 `pixelDensity`（默认 `1`）。 |
 | `EditorViewportManipulationSpace` | 控制者可选提供的本帧精确 view/projection，供 Transform 工具使用。 |
 | `EditorViewportOutput` | Host 拥有的 opaque `ImGuiTextureHandle` 输出。 |
 | `EditorRenderingModule` | Contributor generation、参与判断、控制者选择、Composition、Submit/Draw/Release 与逐 Contributor 异常隔离。 |
 
-同一种 kind 可以同时有多个 Contributor。`EditorRenderingModule` 每帧询问全部候选的 `CanContribute`，将成功结果组成一个 `EditorViewportComposition`，再让 Host 把每层作为普通 `RenderRequest` 提交到同一 `RenderTexture`。低 order 先绘制，高 order 后叠加；相同 order 使用 Stable ID 排序，因此热重载、文件枚举顺序和反射顺序不会改变画面层次。
+同一种 kind 可以注册多个 Contributor。`EditorRenderingModule` 每帧询问全部候选的 `CanContribute`；只有一个适用模型时直接提交。多个模型同时适用时必须为该 viewport 配置 `RenderOutputRoute`，明确层顺序及专属世界内容源。Host 为每个模型建立独立目标，并校验共同的目标格式后按预乘 Alpha 合成；未配置 route 或任一模型失败时拒绝整个输出并显示诊断。跨模型不共享几何深度。
 
-同一目标上与已成功层发生像素重叠的后续请求，会收到 `RenderPipelineContext.preservePresentationTarget=true`。该 Pipeline 必须 Load/Preserve 已有颜色，不能再次清屏。互不重叠的 split-screen viewport 可以分别初始化自己的区域；建图失败的层会回滚，不会占据目标，也不会阻止其他 Contributor。所有层必须使用同一 presentation format，否则仅隔离格式不一致的 Contributor。
+显式 `RenderRequest` 写入同一目标重叠区域时会收到 `RenderPipelineContext.preservePresentationTarget=true`。该 Pipeline 必须 Load/Preserve 已有颜色，不能再次清屏。多 Contributor 使用独立模型目标与图层合成。
 
-渲染顺序和交互所有权是两个正交维度。`controllerPriority` 只选择一个 Contributor 负责导航、Toolbar、Pointer 与 Gizmo manipulation space，不改变 layer order。这样 3D 可以作为底层和交互控制者，2D 可以作为 overlay；也允许 2D 在纯 2D 内容中同时承担两者。错误、导航和 target 状态均按稳定 `viewportId` 隔离，多开同 kind viewport 不会串状态。
+渲染顺序和交互所有权是两个正交维度。`controllerPriority` 只选择一个 Contributor 负责导航、Toolbar、Pointer 与 Gizmo manipulation space；它不提供多模型合成。错误、导航和 target 状态均按稳定 `viewportId` 隔离，多开同 kind viewport 不会串状态。
 
 Plugin 示例：
 

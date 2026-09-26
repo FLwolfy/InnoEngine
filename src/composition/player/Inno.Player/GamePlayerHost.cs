@@ -26,6 +26,7 @@ using Inno.Rendering;
 using Inno.Rendering.Runtime;
 using Inno.Shell;
 using Inno.Storage.Runtime;
+using Inno.UI.Runtime;
 using ShellHost = Inno.Shell.Shell;
 
 namespace Inno.Player;
@@ -116,9 +117,11 @@ internal sealed class GamePlayerHost : ShellHost
 
     internal int RunGame(int? smokeFrameLimit)
     {
-        // The Player has one immutable project owner for its entire run. Output providers execute
-        // after the session tick, so its settings must cover the complete Shell phase sequence.
+        // Output content is collected during presentation, after the session tick has ended.
+        // Keep its asset and UI services bound throughout the complete shell frame.
         using IDisposable scope = settings.EnterExecutionScope();
+        using IDisposable sessionScope = session.EnterExecutionScope();
+        using IDisposable uiScope = session.subsystems.GetRequiredSubsystem<UiRuntime>().EnterExecutionScope();
         return Run(smokeFrameLimit);
     }
 
@@ -169,11 +172,16 @@ internal sealed class GamePlayerHost : ShellHost
             .GetRequiredSubsystem<AudioRuntime>();
         AnimationRuntime animation = session.subsystems
             .GetRequiredSubsystem<AnimationRuntime>();
+        InputRuntime inputRuntime = session.subsystems
+            .GetRequiredSubsystem<InputRuntime>();
         m_rendering = new RenderRuntime(m_engine.types, renderDevice, m_renderDiagnostics,
             targetArtifacts: new FileRenderTargetArtifactProvider(runtimeContentRoot, m_engine.serialization,
                 AssetSerializationContext.Create(session.assets)),
             contentScopeProvider: () => SceneContentSource.CreateScope(session.scenes),
-            primaryPresentationViewportProvider: size => CreatePresentationViewport(presentation, size));
+            primaryPresentationViewportProvider: size => CreatePresentationViewport(presentation, size),
+            inputSnapshotProvider: () => inputRuntime.snapshot,
+            primaryInputSurfaceSizeProvider: () => new RenderPresentationSize(
+                Math.Max(1, primaryWindow.width), Math.Max(1, primaryWindow.height)));
         UseHostPipeline(m_engine.CreateHostPipeline(DefaultEngine.CreateHostSubsystems(m_rendering)));
         using (settings.EnterExecutionScope())
         using (AnimationExecutionContext.EnterScope(animation))
@@ -234,13 +242,25 @@ internal sealed class GamePlayerHost : ShellHost
     private sealed class SmokeDiagnostics : IDiagnosticSink
     {
         internal readonly List<string> errors = [];
-        public void Replace(DiagnosticReport report)
+        /// <summary>
+        /// Records errors from the current diagnostic report.
+        /// </summary>
+        /// <param name="report">
+        /// The report consumed by replace; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Replace(DiagnosticReport report)
         {
             foreach (Diagnostic diagnostic in report.diagnostics)
                 if (diagnostic.severity == DiagnosticSeverity.Error)
                     errors.Add(report.source.id + "/" + diagnostic.code + ": " + diagnostic.message);
         }
-        public void Clear(DiagnosticSource source) { }
+        /// <summary>
+        /// Removes all retained entries and returns the instance to an empty reusable state.
+        /// </summary>
+        /// <param name="source">
+        /// The source value or location read by this operation.
+        /// </param>
+public void Clear(DiagnosticSource source) { }
     }
 
     /// <summary>

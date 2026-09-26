@@ -38,6 +38,35 @@ public sealed class SceneEdits : EditorModule
     }
 
     /// <summary>
+    /// Gets whether a scene is a writable Edit document.
+    /// </summary>
+    /// <param name="scene">
+    /// The loaded scene to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when authoring commands may change this scene.
+    /// </returns>
+    public bool CanEdit(GameScene scene) => m_workspace.CanEdit(scene);
+
+    /// <summary>
+    /// Gets whether a scene object belongs to a writable Edit document.
+    /// </summary>
+    /// <param name="target">
+    /// The scene object to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when its owning scene is writable.
+    /// </returns>
+    public bool CanEdit(EngineObject target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.isDestroyed)
+            return false;
+        try { return m_workspace.CanEdit(ResolveOwnerScene(target)); }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>
     /// Creates an additive scene and records a reversible document change.
     /// </summary>
     /// <param name="historyName">
@@ -100,6 +129,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         if (parent is not null && !ReferenceEquals(parent.gameObject.scene, scene))
             throw new ArgumentException("The parent belongs to another scene.", nameof(parent));
         Guid? selectedBefore = GetSelectionId();
@@ -159,6 +189,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         if (!scene.isLoaded)
             throw new InvalidOperationException("A prefab can only be instantiated into a loaded scene.");
         if (parent is not null && !ReferenceEquals(parent.gameObject.scene, scene))
@@ -212,6 +243,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         if (!gameObject.isRuntimeValid)
             return false;
         GameScene scene = gameObject.scene;
@@ -290,6 +322,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(componentType);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(owner.scene);
         GameComponent component = owner.AddComponent(componentType);
         try
         {
@@ -344,6 +377,7 @@ public sealed class SceneEdits : EditorModule
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (component.isDestroyed)
             return false;
+        m_workspace.EnsureEditable(component.gameObject.scene);
         GameObject owner = component.gameObject;
         GameScene scene = owner.scene;
         TypeRef typeRef = GetElementType(component);
@@ -414,6 +448,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(component);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(component.gameObject.scene);
         GameObject owner = component.gameObject;
         byte[] before = SceneElementSerialization.CaptureState(
             component,
@@ -475,6 +510,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(component);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(component.gameObject.scene);
         GameObject owner = component.gameObject;
         int beforeIndex = owner.GetComponentIndex(component);
         int afterIndex;
@@ -529,6 +565,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(systemType);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         GameSystem system = scene.AddSystem(systemType);
         try
         {
@@ -583,6 +620,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         if (system.isDestroyed)
             return false;
         byte[] state = SceneElementSerialization.CaptureState(
@@ -657,6 +695,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         byte[] before = SceneElementSerialization.CaptureState(
             system,
             m_workspace.serialization,
@@ -722,6 +761,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(system);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         int beforeIndex = scene.GetSystemIndex(system);
         int afterIndex;
         try
@@ -853,6 +893,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(name);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(scene);
         ChangeScalar(
             scene,
             SceneScalarKind.SceneName,
@@ -883,6 +924,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentNullException.ThrowIfNull(name);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         ChangeScalar(
             gameObject,
             SceneScalarKind.GameObjectName,
@@ -912,6 +954,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         string before = gameObject.activeSelf ? "1" : "0";
         string after = active ? "1" : "0";
         ChangeScalar(
@@ -951,6 +994,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentException.ThrowIfNullOrWhiteSpace(tag);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         string requestedTag = tag.Trim();
         ChangeScalar(
             gameObject,
@@ -988,6 +1032,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         ChangeScalar(
             gameObject,
             SceneScalarKind.GameObjectLayer,
@@ -1032,6 +1077,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(ResolveOwnerScene(target));
         IReadOnlyList<SerializationPropertySnapshot> before = OrderPropertySnapshots(
             ScenePropertySerialization.CapturePropertySnapshots(
                 target,
@@ -1150,10 +1196,13 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        m_workspace.EnsureEditable(gameObject.scene);
         GameObject[] affected = (relatedObjects ?? Array.Empty<GameObject>())
             .Prepend(gameObject)
             .DistinctBy(static candidate => candidate.identity.persistentId)
             .ToArray();
+        foreach (GameObject affectedObject in affected)
+            m_workspace.EnsureEditable(affectedObject.scene);
         SceneObjectPlacement[] before = CapturePlacements(affected);
         SceneObjectPlacement[] after;
         try
@@ -1267,6 +1316,18 @@ public sealed class SceneEdits : EditorModule
         => m_workspace.activeScene is { isDestroyed: false } scene
             ? scene.identity.persistentId
             : null;
+
+    private GameScene ResolveOwnerScene(EngineObject target)
+        => target switch
+        {
+            GameScene scene => scene,
+            GameObject gameObject => gameObject.scene,
+            GameComponent component => component.gameObject.scene,
+            GameSystem system => m_workspace.scenes.FirstOrDefault(scene =>
+                scene.GetSystems().Contains(system))
+                ?? throw new InvalidOperationException("The system has no loaded scene."),
+            _ => throw new InvalidOperationException("The object has no loaded scene.")
+        };
 
     private Guid? GetSelectionId()
         => m_interactions.selection.selectedTarget is EngineObject { isDestroyed: false } target

@@ -5,19 +5,41 @@ using Inno.Rendering;
 
 namespace Inno.Editor.Shaders;
 
-/// <summary>Uses the shared Inspector drawers for both Shader defaults and Material overrides.</summary>
+/// <summary>
+/// Uses the shared Inspector drawers for both Shader defaults and Material overrides.
+/// </summary>
 public static class ShaderPropertyInspector
 {
-    /// <summary>Draws a typed value without choosing its persistence or history policy.</summary>
-    /// <param name="context">Current Inspector invocation.</param>
-    /// <param name="owner">Detached draft owner used for widget identity.</param>
-    /// <param name="path">Stable draft property path.</param>
-    /// <param name="property">Current Shader declaration.</param>
-    /// <param name="value">Current default or override, never mutated.</param>
-    /// <param name="setter">Writes only the host's detached draft.</param>
-    /// <param name="edits">Host-owned gesture and history service.</param>
-    /// <param name="readOnly">Whether this source is editable.</param>
-    /// <param name="presentation">Optional Editor-only description and scalar bounds; it never changes inherited or stored values.</param>
+    /// <summary>
+    /// Draws a typed value without choosing its persistence or history policy.
+    /// </summary>
+    /// <param name="context">
+    /// Current Inspector invocation.
+    /// </param>
+    /// <param name="owner">
+    /// Detached draft owner used for widget identity.
+    /// </param>
+    /// <param name="path">
+    /// Stable draft property path.
+    /// </param>
+    /// <param name="property">
+    /// Current Shader declaration.
+    /// </param>
+    /// <param name="value">
+    /// Current default or override, never mutated.
+    /// </param>
+    /// <param name="setter">
+    /// Writes only the host's detached draft.
+    /// </param>
+    /// <param name="edits">
+    /// Host-owned gesture and history service.
+    /// </param>
+    /// <param name="readOnly">
+    /// Whether this source is editable.
+    /// </param>
+    /// <param name="presentation">
+    /// Optional Editor-only description and scalar bounds; it never changes inherited or stored values.
+    /// </param>
     public static void Draw(InspectionDrawContext context, object owner, string path, ShaderPropertyDefinition property,
         MaterialValue value, Action<MaterialValue> setter, IInspectionPropertyEditService edits, bool readOnly,
         ShaderParameterPresentation? presentation = null)
@@ -35,10 +57,18 @@ public static class ShaderPropertyInspector
                     candidate.sampler = (RenderSamplerState)next!; setter(candidate); }, edits, readOnly);
     }
 
-    /// <summary>Tests whether a stored override has the exact representation expected by a declaration.</summary>
-    /// <param name="type">Declared material type.</param>
-    /// <param name="kind">Stored representation.</param>
-    /// <returns>True only for supported matching kinds; no lossy conversion is performed.</returns>
+    /// <summary>
+    /// Tests whether a stored override has the exact representation expected by a declaration.
+    /// </summary>
+    /// <param name="type">
+    /// Declared material type.
+    /// </param>
+    /// <param name="kind">
+    /// Stored representation.
+    /// </param>
+    /// <returns>
+    /// True only for supported matching kinds; no lossy conversion is performed.
+    /// </returns>
     public static bool Compatible(ShaderPropertyType type, MaterialValueKind kind) => type switch
     {
         ShaderPropertyType.Float => kind == MaterialValueKind.Float,
@@ -49,12 +79,24 @@ public static class ShaderPropertyInspector
         _ => false
     };
 
-    /// <summary>Applies the edited components of a representative value without replacing unrelated mixed components.</summary>
-    /// <param name="type">Common exact Shader property type.</param>
-    /// <param name="before">Representative value before the control gesture sample.</param>
-    /// <param name="edited">Representative value after this sample.</param>
-    /// <param name="target">Another selected Material's current effective value.</param>
-    /// <returns>A detached value preserving the target's untouched channels, texture or sampler.</returns>
+    /// <summary>
+    /// Applies the edited components of a representative value without replacing unrelated mixed components.
+    /// </summary>
+    /// <param name="type">
+    /// Common exact Shader property type.
+    /// </param>
+    /// <param name="before">
+    /// Representative value before the control gesture sample.
+    /// </param>
+    /// <param name="edited">
+    /// Representative value after this sample.
+    /// </param>
+    /// <param name="target">
+    /// Another selected Material's current effective value.
+    /// </param>
+    /// <returns>
+    /// A detached value preserving the target's untouched channels, texture or sampler.
+    /// </returns>
     public static MaterialValue ApplyEdit(ShaderPropertyType type, MaterialValue before, MaterialValue edited, MaterialValue target)
     {
         if (!Compatible(type, before.kind) || !Compatible(type, edited.kind) || !Compatible(type, target.kind))

@@ -17,7 +17,9 @@ public sealed class FramePacingOptions
     /// <summary>
     /// Gets or sets the software frame-rate ceiling. Zero leaves the frame rate unlimited.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value is negative.
+    /// </exception>
     public int maximumFrameRate
     {
         get => m_maximumFrameRate;

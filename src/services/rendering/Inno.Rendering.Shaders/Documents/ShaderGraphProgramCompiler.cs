@@ -11,24 +11,46 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Partitions explicit GPU-stage regions and lowers them through registered node compilers.</summary>
+/// <summary>
+/// Partitions explicit GPU-stage regions and lowers them through registered node compilers.
+/// </summary>
 public sealed class ShaderGraphProgramCompiler
 {
     private readonly ShaderNodeCompilerRegistry m_nodes;
 
-    /// <summary>Uses the shared node compiler generation rather than retaining individual providers.</summary>
-    /// <param name="nodes">The owner-scoped node registry.</param>
+    /// <summary>
+    /// Uses the shared node compiler generation rather than retaining individual providers.
+    /// </summary>
+    /// <param name="nodes">
+    /// The owner-scoped node registry.
+    /// </param>
     public ShaderGraphProgramCompiler(ShaderNodeCompilerRegistry nodes)
         => m_nodes = nodes ?? throw new ArgumentNullException(nameof(nodes));
 
-    /// <summary>Validates the complete pass/stage graph without deleting invalid or unavailable records.</summary>
-    /// <param name="document">Authored graph, copied before validation.</param>
-    /// <param name="implementationId">Exact adapter implementation identity selected by the caller.</param>
-    /// <param name="sources">Frozen function modules keyed by source node identity.</param>
-    /// <param name="serialization">The owner converter registry.</param>
-    /// <param name="context">The complete owner reference context.</param>
-    /// <param name="cancellationToken">Cancellation between stages and node invocations.</param>
-    /// <returns>All typed passes, or diagnostics without a partial publishable program.</returns>
+    /// <summary>
+    /// Validates the complete pass/stage graph without deleting invalid or unavailable records.
+    /// </summary>
+    /// <param name="document">
+    /// Authored graph, copied before validation.
+    /// </param>
+    /// <param name="implementationId">
+    /// Exact adapter implementation identity selected by the caller.
+    /// </param>
+    /// <param name="sources">
+    /// Frozen function modules keyed by source node identity.
+    /// </param>
+    /// <param name="serialization">
+    /// The owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// The complete owner reference context.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation between stages and node invocations.
+    /// </param>
+    /// <returns>
+    /// All typed passes, or diagnostics without a partial publishable program.
+    /// </returns>
     public ShaderGraphProgramResult Lower(GraphDocument document, string implementationId,
         IReadOnlyDictionary<GraphNodeId, ShaderSourceModuleAnalysis> sources,
         SerializationRegistry serialization, SerializationContext context, CancellationToken cancellationToken = default)

@@ -5,13 +5,23 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Provides small backend-neutral starting documents composed exclusively of ordinary graph nodes.</summary>
+/// <summary>
+/// Provides small backend-neutral starting documents composed exclusively of ordinary graph nodes.
+/// </summary>
 public static class ShaderGraphTemplates
 {
-    /// <summary>Creates a raster graph accepting clip-space XY positions and an exposed RGBA color.</summary>
-    /// <param name="serialization">Owner native converter registry.</param>
-    /// <param name="context">Complete owner asset/reference context for material defaults.</param>
-    /// <returns>A valid two-stage document; pipelines may replace its vertex transform or provide their own templates.</returns>
+    /// <summary>
+    /// Creates a raster graph accepting clip-space XY positions and an exposed RGBA color.
+    /// </summary>
+    /// <param name="serialization">
+    /// Owner native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner asset/reference context for material defaults.
+    /// </param>
+    /// <returns>
+    /// A valid two-stage document; pipelines may replace its vertex transform or provide their own templates.
+    /// </returns>
     public static GraphDocument CreateRaster(SerializationRegistry serialization, SerializationContext context)
     {
         var pass = new ShaderPassDefinition("Main", ShaderProgramKind.Raster, renderState: new()

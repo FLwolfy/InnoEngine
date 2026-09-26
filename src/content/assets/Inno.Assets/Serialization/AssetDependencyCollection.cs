@@ -68,8 +68,12 @@ public sealed class AssetDependencyCollection
             includeLastKnownPaths ? asset.assetPath.ToString() : string.Empty);
     }
 
-    /// <summary>Includes a dependency already captured inside a neutral nested property payload.</summary>
-    /// <param name="dependency">Stable asset/type identity and optional location hint.</param>
+    /// <summary>
+    /// Includes a dependency already captured inside a neutral nested property payload.
+    /// </summary>
+    /// <param name="dependency">
+    /// Stable asset/type identity and optional location hint.
+    /// </param>
     public void Add(AssetDependency dependency)
     {
         if (dependency.persistentId == Guid.Empty) throw new ArgumentException("A dependency requires a persistent asset identity.", nameof(dependency));

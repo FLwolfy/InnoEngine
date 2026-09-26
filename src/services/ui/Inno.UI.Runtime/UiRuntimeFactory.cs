@@ -15,7 +15,9 @@ public sealed class UiRuntimeFactory : IRuntimeSubsystemFactory
     /// <summary>
     /// Creates a reusable UI runtime factory.
     /// </summary>
-    /// <param name="runtimeFactory">The callback that creates one runtime per session.</param>
+    /// <param name="runtimeFactory">
+    /// The callback that creates one runtime per session.
+    /// </param>
     public UiRuntimeFactory(Func<RuntimeSubsystemContext, UiRuntime> runtimeFactory)
     {
         m_runtimeFactory = runtimeFactory ?? throw new ArgumentNullException(nameof(runtimeFactory));
@@ -35,8 +37,12 @@ public sealed class UiRuntimeFactory : IRuntimeSubsystemFactory
     /// <summary>
     /// Creates one session-owned UI runtime.
     /// </summary>
-    /// <param name="context">The isolated session construction context.</param>
-    /// <returns>The unattached runtime.</returns>
+    /// <param name="context">
+    /// The isolated session construction context.
+    /// </param>
+    /// <returns>
+    /// The unattached runtime.
+    /// </returns>
     public IRuntimeSubsystem Create(RuntimeSubsystemContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

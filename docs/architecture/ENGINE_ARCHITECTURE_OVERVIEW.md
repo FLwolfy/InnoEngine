@@ -401,7 +401,7 @@ InnoEngine
 | Solution Folder | 项目 |
 | --- | --- |
 | `native` | `Inno.Native.LibraryLoading`、`Inno.Native.Sdl3`、`Inno.Native.Bgfx`、`Inno.Native.MiniAudio`、`Inno.Native.ImGui`、`Inno.Native.ImGuizmo` |
-| `build/pipeline` | `Inno.Build`、`Inno.Build.Cli`、`Inno.Build.Platform.MacOS`、`Inno.Build.Platform.Windows` |
+| `build/pipeline` | `Inno.Build`、`Inno.Build.Platform.MacOS`、`Inno.Build.Platform.Windows` |
 | `build/support` | `Inno.Build.SupportPacks` |
 | `build/toolchains` | `Inno.Build.Toolchains`、`Inno.Build.Toolchains.Sdl3`、`Inno.Build.Toolchains.Bgfx`、`Inno.Build.Toolchains.Bgfx.Tools`、`Inno.Build.Toolchains.ImGui`、`Inno.Build.Toolchains.ImGuizmo`、`Inno.Build.Toolchains.MiniAudio` |
 | `tools` | `Inno.Tooling.Architecture` |

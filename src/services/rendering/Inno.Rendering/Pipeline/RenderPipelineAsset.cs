@@ -38,8 +38,12 @@ public struct SerializedRenderExtensionState
         dependencies = [];
     }
 
-    /// <summary>Copies an owner-captured property snapshot, preserving its automatic resource dependency declarations.</summary>
-    /// <param name="properties">Complete neutral properties produced by the asset authoring services.</param>
+    /// <summary>
+    /// Copies an owner-captured property snapshot, preserving its automatic resource dependency declarations.
+    /// </summary>
+    /// <param name="properties">
+    /// Complete neutral properties produced by the asset authoring services.
+    /// </param>
     public SerializedRenderExtensionState(AssetPropertySnapshot properties)
     {
         ArgumentNullException.ThrowIfNull(properties);
@@ -60,7 +64,9 @@ public struct SerializedRenderExtensionState
     [SerializableProperty]
     public byte[] propertyData { get; set; }
 
-    /// <summary>Gets or sets asset dependencies captured with the neutral property payload.</summary>
+    /// <summary>
+    /// Gets or sets asset dependencies captured with the neutral property payload.
+    /// </summary>
     [SerializableProperty]
     public AssetDependency[] dependencies { get; set; }
 
@@ -73,7 +79,9 @@ public struct SerializedRenderExtensionState
     /// <param name="target">
     /// Current generation instance to restore.
     /// </param>
-    /// <param name="context">Explicit owner context used to restore types and asset references.</param>
+    /// <param name="context">
+    /// Explicit owner context used to restore types and asset references.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when the active type does not match the stored stable identity.
     /// </exception>

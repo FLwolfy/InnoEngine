@@ -174,7 +174,25 @@ internal sealed partial class ShaderEditorCanvas
 
     private sealed class ParameterEdits(ShaderEditorCanvas canvas) : Inno.Editor.Inspection.IInspectionPropertyEditService
     {
-        public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
+        /// <summary>
+        /// Applies one serialized property edit and records its reversible history payload.
+        /// </summary>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <param name="propertyName">
+        /// The property name text validated by the change property operation.
+        /// </param>
+        /// <param name="mutation">
+        /// The callback invoked by change property within the operation's owned lifetime.
+        /// </param>
+        /// <param name="historyName">
+        /// The history name text validated by the change property operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
         {
             canvas.Gesture();
             mutation();

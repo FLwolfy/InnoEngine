@@ -42,18 +42,18 @@ public sealed class Logger
     /// <param name="arguments">
     /// Optional composite-format arguments.
     /// </param>
-    /// <param name="filePath">
-    /// The compiler-supplied path of the source file containing the call.
-    /// </param>
-    /// <param name="lineNumber">
-    /// The compiler-supplied source line containing the call.
-    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="message"/> is empty.
     /// </exception>
     /// <exception cref="ObjectDisposedException">
     /// Thrown after the owning router has been disposed.
     /// </exception>
+    /// <param name="filePath">
+    /// Source file supplied by the caller information attribute.
+    /// </param>
+    /// <param name="lineNumber">
+    /// Source line supplied by the caller information attribute.
+    /// </param>
     public void Write(
         LogLevel level,
         string message,

@@ -8,10 +8,17 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
+/// <summary>
+/// Handles asset creation actions in the Editor file browser.
+/// </summary>
 public sealed partial class AssetEditorModule
 {
-    /// <summary>Selects a newly created source and starts its shared inline rename interaction.</summary>
-    /// <param name="entry">The newly indexed writable source.</param>
+    /// <summary>
+    /// Selects a newly created source and starts its shared inline rename interaction.
+    /// </summary>
+    /// <param name="entry">
+    /// The newly indexed writable source.
+    /// </param>
     public void BeginCreatedSourceRename(AssetFileEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -20,12 +27,24 @@ public sealed partial class AssetEditorModule
         _ = interaction.Execute(FileBrowserInteractionIds.C_RENAME);
     }
 
-    /// <summary>Creates a native or ordinary-text asset source as one recoverable shared-history operation.</summary>
-    /// <param name="path">A new file in an existing writable asset directory.</param>
-    /// <param name="bytes">Complete source bytes supplied by the feature's native writer.</param>
-    /// <returns>The indexed source identity, even when its first import reports a source error.</returns>
-    /// <exception cref="IOException">The source already exists, has no existing parent, or cannot be installed.</exception>
-    /// <exception cref="InvalidOperationException">The source mount is unavailable/read-only or history cannot retain the change.</exception>
+    /// <summary>
+    /// Creates a native or ordinary-text asset source as one recoverable shared-history operation.
+    /// </summary>
+    /// <param name="path">
+    /// A new file in an existing writable asset directory.
+    /// </param>
+    /// <param name="bytes">
+    /// Complete source bytes supplied by the feature's native writer.
+    /// </param>
+    /// <returns>
+    /// The indexed source identity, even when its first import reports a source error.
+    /// </returns>
+    /// <exception cref="IOException">
+    /// The source already exists, has no existing parent, or cannot be installed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The source mount is unavailable/read-only or history cannot retain the change.
+    /// </exception>
     public AssetFileEntry CreateSource(AssetPath path, ReadOnlySpan<byte> bytes)
     {
         AssetSourceMount mount = m_pipeline.sourceMounts.SingleOrDefault(source => source.id == path.source)

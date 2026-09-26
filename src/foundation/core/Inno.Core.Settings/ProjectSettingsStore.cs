@@ -18,7 +18,9 @@ public sealed class ProjectSettingsStore : IDisposable, IProjectSettingsLookup
     private IReadOnlyList<ProjectSettingsContributor> m_contributors = [];
     private ProjectSettings? m_current;
     private long m_revision;
-    /// <summary>Gets the unique, non-persistent lifetime identity used with the effective snapshot revision.</summary>
+    /// <summary>
+    /// Gets the unique, non-persistent lifetime identity used with the effective snapshot revision.
+    /// </summary>
     public Guid ownerId { get; } = Guid.NewGuid();
 
     /// <summary>

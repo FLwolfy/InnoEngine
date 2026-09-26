@@ -26,6 +26,7 @@ struct ProcessHost
     std::unique_ptr<FontEngineInterfaceHarfBuzz> font_engine;
     std::vector<std::unique_ptr<std::vector<std::uint8_t>>> font_memory;
     std::unordered_map<std::string, std::uint64_t> font_registrations;
+    std::vector<std::unique_ptr<Rml::RenderInterface>> retired_renderers;
 };
 
 ProcessHost& GetProcessHost()
@@ -88,11 +89,19 @@ void ReleaseProcessHost() noexcept
         return;
 
     Rml::Shutdown();
+    host.retired_renderers.clear();
     host.font_memory.clear();
     host.font_registrations.clear();
     Rml::SetFontEngineInterface(nullptr);
     host.font_engine.reset();
     host.owner_thread = {};
+}
+
+void RetainRenderInterface(std::unique_ptr<Rml::RenderInterface> renderer)
+{
+    ProcessHost& host = GetProcessHost();
+    std::lock_guard<std::mutex> lock(host.mutex);
+    host.retired_renderers.push_back(std::move(renderer));
 }
 
 std::uint64_t AllocateContextId() noexcept

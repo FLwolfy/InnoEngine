@@ -19,7 +19,10 @@ internal sealed class WindowsX64BgfxBuilder : BgfxBuilder
     /// Gets the native platform identifier produced by this builder.
     /// </summary>
     public override string outputPlatform => OUTPUT_PLATFORM;
-    public override string artifactPathToken => "/win64_vs2022/bin/";
+    /// <summary>
+    /// Gets the artifact path token text used by the current instance.
+    /// </summary>
+public override string artifactPathToken => "/win64_vs2022/bin/";
     /// <summary>
     /// Gets the native make target used for debug output.
     /// </summary>

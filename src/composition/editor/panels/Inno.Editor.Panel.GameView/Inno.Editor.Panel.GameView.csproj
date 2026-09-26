@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\framework\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\features\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\features\Inno.Editor.PlayMode\Inno.Editor.PlayMode.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\features\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\framework\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />

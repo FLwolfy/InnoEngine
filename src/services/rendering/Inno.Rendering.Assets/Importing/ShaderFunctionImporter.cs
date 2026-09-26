@@ -14,14 +14,37 @@ namespace Inno.Rendering.Assets;
 [AssetImporter("inno.rendering.shader-function")]
 internal sealed class ShaderFunctionImporter : AssetImporter<ShaderFunctionAsset>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the normalized source extensions accepted by this importer.
+    /// </summary>
     public override IReadOnlyList<string> supportedExtensions { get; } = [".ishadersource"];
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether imported output is deployed to runtime, editor, or both domains.
+    /// </summary>
     public override AssetDeploymentScope deploymentScope => AssetDeploymentScope.AuthoringOnly;
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates an import settings using this implementation's validated inputs.
+    /// </summary>
+    /// <returns>
+    /// The validated iserializable that represents the completed operation.
+    /// </returns>
     public override ISerializable CreateImportSettings() => new ShaderSourceImportSettings();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Imports source content into a validated runtime asset and artifact set.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="output">
+    /// The import output writer that receives runtime data and dependency declarations.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The token that cancels the operation before it commits.
+    /// </param>
+    /// <returns>
+    /// An asynchronous operation that completes after all requested work has finished.
+    /// </returns>
     protected override async ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<ShaderFunctionAsset> output,
         CancellationToken cancellationToken)
     {
@@ -71,7 +94,19 @@ internal sealed class ShaderFunctionImporter : AssetImporter<ShaderFunctionAsset
 
     private sealed class SourceResolver(AssetImportContext context) : IShaderSourceResolver
     {
-        public ShaderSourceFile ReadInclude(string includingFile, string include)
+        /// <summary>
+        /// Reads and validates the include value from its authoritative source.
+        /// </summary>
+        /// <param name="includingFile">
+        /// The including file text validated by the read include operation.
+        /// </param>
+        /// <param name="include">
+        /// The include text validated by the read include operation.
+        /// </param>
+        /// <returns>
+        /// The validated shader source file that represents the completed operation.
+        /// </returns>
+public ShaderSourceFile ReadInclude(string includingFile, string include)
         {
             AssetPath owner = AssetPath.Parse(includingFile);
             string normalized = include.Replace('\\', '/');

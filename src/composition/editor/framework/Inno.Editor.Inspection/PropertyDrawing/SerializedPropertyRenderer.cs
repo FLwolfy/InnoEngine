@@ -105,20 +105,48 @@ public sealed class SerializedPropertyRenderer
             property.SetValue);
     }
 
-    /// <summary>Draws a declared authoring value with existing property drawers and a feature-owned draft edit service.</summary>
-    /// <param name="editorContext">Current Editor frame.</param>
-    /// <param name="owner">Stable owner for text state and edit routing; not necessarily a canonical serialized object.</param>
-    /// <param name="path">Stable unique property path.</param>
-    /// <param name="label">User-facing label.</param>
-    /// <param name="propertyType">Declared value type used to select its registered drawer.</param>
-    /// <param name="getter">Reads the detached value.</param>
-    /// <param name="setter">Changes the detached value within the supplied edit service.</param>
-    /// <param name="edits">Feature-owned transaction boundary, propagated to nested properties.</param>
-    /// <param name="readOnly">Whether assignment is disabled.</param>
-    /// <param name="hdrColor">Whether Color values use unclamped linear floating-point channels.</param>
-    /// <param name="tooltip">Optional authoring description rendered by the shared property tooltip.</param>
-    /// <param name="minimum">Optional inclusive numeric editing bound.</param>
-    /// <param name="maximum">Optional inclusive numeric editing bound.</param>
+    /// <summary>
+    /// Draws a declared authoring value with existing property drawers and a feature-owned draft edit service.
+    /// </summary>
+    /// <param name="editorContext">
+    /// Current Editor frame.
+    /// </param>
+    /// <param name="owner">
+    /// Stable owner for text state and edit routing; not necessarily a canonical serialized object.
+    /// </param>
+    /// <param name="path">
+    /// Stable unique property path.
+    /// </param>
+    /// <param name="label">
+    /// User-facing label.
+    /// </param>
+    /// <param name="propertyType">
+    /// Declared value type used to select its registered drawer.
+    /// </param>
+    /// <param name="getter">
+    /// Reads the detached value.
+    /// </param>
+    /// <param name="setter">
+    /// Changes the detached value within the supplied edit service.
+    /// </param>
+    /// <param name="edits">
+    /// Feature-owned transaction boundary, propagated to nested properties.
+    /// </param>
+    /// <param name="readOnly">
+    /// Whether assignment is disabled.
+    /// </param>
+    /// <param name="hdrColor">
+    /// Whether Color values use unclamped linear floating-point channels.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional authoring description rendered by the shared property tooltip.
+    /// </param>
+    /// <param name="minimum">
+    /// Optional inclusive numeric editing bound.
+    /// </param>
+    /// <param name="maximum">
+    /// Optional inclusive numeric editing bound.
+    /// </param>
     public void DrawValue(EditorContext editorContext, object owner, string path, string label, Type propertyType,
         Func<object?> getter, Action<object?> setter, IInspectionPropertyEditService edits, bool readOnly = false, bool hdrColor = false,
         string? tooltip = null, double? minimum = null, double? maximum = null)
@@ -128,14 +156,30 @@ public sealed class SerializedPropertyRenderer
             readOnly ? PropertyVisibility.Readonly : PropertyVisibility.Show, getter, setter, edits, hdrColor, tooltip, minimum, maximum);
     }
 
-    /// <summary>Draws a detached serialized property with its attributes and a feature-owned draft transaction.</summary>
-    /// <param name="editorContext">Current Editor frame.</param>
-    /// <param name="stateOwner">Stable host-owned presentation state, containing no collectible objects.</param>
-    /// <param name="valueOwner">Invocation-local detached value declaring the property and attributes.</param>
-    /// <param name="ownerPath">Stable document or settings path.</param>
-    /// <param name="property">Detached native serialized property.</param>
-    /// <param name="edits">Draft mutation and shared History boundary.</param>
-    /// <param name="readOnly">Whether source ownership prohibits edits.</param>
+    /// <summary>
+    /// Draws a detached serialized property with its attributes and a feature-owned draft transaction.
+    /// </summary>
+    /// <param name="editorContext">
+    /// Current Editor frame.
+    /// </param>
+    /// <param name="stateOwner">
+    /// Stable host-owned presentation state, containing no collectible objects.
+    /// </param>
+    /// <param name="valueOwner">
+    /// Invocation-local detached value declaring the property and attributes.
+    /// </param>
+    /// <param name="ownerPath">
+    /// Stable document or settings path.
+    /// </param>
+    /// <param name="property">
+    /// Detached native serialized property.
+    /// </param>
+    /// <param name="edits">
+    /// Draft mutation and shared History boundary.
+    /// </param>
+    /// <param name="readOnly">
+    /// Whether source ownership prohibits edits.
+    /// </param>
     [ScriptingApiIgnore]
     public void DrawDraftProperty(EditorContext editorContext, object stateOwner, object valueOwner, string ownerPath,
         SerializedProperty property, IInspectionPropertyEditService edits, bool readOnly = false)

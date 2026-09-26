@@ -4,37 +4,69 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Persists a complete shader type as neutral native-serializable data, without extension instances.</summary>
+/// <summary>
+/// Persists a complete shader type as neutral native-serializable data, without extension instances.
+/// </summary>
 public sealed class ShaderGraphType : ISerializable
 {
-    /// <summary>Gets or sets the atomic or nominal structure type identity.</summary>
+    /// <summary>
+    /// Gets or sets the atomic or nominal structure type identity.
+    /// </summary>
     [SerializableProperty] public string id { get; set; } = "float4";
-    /// <summary>Gets or sets the fixed array element type, or null for a non-array.</summary>
+    /// <summary>
+    /// Gets or sets the fixed array element type, or null for a non-array.
+    /// </summary>
     [SerializableProperty] public ShaderGraphType? element { get; set; }
-    /// <summary>Gets or sets the fixed array length.</summary>
+    /// <summary>
+    /// Gets or sets the fixed array length.
+    /// </summary>
     [SerializableProperty] public int length { get; set; }
-    /// <summary>Gets or sets ordered structure member names.</summary>
+    /// <summary>
+    /// Gets or sets ordered structure member names.
+    /// </summary>
     [SerializableProperty] public string[] fieldNames { get; set; } = [];
-    /// <summary>Gets or sets ordered structure member types.</summary>
+    /// <summary>
+    /// Gets or sets ordered structure member types.
+    /// </summary>
     [SerializableProperty] public ShaderGraphType[] fieldTypes { get; set; } = [];
-    /// <summary>Gets or sets whether the descriptor represents a storage binding.</summary>
+    /// <summary>
+    /// Gets or sets whether the descriptor represents a storage binding.
+    /// </summary>
     [SerializableProperty] public bool isStorage { get; set; }
-    /// <summary>Gets or sets whether storage is an image instead of a buffer.</summary>
+    /// <summary>
+    /// Gets or sets whether storage is an image instead of a buffer.
+    /// </summary>
     [SerializableProperty] public bool isImage { get; set; }
-    /// <summary>Gets or sets the complete buffer element type.</summary>
+    /// <summary>
+    /// Gets or sets the complete buffer element type.
+    /// </summary>
     [SerializableProperty] public ShaderGraphType? storageElement { get; set; }
-    /// <summary>Gets or sets storage access.</summary>
+    /// <summary>
+    /// Gets or sets storage access.
+    /// </summary>
     [SerializableProperty] public RenderStorageAccess access { get; set; }
-    /// <summary>Gets or sets the image texel format.</summary>
+    /// <summary>
+    /// Gets or sets the image texel format.
+    /// </summary>
     [SerializableProperty] public RenderTextureFormat format { get; set; }
-    /// <summary>Gets or sets the image spatial dimension.</summary>
+    /// <summary>
+    /// Gets or sets the image spatial dimension.
+    /// </summary>
     [SerializableProperty] public RenderTextureDimension dimension { get; set; } = RenderTextureDimension.Texture2D;
-    /// <summary>Gets or sets whether an image has array layers.</summary>
+    /// <summary>
+    /// Gets or sets whether an image has array layers.
+    /// </summary>
     [SerializableProperty] public bool isArray { get; set; }
 
-    /// <summary>Captures a full immutable source type as reload-safe authoring data.</summary>
-    /// <param name="type">Atomic, aggregate or storage type to capture.</param>
-    /// <returns>A detached descriptor whose reconstructed type has the same complete interface.</returns>
+    /// <summary>
+    /// Captures a full immutable source type as reload-safe authoring data.
+    /// </summary>
+    /// <param name="type">
+    /// Atomic, aggregate or storage type to capture.
+    /// </param>
+    /// <returns>
+    /// A detached descriptor whose reconstructed type has the same complete interface.
+    /// </returns>
     public static ShaderGraphType Capture(ShaderSourceType type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -54,8 +86,12 @@ public sealed class ShaderGraphType : ISerializable
         return result;
     }
 
-    /// <summary>Validates and freezes the complete descriptor.</summary>
-    /// <returns>An immutable type; contradictory or incomplete descriptors fail explicitly.</returns>
+    /// <summary>
+    /// Validates and freezes the complete descriptor.
+    /// </summary>
+    /// <returns>
+    /// An immutable type; contradictory or incomplete descriptors fail explicitly.
+    /// </returns>
     public ShaderSourceType CreateType()
     {
         if (fieldNames.Length != fieldTypes.Length) throw new InvalidOperationException("Shader structure field names and types differ in length.");

@@ -6,125 +6,217 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Chooses whether a graph-authored node is inlined or consumed by a domain Target.</summary>
+/// <summary>
+/// Chooses whether a graph-authored node is inlined or consumed by a domain Target.
+/// </summary>
 public enum ShaderGraphNodeKind
 {
-    /// <summary>Inlines the node graph into the caller before Target expansion and typed lowering.</summary>
+    /// <summary>
+    /// Inlines the node graph into the caller before Target expansion and typed lowering.
+    /// </summary>
     Function,
-    /// <summary>Leaves the node as a typed domain boundary for the selected Shader Target.</summary>
+    /// <summary>
+    /// Leaves the node as a typed domain boundary for the selected Shader Target.
+    /// </summary>
     DomainOutput
 }
 
-/// <summary>Declares whether a graph-authored function is pure or intentionally emits ordered effects.</summary>
+/// <summary>
+/// Declares whether a graph-authored function is pure or intentionally emits ordered effects.
+/// </summary>
 public enum ShaderGraphNodeEffect
 {
-    /// <summary>The function only computes returned values and therefore requires at least one output.</summary>
+    /// <summary>
+    /// The function only computes returned values and therefore requires at least one output.
+    /// </summary>
     Pure,
-    /// <summary>The function may contain ordered GPU effects and can intentionally expose no returned values.</summary>
+    /// <summary>
+    /// The function may contain ordered GPU effects and can intentionally expose no returned values.
+    /// </summary>
     SideEffect
 }
 
-/// <summary>Stores graph-level identity and catalog metadata for a reusable Shader node.</summary>
+/// <summary>
+/// Stores graph-level identity and catalog metadata for a reusable Shader node.
+/// </summary>
 public sealed class ShaderGraphNodeSettings : ISerializable
 {
-    /// <summary>Gets or sets the node title displayed to authors.</summary>
+    /// <summary>
+    /// Gets or sets the node title displayed to authors.
+    /// </summary>
     [SerializableProperty] public string displayName { get; set; } = "Graph Node";
-    /// <summary>Gets or sets the slash-separated creation catalog beneath Graph Nodes.</summary>
+    /// <summary>
+    /// Gets or sets the slash-separated creation catalog beneath Graph Nodes.
+    /// </summary>
     [SerializableProperty] public string createPath { get; set; } = "General";
-    /// <summary>Gets or sets the deterministic order within the creation catalog.</summary>
+    /// <summary>
+    /// Gets or sets the deterministic order within the creation catalog.
+    /// </summary>
     [SerializableProperty] public int createOrder { get; set; }
-    /// <summary>Gets or sets how a reference to this graph participates in compilation.</summary>
+    /// <summary>
+    /// Gets or sets how a reference to this graph participates in compilation.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodeKind kind { get; set; }
-    /// <summary>Gets or sets the observable computation behavior of an inline function.</summary>
+    /// <summary>
+    /// Gets or sets the observable computation behavior of an inline function.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodeEffect effect { get; set; }
-    /// <summary>Gets or sets the domain role consumed by a Target; empty for ordinary inline functions.</summary>
+    /// <summary>
+    /// Gets or sets the domain role consumed by a Target; empty for ordinary inline functions.
+    /// </summary>
     [SerializableProperty] public string role { get; set; } = "";
 }
 
-/// <summary>Declares one stable, typed port on a graph-authored node interface.</summary>
+/// <summary>
+/// Declares one stable, typed port on a graph-authored node interface.
+/// </summary>
 public sealed class ShaderGraphNodePortDefinition : ISerializable
 {
-    /// <summary>Gets or sets the stable node-local port identity.</summary>
+    /// <summary>
+    /// Gets or sets the stable node-local port identity.
+    /// </summary>
     [SerializableProperty] public string id { get; set; } = "value";
-    /// <summary>Gets or sets the complete backend-neutral value type.</summary>
+    /// <summary>
+    /// Gets or sets the complete backend-neutral value type.
+    /// </summary>
     [SerializableProperty] public ShaderGraphType type { get; set; } = new() { id = "float" };
-    /// <summary>Gets or sets whether callers must connect the input instead of using an explicit/default zero.</summary>
+    /// <summary>
+    /// Gets or sets whether callers must connect the input instead of using an explicit/default zero.
+    /// </summary>
     [SerializableProperty] public bool required { get; set; } = true;
 
     internal ShaderNodePort ToPort(GraphPortDirection direction)
         => new(id, type.CreateType(), direction, direction == GraphPortDirection.Input && required);
 }
 
-/// <summary>Stores values supplied by callers to a graph-authored node.</summary>
+/// <summary>
+/// Stores values supplied by callers to a graph-authored node.
+/// </summary>
 public sealed class ShaderGraphNodeInputSettings : ISerializable
 {
-    /// <summary>Gets or sets values supplied by callers and exposed as outputs inside the node graph.</summary>
+    /// <summary>
+    /// Gets or sets values supplied by callers and exposed as outputs inside the node graph.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodePortDefinition[] ports { get; set; } = [];
 }
 
-/// <summary>Stores values returned by a graph-authored function node.</summary>
+/// <summary>
+/// Stores values returned by a graph-authored function node.
+/// </summary>
 public sealed class ShaderGraphNodeOutputSettings : ISerializable
 {
-    /// <summary>Gets or sets values collected inside the node graph and exposed as outputs to callers.</summary>
+    /// <summary>
+    /// Gets or sets values collected inside the node graph and exposed as outputs to callers.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodePortDefinition[] ports { get; set; } = [];
 }
 
-/// <summary>Freezes the complete public interface resolved from one graph-authored node asset.</summary>
+/// <summary>
+/// Freezes the complete public interface resolved from one graph-authored node asset.
+/// </summary>
 public sealed class ShaderGraphNodeInterface : ISerializable
 {
-    /// <summary>Gets or sets the node title displayed to authors.</summary>
+    /// <summary>
+    /// Gets or sets the node title displayed to authors.
+    /// </summary>
     [SerializableProperty] public string displayName { get; set; } = "Graph Node";
-    /// <summary>Gets or sets the slash-separated creation catalog beneath Graph Nodes.</summary>
+    /// <summary>
+    /// Gets or sets the slash-separated creation catalog beneath Graph Nodes.
+    /// </summary>
     [SerializableProperty] public string createPath { get; set; } = "General";
-    /// <summary>Gets or sets the deterministic order within the creation catalog.</summary>
+    /// <summary>
+    /// Gets or sets the deterministic order within the creation catalog.
+    /// </summary>
     [SerializableProperty] public int createOrder { get; set; }
-    /// <summary>Gets or sets whether the graph is inline computation or a Target-owned output boundary.</summary>
+    /// <summary>
+    /// Gets or sets whether the graph is inline computation or a Target-owned output boundary.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodeKind kind { get; set; }
-    /// <summary>Gets or sets whether an inline function is pure or intentionally emits ordered effects.</summary>
+    /// <summary>
+    /// Gets or sets whether an inline function is pure or intentionally emits ordered effects.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodeEffect effect { get; set; }
-    /// <summary>Gets or sets the Target-owned role for a domain output.</summary>
+    /// <summary>
+    /// Gets or sets the Target-owned role for a domain output.
+    /// </summary>
     [SerializableProperty] public string role { get; set; } = "";
-    /// <summary>Gets or sets externally supplied inputs.</summary>
+    /// <summary>
+    /// Gets or sets externally supplied inputs.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodePortDefinition[] inputs { get; set; } = [];
-    /// <summary>Gets or sets externally visible results.</summary>
+    /// <summary>
+    /// Gets or sets externally visible results.
+    /// </summary>
     [SerializableProperty] public ShaderGraphNodePortDefinition[] outputs { get; set; } = [];
 
-    /// <summary>Gets detached typed ports in deterministic input-then-output order.</summary>
-    /// <returns>A provider-free port snapshot suitable for Editor presentation and validation.</returns>
+    /// <summary>
+    /// Gets detached typed ports in deterministic input-then-output order.
+    /// </summary>
+    /// <returns>
+    /// A provider-free port snapshot suitable for Editor presentation and validation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts()
         => inputs.Select(static value => value.ToPort(GraphPortDirection.Input))
             .Concat(outputs.Select(static value => value.ToPort(GraphPortDirection.Output)))
             .ToArray();
 }
 
-/// <summary>Reads and expands reusable node graphs without retaining assets or provider instances.</summary>
+/// <summary>
+/// Reads and expands reusable node graphs without retaining assets or provider instances.
+/// </summary>
 public static class ShaderGraphNodes
 {
-    /// <summary>Identifies the single multi-port node-input interface record.</summary>
+    /// <summary>
+    /// Identifies the single multi-port node-input interface record.
+    /// </summary>
     public const string inputDefinitionId = "inno.shader.node-inputs";
-    /// <summary>Identifies the optional multi-port node-output interface record.</summary>
+    /// <summary>
+    /// Identifies the optional multi-port node-output interface record.
+    /// </summary>
     public const string outputDefinitionId = "inno.shader.node-outputs";
-    /// <summary>Identifies a reference to another Shader graph used as a node.</summary>
+    /// <summary>
+    /// Identifies a reference to another Shader graph used as a node.
+    /// </summary>
     public const string callDefinitionId = "inno.shader.graph-node";
-    /// <summary>Identifies the serialized interface snapshot retained by a graph-node reference.</summary>
+    /// <summary>
+    /// Identifies the serialized interface snapshot retained by a graph-node reference.
+    /// </summary>
     public const string interfaceKey = "interface";
-    /// <summary>Identifies graph-level reusable-node metadata, independent of either interface direction.</summary>
+    /// <summary>
+    /// Identifies graph-level reusable-node metadata, independent of either interface direction.
+    /// </summary>
     public const string settingsKey = "inno.shader.node-settings";
 
-    /// <summary>Determines whether a Shader graph declares a reusable node interface.</summary>
-    /// <param name="graph">Graph to inspect.</param>
-    /// <returns><see langword="true"/> when graph-level node settings are present.</returns>
+    /// <summary>
+    /// Determines whether a Shader graph declares a reusable node interface.
+    /// </summary>
+    /// <param name="graph">
+    /// Graph to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when graph-level node settings are present.
+    /// </returns>
     public static bool IsNodeGraph(GraphDocument graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
         return graph.metadata.ContainsKey(settingsKey);
     }
 
-    /// <summary>Writes graph-level reusable-node metadata without coupling it to an input or output record.</summary>
-    /// <param name="graph">Graph whose node identity is being assigned.</param>
-    /// <param name="settings">Detached node metadata.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
+    /// <summary>
+    /// Writes graph-level reusable-node metadata without coupling it to an input or output record.
+    /// </summary>
+    /// <param name="graph">
+    /// Graph whose node identity is being assigned.
+    /// </param>
+    /// <param name="settings">
+    /// Detached node metadata.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
     public static void WriteSettings(GraphDocument graph, ShaderGraphNodeSettings settings,
         SerializationRegistry serialization, SerializationContext context)
     {
@@ -133,11 +225,21 @@ public static class ShaderGraphNodes
         graph.SetMetadata(settingsKey, ShaderGraphDocument.Encode(settings, serialization, context));
     }
 
-    /// <summary>Reads required graph-level reusable-node metadata.</summary>
-    /// <param name="graph">Graph declaring the reusable node.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>Detached node metadata.</returns>
+    /// <summary>
+    /// Reads required graph-level reusable-node metadata.
+    /// </summary>
+    /// <param name="graph">
+    /// Graph declaring the reusable node.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// Detached node metadata.
+    /// </returns>
     public static ShaderGraphNodeSettings ReadSettings(GraphDocument graph, SerializationRegistry serialization,
         SerializationContext context)
     {
@@ -147,11 +249,21 @@ public static class ShaderGraphNodes
         return ShaderGraphDocument.Decode<ShaderGraphNodeSettings>(value, serialization, context);
     }
 
-    /// <summary>Reads and validates the public node interface declared by a Shader graph.</summary>
-    /// <param name="graph">Detached graph asset source.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>The detached graph-node interface.</returns>
+    /// <summary>
+    /// Reads and validates the public node interface declared by a Shader graph.
+    /// </summary>
+    /// <param name="graph">
+    /// Detached graph asset source.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// The detached graph-node interface.
+    /// </returns>
     public static ShaderGraphNodeInterface ReadInterface(GraphDocument graph, SerializationRegistry serialization,
         SerializationContext context)
     {
@@ -190,11 +302,21 @@ public static class ShaderGraphNodes
         return result;
     }
 
-    /// <summary>Reads the current interface snapshot stored on a graph-node reference.</summary>
-    /// <param name="node">Graph-node reference.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>The detached stored interface.</returns>
+    /// <summary>
+    /// Reads the current interface snapshot stored on a graph-node reference.
+    /// </summary>
+    /// <param name="node">
+    /// Graph-node reference.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// The detached stored interface.
+    /// </returns>
     public static ShaderGraphNodeInterface ReadCallInterface(GraphNodeRecord node, SerializationRegistry serialization,
         SerializationContext context)
     {
@@ -204,12 +326,24 @@ public static class ShaderGraphNodes
         return result;
     }
 
-    /// <summary>Expands every inline graph-node reference and refreshes domain-output interfaces.</summary>
-    /// <param name="graph">Authored parent graph.</param>
-    /// <param name="resolve">Resolves a referenced Shader graph by persistent identity and diagnostic path.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>A detached graph containing no inline graph-node references.</returns>
+    /// <summary>
+    /// Expands every inline graph-node reference and refreshes domain-output interfaces.
+    /// </summary>
+    /// <param name="graph">
+    /// Authored parent graph.
+    /// </param>
+    /// <param name="resolve">
+    /// Resolves a referenced Shader graph by persistent identity and diagnostic path.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// A detached graph containing no inline graph-node references.
+    /// </returns>
     public static GraphDocument Expand(GraphDocument graph, Func<Guid, string, GraphDocument> resolve,
         SerializationRegistry serialization, SerializationContext context)
     {
@@ -408,43 +542,103 @@ public static class ShaderGraphNodes
     }
 }
 
-/// <summary>Describes graph-authored node references before they are expanded or consumed by a Target.</summary>
+/// <summary>
+/// Describes graph-authored node references before they are expanded or consumed by a Target.
+/// </summary>
 public sealed class ShaderGraphCallNodeCompiler : IShaderNodeCompiler
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the definition id text used by the current instance.
+    /// </summary>
     public string definitionId => ShaderGraphNodes.callDefinitionId;
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
         => context.Read(ShaderGraphNodes.interfaceKey, new ShaderGraphNodeInterface()).GetPorts();
-    /// <inheritdoc />
+    /// <summary>
+    /// Lowers this graph node to typed shader IR after validating its inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
         => throw new InvalidOperationException("A graph-authored node must be expanded or consumed by its Shader Target before lowering.");
 }
 
-/// <summary>Describes the multi-port external inputs while editing a graph-authored node asset.</summary>
+/// <summary>
+/// Describes the multi-port external inputs while editing a graph-authored node asset.
+/// </summary>
 public sealed class ShaderGraphNodeInputsCompiler : IShaderNodeCompiler
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the definition id text used by the current instance.
+    /// </summary>
     public string definitionId => ShaderGraphNodes.inputDefinitionId;
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
         => context.Read(ShaderGraphDocument.settingsKey, new ShaderGraphNodeInputSettings()).ports
             .Select(static value => value.ToPort(GraphPortDirection.Output)).ToArray();
-    /// <inheritdoc />
+    /// <summary>
+    /// Lowers this graph node to typed shader IR after validating its inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
         => throw new InvalidOperationException("Node Inputs exist only inside a graph-authored node definition.");
 }
 
-/// <summary>Describes the multi-port returned values while editing a graph-authored function node asset.</summary>
+/// <summary>
+/// Describes the multi-port returned values while editing a graph-authored function node asset.
+/// </summary>
 public sealed class ShaderGraphNodeOutputsCompiler : IShaderNodeCompiler
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the definition id text used by the current instance.
+    /// </summary>
     public string definitionId => ShaderGraphNodes.outputDefinitionId;
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
         => context.Read(ShaderGraphDocument.settingsKey, new ShaderGraphNodeOutputSettings()).ports
             .Select(static value => value.ToPort(GraphPortDirection.Input)).ToArray();
-    /// <inheritdoc />
+    /// <summary>
+    /// Lowers this graph node to typed shader IR after validating its inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
         => throw new InvalidOperationException("Node Outputs exist only inside a graph-authored node definition.");
 }

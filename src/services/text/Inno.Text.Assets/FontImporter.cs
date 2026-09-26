@@ -23,10 +23,18 @@ public sealed class FontImporter : AssetImporter<FontAsset>
     /// <summary>
     /// Validates the source container and emits runtime metadata plus encoded font data.
     /// </summary>
-    /// <param name="context">The source import context.</param>
-    /// <param name="output">The candidate artifact writer.</param>
-    /// <param name="cancellationToken">Cancellation observed by artifact writes.</param>
-    /// <returns>An operation that completes after both artifacts are staged.</returns>
+    /// <param name="context">
+    /// The source import context.
+    /// </param>
+    /// <param name="output">
+    /// The candidate artifact writer.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation observed by artifact writes.
+    /// </param>
+    /// <returns>
+    /// An operation that completes after both artifacts are staged.
+    /// </returns>
     protected override async ValueTask ImportAsync(
         AssetImportContext context,
         AssetImportWriter<FontAsset> output,

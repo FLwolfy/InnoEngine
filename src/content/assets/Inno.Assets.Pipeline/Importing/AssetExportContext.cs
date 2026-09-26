@@ -39,7 +39,9 @@ public sealed class AssetExportContext
     /// </summary>
     public AssetSerializationServices services { get; }
 
-    /// <summary>Gets the owner-bound immutable outputs used to reconstruct editable sources.</summary>
+    /// <summary>
+    /// Gets the owner-bound immutable outputs used to reconstruct editable sources.
+    /// </summary>
     [ScriptingApiIgnore]
     public Inno.Assets.IAssetArtifactLookup artifacts { get; }
 }

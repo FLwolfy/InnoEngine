@@ -37,7 +37,7 @@ Runtime 导出不复制整个创作期 bundle：校验各输出的相对文件�
 | 分组 | 主要 API |
 | --- | --- |
 | Composition | `AssetPipeline`, `AssetPipelineOptions`, `AssetPipelineMode`, `AssetSourcePolicy`, `AssetCacheOptions` |
-| Source | `AssetSourceMount`, `AssetSourceMountTransaction`, `AssetFileSystem`, `AssetFileEntry`, `AssetSample`, `AssetChangedEvent` |
+| Source | `AssetSourceMount`, `AssetSourceMountTransaction`, `AssetFileSystem`, `AssetFileEntry`, `AssetSample`, `AssetSampleTransformContext`, `IAssetSampleSourceRewriter`, `AssetSampleSourceRewriterAttribute`, `AssetChangedEvent` |
 | Import | `AssetImporter`, `AssetImporter<T>`, `AssetImportContext`, `AssetImportWriter<T>`, `AssetImportHealthSnapshot`, `AssetImportFailure` |
 | Import settings | `AssetImportSettingsSnapshot`、`AssetImporter.CreateImportSettings()`、`AssetImportContext.importSettings`、Pipeline/Loader 的 `GetImportSettings` 与 `SaveImportSettings` |
 | Build | `AssetBuildProcessor`, `AssetBuildProcessor<T>`, `AssetBuildContext<T>`, `AssetArtifactWriter` |
@@ -146,8 +146,8 @@ bool imported = assets.SaveImportSettings(path, snapshot.value, snapshot.fingerp
 
 Project Source Mount 中，名称以 `~` 开头的目录在 File Browser 中显示为 `ISAMPLE`，但仍使用普通创作语义：Asset Import、Catalog、Artifact、authoring 脚本编译、Editor 运行和 Play Mode 都会正常处理，完整 Project 导出为 `.iplugin` 时也会携带这些源文件。`AssetSample.HasSampleDirectoryName(path)` 只表达这个与 Source 无关的命名/显示分类，不表示该目录需要导入。`AssetSample.IsRuntimeExcluded(path, isDirectory)` 则统一表达 deployment 边界：Game 的 runtime Asset 与 runtime script closure 始终剔除任何 Source 下的 `~` 子树；普通 runtime Asset 若依赖其中内容，导出会因闭包不完整而明确失败，Startup Scene 位于其中时也会被明确拒绝。
 
-只读 Plugin Source Mount 中，名称以 `~` 开头的目录才是逻辑 `.isample`。`AssetFileSystem` 仍索引目录及后代，`AssetFileEntry.isSample` 标记该目录本身，`isSampleContent` 标记完整子树；Editor 可以浏览它们，但 Asset Import/Catalog、Artifact 与 Plugin 脚本编译不会处理该子树。
+只读 Plugin Source Mount 中，名称以 `~` 开头的目录才是逻辑 `.isample`。`AssetFileSystem` 索引目录及后代，`AssetFileEntry.isSample` 标记目录本身，`isSampleContent` 标记完整子树；Editor 可以直接打开其中的场景并进入 Play。样例脚本属于独立的作者端程序集，不进入插件运行程序集或 Player 闭包。
 
-`AssetPipeline.ImportSample(source)` 把选中的安装态 `.isample` 原子复制到 Project `Assets` 根，并完整保留所选根目录名及其所有前导 `~`。复制保留 `.imeta`，所以 Sample 内部 persistent reference 不会因导入断裂；`.abin` 与 source noise 不复制。事务拒绝 Project 自身的 `~` 目录、符号链接、目标冲突和复制期间发生变化的 Source，失败时不会留下半个目标。成功后 `~` 目录立刻按 Project 普通 authoring content 进入 Asset import 与脚本 generation，但仍不会进入 runtime deployment。
+`AssetPipeline.ImportSample(source, validateCandidate)` 把安装态 `.isample` 复制到 Project `Assets/<pluginId>-<sampleName>/`，去掉前导 `~`，因此副本可以进入 Player 构建。复制在私有 stage 中进行：每份 `.imeta` 获得新资产身份；结构化序列化数据中的资产及类型引用按精确身份重写；源语言扩展通过 `IAssetSampleSourceRewriter`、`AssetSampleSourceRewriterAttribute` 和 `AssetSampleTransformContext` 重写脚本声明的稳定类型身份。C# 实现位于 Scripting Compiler，不把 Roslyn 引入资产核心。候选索引后，资产层逐个导入检查已识别的资产；Editor 和构建 CLI 通过回调再编译候选脚本，然后才通知观察者。失败会撤销目录并刷新索引。`.abin` 与 source noise 不复制；目标冲突、符号链接、源变更或重写失败时，事务不发布半个目录。调用 `AssetSample.GetImportName(source)` 可以预先得到目标目录名。
 
 损坏当前格式、只读 mount 写入、Importer 冲突、Artifact closure 不完整和 observer failure 都明确报告。`Library` 可删除重建，不作为创作事实来源。

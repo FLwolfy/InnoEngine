@@ -10,14 +10,20 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Owns an immutable compiler map; the common lowering algorithm never switches on concrete node identities.</summary>
+/// <summary>
+/// Owns an immutable compiler map; the common lowering algorithm never switches on concrete node identities.
+/// </summary>
 public sealed class ShaderNodeCompilerCatalog
 {
     private readonly Dictionary<string, IShaderNodeCompiler> m_compilers = new(StringComparer.Ordinal);
     internal IReadOnlyList<IShaderNodeCompiler> providers { get; }
 
-    /// <summary>Validates a complete generation of node compiler registrations.</summary>
-    /// <param name="compilers">Providers owned by the calling generation or composition scope.</param>
+    /// <summary>
+    /// Validates a complete generation of node compiler registrations.
+    /// </summary>
+    /// <param name="compilers">
+    /// Providers owned by the calling generation or composition scope.
+    /// </param>
     public ShaderNodeCompilerCatalog(IEnumerable<IShaderNodeCompiler> compilers)
     {
         ArgumentNullException.ThrowIfNull(compilers);
@@ -31,17 +37,35 @@ public sealed class ShaderNodeCompilerCatalog
         definitionIds = Array.AsReadOnly(m_compilers.Keys.Order(StringComparer.Ordinal).ToArray());
     }
 
-    /// <summary>Gets stable registered definition identities, without exposing providers.</summary>
+    /// <summary>
+    /// Gets stable registered definition identities, without exposing providers.
+    /// </summary>
     public IReadOnlyList<string> definitionIds { get; }
 
-    /// <summary>Describes current typed ports for editor presentation without exposing the compiler provider.</summary>
-    /// <param name="node">Neutral node properties.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <param name="source">Resolved frozen function module, or null.</param>
-    /// <param name="implementationId">Selected source implementation.</param>
-    /// <param name="input">Resolved stage input interface, or null.</param>
-    /// <returns>A detached immutable typed port snapshot.</returns>
+    /// <summary>
+    /// Describes current typed ports for editor presentation without exposing the compiler provider.
+    /// </summary>
+    /// <param name="node">
+    /// Neutral node properties.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <param name="source">
+    /// Resolved frozen function module, or null.
+    /// </param>
+    /// <param name="implementationId">
+    /// Selected source implementation.
+    /// </param>
+    /// <param name="input">
+    /// Resolved stage input interface, or null.
+    /// </param>
+    /// <returns>
+    /// A detached immutable typed port snapshot.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> DescribePorts(GraphNodeRecord node, SerializationRegistry serialization,
         SerializationContext context, ShaderSourceModuleAnalysis? source = null, string implementationId = "",
         ShaderIrStageInput? input = null)
@@ -56,11 +80,21 @@ public sealed class ShaderNodeCompilerCatalog
     /// Lowers an entire target-selected region, preserving stable topological/document order and all source calls.
     /// Missing definitions, stale ports and cycles fail without mutating graph records or dropping edges.
     /// </summary>
-    /// <param name="request">Frozen region, outputs and resolved source/target data.</param>
-    /// <param name="serialization">The current owner's native converter registry.</param>
-    /// <param name="context">The complete owner reference/asset serialization context; never synthesized by this compiler.</param>
-    /// <param name="cancellationToken">Cancellation between node invocations.</param>
-    /// <returns>A detached typed region or precise graph diagnostics.</returns>
+    /// <param name="request">
+    /// Frozen region, outputs and resolved source/target data.
+    /// </param>
+    /// <param name="serialization">
+    /// The current owner's native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// The complete owner reference/asset serialization context; never synthesized by this compiler.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation between node invocations.
+    /// </param>
+    /// <returns>
+    /// A detached typed region or precise graph diagnostics.
+    /// </returns>
     public ShaderGraphLoweringResult Lower(ShaderGraphLoweringRequest request, SerializationRegistry serialization,
         SerializationContext context, CancellationToken cancellationToken = default)
     {

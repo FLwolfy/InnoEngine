@@ -6,16 +6,32 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Keeps graph input edits and the material-visible parameter contract in one neutral document change.</summary>
+/// <summary>
+/// Keeps graph input edits and the material-visible parameter contract in one neutral document change.
+/// </summary>
 public static class ShaderGraphBindings
 {
-    /// <summary>Removes selected nodes, stage-owned nodes and declarations which lose their last graph owner.</summary>
-    /// <param name="graph">Current shader graph, never mutated by this operation.</param>
-    /// <param name="nodeIds">Explicitly selected node identities. Deleting an output also deletes its stage contents.</param>
-    /// <param name="serialization">Owner native converter registry.</param>
-    /// <param name="context">Complete owner reference context for material defaults.</param>
-    /// <returns>A detached candidate suitable for one atomic history entry; unrelated incomplete content is retained.</returns>
-    /// <exception cref="ArgumentException">A selected identity is not in the document.</exception>
+    /// <summary>
+    /// Removes selected nodes, stage-owned nodes and declarations which lose their last graph owner.
+    /// </summary>
+    /// <param name="graph">
+    /// Current shader graph, never mutated by this operation.
+    /// </param>
+    /// <param name="nodeIds">
+    /// Explicitly selected node identities. Deleting an output also deletes its stage contents.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context for material defaults.
+    /// </param>
+    /// <returns>
+    /// A detached candidate suitable for one atomic history entry; unrelated incomplete content is retained.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// A selected identity is not in the document.
+    /// </exception>
     public static GraphDocument RemoveNodes(GraphDocument graph, IEnumerable<GraphNodeId> nodeIds,
         SerializationRegistry serialization, SerializationContext context)
     {
@@ -76,14 +92,30 @@ public static class ShaderGraphBindings
         return candidate;
     }
 
-    /// <summary>Creates a detached candidate with the input and its material/resource declaration updated together.</summary>
-    /// <param name="graph">Current shader graph, never mutated by this operation.</param>
-    /// <param name="nodeId">Stage input node identity.</param>
-    /// <param name="settings">New input settings, including incomplete values while typing.</param>
-    /// <param name="serialization">Owner native converter registry.</param>
-    /// <param name="context">Complete owner reference context for texture defaults.</param>
-    /// <returns>A serializable candidate. Invalid input remains visible for normal graph validation.</returns>
-    /// <exception cref="ArgumentException">The identity does not name a stage input node.</exception>
+    /// <summary>
+    /// Creates a detached candidate with the input and its material/resource declaration updated together.
+    /// </summary>
+    /// <param name="graph">
+    /// Current shader graph, never mutated by this operation.
+    /// </param>
+    /// <param name="nodeId">
+    /// Stage input node identity.
+    /// </param>
+    /// <param name="settings">
+    /// New input settings, including incomplete values while typing.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context for texture defaults.
+    /// </param>
+    /// <returns>
+    /// A serializable candidate. Invalid input remains visible for normal graph validation.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The identity does not name a stage input node.
+    /// </exception>
     public static GraphDocument ChangeInput(GraphDocument graph, GraphNodeId nodeId, ShaderGraphInputSettings settings,
         SerializationRegistry serialization, SerializationContext context)
     {

@@ -20,7 +20,9 @@ public sealed partial class ShaderIrBuilder
     private bool m_closed;
     private int m_nextValue;
 
-    /// <summary>Creates an independent typed region builder and value identity scope.</summary>
+    /// <summary>
+    /// Creates an independent typed region builder and value identity scope.
+    /// </summary>
     public ShaderIrBuilder() => m_root = this;
 
     private ShaderIrBuilder(ShaderIrBuilder parent)
@@ -29,11 +31,21 @@ public sealed partial class ShaderIrBuilder
         m_root = parent.m_root;
     }
 
-    /// <summary>Reads a named input from the enclosing typed function or stage interface.</summary>
-    /// <param name="name">Stable interface identity; it is not emitted as native source verbatim.</param>
-    /// <param name="type">Complete non-void input type.</param>
-    /// <returns>The shared input value for this name and type.</returns>
-    /// <exception cref="ArgumentException">The name is empty, type is void, or this input was already declared with another type.</exception>
+    /// <summary>
+    /// Reads a named input from the enclosing typed function or stage interface.
+    /// </summary>
+    /// <param name="name">
+    /// Stable interface identity; it is not emitted as native source verbatim.
+    /// </param>
+    /// <param name="type">
+    /// Complete non-void input type.
+    /// </param>
+    /// <returns>
+    /// The shared input value for this name and type.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The name is empty, type is void, or this input was already declared with another type.
+    /// </exception>
     public ShaderIrValue Input(string name, ShaderSourceType type)
     {
         EnsureWritable();
@@ -51,37 +63,75 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Produces a finite, exact 32-bit floating-point constant.</summary>
-    /// <param name="value">Finite scalar value, including signed zero.</param>
-    /// <returns>A float-typed intermediate value.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The value is NaN or infinite.</exception>
+    /// <summary>
+    /// Produces a finite, exact 32-bit floating-point constant.
+    /// </summary>
+    /// <param name="value">
+    /// Finite scalar value, including signed zero.
+    /// </param>
+    /// <returns>
+    /// A float-typed intermediate value.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value is NaN or infinite.
+    /// </exception>
     public ShaderIrValue Constant(float value)
     {
         if (!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value), "Shader constants must be finite.");
         return ConstantBits("float", BitConverter.SingleToUInt32Bits(value));
     }
 
-    /// <summary>Produces an exact signed 32-bit integer constant.</summary>
-    /// <param name="value">Scalar integer value.</param>
-    /// <returns>An int-typed intermediate value.</returns>
+    /// <summary>
+    /// Produces an exact signed 32-bit integer constant.
+    /// </summary>
+    /// <param name="value">
+    /// Scalar integer value.
+    /// </param>
+    /// <returns>
+    /// An int-typed intermediate value.
+    /// </returns>
     public ShaderIrValue Constant(int value) => ConstantBits("int", unchecked((uint)value));
 
-    /// <summary>Produces an exact unsigned 32-bit integer constant.</summary>
-    /// <param name="value">Scalar unsigned integer value.</param>
-    /// <returns>A uint-typed intermediate value.</returns>
+    /// <summary>
+    /// Produces an exact unsigned 32-bit integer constant.
+    /// </summary>
+    /// <param name="value">
+    /// Scalar unsigned integer value.
+    /// </param>
+    /// <returns>
+    /// A uint-typed intermediate value.
+    /// </returns>
     public ShaderIrValue Constant(uint value) => ConstantBits("uint", value);
 
-    /// <summary>Produces a scalar Boolean constant.</summary>
-    /// <param name="value">Scalar Boolean value.</param>
-    /// <returns>A bool-typed intermediate value.</returns>
+    /// <summary>
+    /// Produces a scalar Boolean constant.
+    /// </summary>
+    /// <param name="value">
+    /// Scalar Boolean value.
+    /// </param>
+    /// <returns>
+    /// A bool-typed intermediate value.
+    /// </returns>
     public ShaderIrValue Constant(bool value) => ConstantBits("bool", value ? 1UL : 0UL);
 
-    /// <summary>Applies an explicitly typed binary arithmetic or scalar comparison operation.</summary>
-    /// <param name="operation">Add, Subtract, Multiply, Divide, Minimum, Maximum, Equal or LessThan.</param>
-    /// <param name="left">Left operand from this builder.</param>
-    /// <param name="right">Right operand of the same complete type.</param>
-    /// <returns>The result; comparisons produce a scalar Boolean.</returns>
-    /// <exception cref="ArgumentException">Operands belong to another builder, differ in type, or the operation is invalid for them.</exception>
+    /// <summary>
+    /// Applies an explicitly typed binary arithmetic or scalar comparison operation.
+    /// </summary>
+    /// <param name="operation">
+    /// Add, Subtract, Multiply, Divide, Minimum, Maximum, Equal or LessThan.
+    /// </param>
+    /// <param name="left">
+    /// Left operand from this builder.
+    /// </param>
+    /// <param name="right">
+    /// Right operand of the same complete type.
+    /// </param>
+    /// <returns>
+    /// The result; comparisons produce a scalar Boolean.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Operands belong to another builder, differ in type, or the operation is invalid for them.
+    /// </exception>
     public ShaderIrValue Binary(ShaderIrOperation operation, ShaderIrValue left, ShaderIrValue right)
     {
         RequireOwned(left);
@@ -104,12 +154,24 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Selects between equal typed values without conditionally executing their producers.</summary>
-    /// <param name="condition">Scalar Boolean condition from this builder.</param>
-    /// <param name="whenTrue">Value selected when true.</param>
-    /// <param name="whenFalse">Value selected when false.</param>
-    /// <returns>A value with the selected operands' complete type.</returns>
-    /// <exception cref="ArgumentException">The condition is not bool or selected value types differ.</exception>
+    /// <summary>
+    /// Selects between equal typed values without conditionally executing their producers.
+    /// </summary>
+    /// <param name="condition">
+    /// Scalar Boolean condition from this builder.
+    /// </param>
+    /// <param name="whenTrue">
+    /// Value selected when true.
+    /// </param>
+    /// <param name="whenFalse">
+    /// Value selected when false.
+    /// </param>
+    /// <returns>
+    /// A value with the selected operands' complete type.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The condition is not bool or selected value types differ.
+    /// </exception>
     public ShaderIrValue Select(ShaderIrValue condition, ShaderIrValue whenTrue, ShaderIrValue whenFalse)
     {
         RequireOwned(condition);
@@ -124,11 +186,21 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Constructs a complete vector, column-major matrix, structure or fixed array from typed members.</summary>
-    /// <param name="type">The complete aggregate type.</param>
-    /// <param name="members">Scalar vector/matrix components, declaration-ordered structure fields, or array elements.</param>
-    /// <returns>A value of the requested type.</returns>
-    /// <exception cref="ArgumentException">The type is not an aggregate or members have incorrect count or types.</exception>
+    /// <summary>
+    /// Constructs a complete vector, column-major matrix, structure or fixed array from typed members.
+    /// </summary>
+    /// <param name="type">
+    /// The complete aggregate type.
+    /// </param>
+    /// <param name="members">
+    /// Scalar vector/matrix components, declaration-ordered structure fields, or array elements.
+    /// </param>
+    /// <returns>
+    /// A value of the requested type.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The type is not an aggregate or members have incorrect count or types.
+    /// </exception>
     public ShaderIrValue Construct(ShaderSourceType type, params ShaderIrValue[] members)
     {
         RequireValueType(type);
@@ -147,12 +219,24 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Extracts one static component, structure member or array element without source-language member syntax.</summary>
-    /// <param name="value">Aggregate value from this builder.</param>
-    /// <param name="memberIndex">Zero-based member index; a matrix index selects a column vector.</param>
-    /// <returns>The precisely typed selected member.</returns>
-    /// <exception cref="ArgumentException">The input is not an aggregate.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The member index is outside the aggregate layout.</exception>
+    /// <summary>
+    /// Extracts one static component, structure member or array element without source-language member syntax.
+    /// </summary>
+    /// <param name="value">
+    /// Aggregate value from this builder.
+    /// </param>
+    /// <param name="memberIndex">
+    /// Zero-based member index; a matrix index selects a column vector.
+    /// </param>
+    /// <returns>
+    /// The precisely typed selected member.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The input is not an aggregate.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The member index is outside the aggregate layout.
+    /// </exception>
     public ShaderIrValue Extract(ShaderIrValue value, int memberIndex)
     {
         RequireOwned(value);
@@ -176,12 +260,24 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Calls a validated source implementation using semantic parameter names, preserving all call side effects.</summary>
-    /// <param name="module">A module whose selected implementations and variants share the same interface.</param>
-    /// <param name="implementationId">The exact implementation/configuration selected by the target.</param>
-    /// <param name="inputs">Exactly the input/inout parameters by public name; output-only parameters are not supplied.</param>
-    /// <returns>Named results: return, followed by output.&lt;name&gt; for out/inout parameters.</returns>
-    /// <exception cref="ArgumentException">The module failed, implementation is absent, or input names/types do not match.</exception>
+    /// <summary>
+    /// Calls a validated source implementation using semantic parameter names, preserving all call side effects.
+    /// </summary>
+    /// <param name="module">
+    /// A module whose selected implementations and variants share the same interface.
+    /// </param>
+    /// <param name="implementationId">
+    /// The exact implementation/configuration selected by the target.
+    /// </param>
+    /// <param name="inputs">
+    /// Exactly the input/inout parameters by public name; output-only parameters are not supplied.
+    /// </param>
+    /// <returns>
+    /// Named results: return, followed by output.&lt;name&gt; for out/inout parameters.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The module failed, implementation is absent, or input names/types do not match.
+    /// </exception>
     public IReadOnlyDictionary<string, ShaderIrValue> Call(ShaderSourceModuleAnalysis module, string implementationId,
         IReadOnlyDictionary<string, ShaderIrValue> inputs)
     {
@@ -214,10 +310,18 @@ public sealed partial class ShaderIrBuilder
         return new ReadOnlyDictionary<string, ShaderIrValue>(outputs);
     }
 
-    /// <summary>Freezes the current region without pruning unused calls or retaining this mutable builder.</summary>
-    /// <param name="outputs">Named values returned by the enclosing region.</param>
-    /// <returns>An immutable block unaffected by later builder changes.</returns>
-    /// <exception cref="ArgumentException">An output name is empty or a value belongs to another builder.</exception>
+    /// <summary>
+    /// Freezes the current region without pruning unused calls or retaining this mutable builder.
+    /// </summary>
+    /// <param name="outputs">
+    /// Named values returned by the enclosing region.
+    /// </param>
+    /// <returns>
+    /// An immutable block unaffected by later builder changes.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// An output name is empty or a value belongs to another builder.
+    /// </exception>
     public ShaderIrBlock Build(IReadOnlyDictionary<string, ShaderIrValue> outputs)
     {
         ArgumentNullException.ThrowIfNull(outputs);

@@ -44,6 +44,7 @@ internal sealed class EditorRenderingHostService :
         m_presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
         ArgumentNullException.ThrowIfNull(reloads);
         m_reloadRegistration = reloads.Register(this);
+        m_runtime.SetPrimaryModelOutputEnabled(false);
         m_runtime.RegisterContributor(this);
     }
 
@@ -52,10 +53,36 @@ internal sealed class EditorRenderingHostService :
     /// </summary>
     public uint deviceGeneration => m_runtime.deviceGeneration;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the immutable feature and limit set reported by the active graphics backend.
+    /// </summary>
     public GraphicsCapabilities capabilities => m_runtime.resources.capabilities;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the collector shared by Editor render outputs.
+    /// </summary>
+    public IViewContentCollector viewContent => m_runtime.viewContent;
+
+    /// <summary>
+    /// Gets the current frame index scalar measured or assigned by the current instance.
+    /// </summary>
+    public ulong currentFrameIndex => m_runtime.currentFrameIndex;
+
+    /// <summary>
+    /// Requests validation of a compiled shader artifact for this device generation.
+    /// </summary>
+    /// <param name="documentId">
+    /// The document id consumed by request; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="revision">
+    /// The revision consumed by request; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="artifact">
+    /// The resolved immutable artifact payload returned to the caller.
+    /// </param>
+    /// <returns>
+    /// The validated editor shader artifact validation snapshot that represents the completed operation.
+    /// </returns>
     public EditorShaderArtifactValidationSnapshot Request(
         Guid documentId,
         ulong revision,
@@ -78,7 +105,12 @@ internal sealed class EditorRenderingHostService :
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the caller-owned value lifetime and its retained resources.
+    /// </summary>
+    /// <param name="documentId">
+    /// The document id consumed by release; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void Release(Guid documentId)
     {
         if (documentId == Guid.Empty)
@@ -87,7 +119,12 @@ internal sealed class EditorRenderingHostService :
             m_shaderValidations.Remove(documentId);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Prepares frame-owned resources before render graph recording begins.
+    /// </summary>
+    /// <param name="frameIndex">
+    /// The monotonic frame identity associated with this operation.
+    /// </param>
     public void PrepareFrame(ulong frameIndex)
     {
         _ = frameIndex;
@@ -125,14 +162,33 @@ internal sealed class EditorRenderingHostService :
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Adds the renderer's frame passes and resource declarations to the render graph.
+    /// </summary>
+    /// <param name="graph">
+    /// The graph consumed by add render passes; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="frameIndex">
+    /// The monotonic frame identity associated with this operation.
+    /// </param>
     public void AddRenderPasses(RenderGraphBuilder graph, ulong frameIndex)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _ = frameIndex;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Attempts to render without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="composition">
+    /// The composition consumed by try render; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="handle">
+    /// The opaque handle validated by this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool TryRender(EditorViewportComposition composition, out EditorPreviewHandle handle)
     {
         EditorViewportOutput output = Submit(composition);
@@ -155,7 +211,12 @@ internal sealed class EditorRenderingHostService :
         return true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the caller-owned rendered lifetime and its retained resources.
+    /// </summary>
+    /// <param name="viewportId">
+    /// The viewport id text validated by the release rendered operation.
+    /// </param>
     public void ReleaseRendered(string viewportId) => Release(viewportId);
 
     /// <summary>
@@ -324,16 +385,19 @@ internal sealed class EditorRenderingHostService :
 
         RenderTarget target = RenderTarget.FromTexture(state.target);
         var viewport = new RenderViewport(0, 0, composition.pixelWidth, composition.pixelHeight);
-        foreach (EditorViewportLayer layer in composition.layers)
-        {
-            m_runtime.Submit(new RenderRequest(
+        RenderRequest[] layers = composition.layers.Select(layer =>
+            new RenderRequest(
                 $"Editor:{composition.viewportId}:{layer.contributorId}",
                 target,
                 viewport,
                 layer.pipeline,
                 layer.data,
-                layer.order));
-        }
+                layer.order)).ToArray();
+        if (layers.Length == 1)
+            m_runtime.Submit(layers[0]);
+        else
+            m_runtime.SubmitComposition($"Editor:{composition.viewportId}", target,
+                viewport, composition.targetFormat, layers);
 
         if (m_runtime.targets.TryGetTexture(state.target, out PersistentTextureHandle resident)
             && resident != state.residentTexture)

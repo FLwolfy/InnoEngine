@@ -15,14 +15,35 @@ internal sealed class TransformInspectionDrawer(SceneEdits edits) : InspectionDr
 {
     private bool m_world;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
     public override string icon => ImGuiIcon.ArrowsUpDownLeftRight;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// Current Inspector drawing context.
+    /// </param>
+    /// <param name="target">
+    /// The transform being presented.
+    /// </param>
+    /// <returns>
+    /// A fixed Transform label with no rename action.
+    /// </returns>
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, Transform target)
         => ("Transform", null);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
     protected override void Draw(InspectionDrawContext context, Transform target)
     {
         if (!EditorWidget.SectionHeader(

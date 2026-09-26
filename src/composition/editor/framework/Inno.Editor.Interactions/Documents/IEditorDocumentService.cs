@@ -57,10 +57,18 @@ public interface IEditorDocumentService
     /// </returns>
     EditorDocumentContext Open(string assetPath, Guid assetId = default);
 
-    /// <summary>Updates an open document's source location after an identity-preserving asset move, without changing history or focus.</summary>
-    /// <param name="documentId">Existing document identity.</param>
-    /// <param name="assetPath">Current authoritative source location for the same persistent asset.</param>
-    /// <returns>Whether the document exists.</returns>
+    /// <summary>
+    /// Updates an open document's source location after an identity-preserving asset move, without changing history or focus.
+    /// </summary>
+    /// <param name="documentId">
+    /// Existing document identity.
+    /// </param>
+    /// <param name="assetPath">
+    /// Current authoritative source location for the same persistent asset.
+    /// </param>
+    /// <returns>
+    /// Whether the document exists.
+    /// </returns>
     bool UpdateAssetPath(Guid documentId, string assetPath);
 
     /// <summary>
@@ -69,7 +77,9 @@ public interface IEditorDocumentService
     /// <param name="documentId">
     /// Stable tab identity.
     /// </param>
-    /// <param name="isDirty">Whether the provider's current draft differs from its saved baseline.</param>
+    /// <param name="isDirty">
+    /// Whether the provider's current draft differs from its saved baseline.
+    /// </param>
     void SetDirty(Guid documentId, bool isDirty = true);
 
     /// <summary>

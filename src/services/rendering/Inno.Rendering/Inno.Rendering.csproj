@@ -14,6 +14,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Identity/Inno.Core.Identity.csproj" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Input/Inno.Core.Input.csproj" />
     <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
   </ItemGroup>
   <ItemGroup>

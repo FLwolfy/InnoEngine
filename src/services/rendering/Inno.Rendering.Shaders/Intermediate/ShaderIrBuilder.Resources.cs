@@ -3,13 +3,26 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Shaders;
 
+/// <summary>
+/// Builds typed shader IR instructions for graph compilation.
+/// </summary>
 public sealed partial class ShaderIrBuilder
 {
-    /// <summary>Samples a texture using implicit derivatives; the enclosing stage must be Fragment.</summary>
-    /// <param name="texture">A sampled 2D, 2D-array, 3D or cube texture.</param>
-    /// <param name="coordinate">float2 for 2D, or float3 for an array, volume or cube.</param>
-    /// <returns>The sampled float4 value.</returns>
-    /// <exception cref="ArgumentException">Operands have incompatible types or owners.</exception>
+    /// <summary>
+    /// Samples a texture using implicit derivatives; the enclosing stage must be Fragment.
+    /// </summary>
+    /// <param name="texture">
+    /// A sampled 2D, 2D-array, 3D or cube texture.
+    /// </param>
+    /// <param name="coordinate">
+    /// float2 for 2D, or float3 for an array, volume or cube.
+    /// </param>
+    /// <returns>
+    /// The sampled float4 value.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Operands have incompatible types or owners.
+    /// </exception>
     public ShaderIrValue Sample(ShaderIrValue texture, ShaderIrValue coordinate)
     {
         ValidateSample(texture, coordinate);
@@ -18,12 +31,24 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Samples a texture at an explicit floating-point mip level without implicit derivatives.</summary>
-    /// <param name="texture">A sampled 2D, 2D-array, 3D or cube texture.</param>
-    /// <param name="coordinate">float2 for 2D, or float3 for an array, volume or cube.</param>
-    /// <param name="level">Scalar floating-point mip level.</param>
-    /// <returns>The sampled float4 value.</returns>
-    /// <exception cref="ArgumentException">Operands have incompatible types or owners.</exception>
+    /// <summary>
+    /// Samples a texture at an explicit floating-point mip level without implicit derivatives.
+    /// </summary>
+    /// <param name="texture">
+    /// A sampled 2D, 2D-array, 3D or cube texture.
+    /// </param>
+    /// <param name="coordinate">
+    /// float2 for 2D, or float3 for an array, volume or cube.
+    /// </param>
+    /// <param name="level">
+    /// Scalar floating-point mip level.
+    /// </param>
+    /// <returns>
+    /// The sampled float4 value.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Operands have incompatible types or owners.
+    /// </exception>
     public ShaderIrValue SampleLevel(ShaderIrValue texture, ShaderIrValue coordinate, ShaderIrValue level)
     {
         ValidateSample(texture, coordinate);
@@ -34,11 +59,21 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Loads a storage value at this exact point in the block's memory-effect sequence.</summary>
-    /// <param name="resource">A readable typed storage input.</param>
-    /// <param name="coordinate">uint buffer index; int2 image coordinate, or int3 for an image array/volume.</param>
-    /// <returns>The declared buffer element or float4 image value.</returns>
-    /// <exception cref="ArgumentException">The resource is write-only or the coordinate is incompatible.</exception>
+    /// <summary>
+    /// Loads a storage value at this exact point in the block's memory-effect sequence.
+    /// </summary>
+    /// <param name="resource">
+    /// A readable typed storage input.
+    /// </param>
+    /// <param name="coordinate">
+    /// uint buffer index; int2 image coordinate, or int3 for an image array/volume.
+    /// </param>
+    /// <returns>
+    /// The declared buffer element or float4 image value.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The resource is write-only or the coordinate is incompatible.
+    /// </exception>
     public ShaderIrValue LoadStorage(ShaderIrValue resource, ShaderIrValue coordinate)
     {
         ShaderStorageType storage = ValidateStorage(resource, coordinate);
@@ -48,11 +83,21 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Stores a storage value without pruning unused writes or reordering surrounding memory operations.</summary>
-    /// <param name="resource">A writable typed storage input.</param>
-    /// <param name="coordinate">uint buffer index; int2 image coordinate, or int3 for an image array/volume.</param>
-    /// <param name="value">Exactly the declared element or image value type.</param>
-    /// <exception cref="ArgumentException">The resource is read-only or operands have incompatible types.</exception>
+    /// <summary>
+    /// Stores a storage value without pruning unused writes or reordering surrounding memory operations.
+    /// </summary>
+    /// <param name="resource">
+    /// A writable typed storage input.
+    /// </param>
+    /// <param name="coordinate">
+    /// uint buffer index; int2 image coordinate, or int3 for an image array/volume.
+    /// </param>
+    /// <param name="value">
+    /// Exactly the declared element or image value type.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The resource is read-only or operands have incompatible types.
+    /// </exception>
     public void StoreStorage(ShaderIrValue resource, ShaderIrValue coordinate, ShaderIrValue value)
     {
         ShaderStorageType storage = ValidateStorage(resource, coordinate);
@@ -62,12 +107,24 @@ public sealed partial class ShaderIrBuilder
         m_instructions.Add(new(ShaderIrOperation.StorageStore, [resource, coordinate, value], []));
     }
 
-    /// <summary>Atomically adds to a scalar integer buffer element and returns its previous value.</summary>
-    /// <param name="resource">A read-write int or uint storage buffer.</param>
-    /// <param name="index">Unsigned element index.</param>
-    /// <param name="value">Addition operand matching the buffer element type.</param>
-    /// <returns>The original scalar value observed by the atomic operation.</returns>
-    /// <exception cref="ArgumentException">The resource is not an appropriate read-write integer buffer.</exception>
+    /// <summary>
+    /// Atomically adds to a scalar integer buffer element and returns its previous value.
+    /// </summary>
+    /// <param name="resource">
+    /// A read-write int or uint storage buffer.
+    /// </param>
+    /// <param name="index">
+    /// Unsigned element index.
+    /// </param>
+    /// <param name="value">
+    /// Addition operand matching the buffer element type.
+    /// </param>
+    /// <returns>
+    /// The original scalar value observed by the atomic operation.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The resource is not an appropriate read-write integer buffer.
+    /// </exception>
     public ShaderIrValue AtomicAddStorage(ShaderIrValue resource, ShaderIrValue index, ShaderIrValue value)
     {
         ShaderStorageType storage = ValidateStorage(resource, index);
@@ -80,9 +137,15 @@ public sealed partial class ShaderIrBuilder
         return output;
     }
 
-    /// <summary>Discards a fragment when the Boolean condition is true; other stages reject this instruction.</summary>
-    /// <param name="condition">Scalar Boolean from this block.</param>
-    /// <exception cref="ArgumentException">The condition is not a Boolean or belongs to another builder.</exception>
+    /// <summary>
+    /// Discards a fragment when the Boolean condition is true; other stages reject this instruction.
+    /// </summary>
+    /// <param name="condition">
+    /// Scalar Boolean from this block.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The condition is not a Boolean or belongs to another builder.
+    /// </exception>
     public void Discard(ShaderIrValue condition)
     {
         RequireOwned(condition);

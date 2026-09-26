@@ -25,6 +25,17 @@ public interface IEditorSceneWorkspace
     bool canPersist { get; }
 
     /// <summary>
+    /// Gets whether a loaded scene may be changed in the Edit workspace.
+    /// </summary>
+    /// <param name="scene">
+    /// The scene to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> for a writable Project document outside Play Mode.
+    /// </returns>
+    bool CanEdit(GameScene scene);
+
+    /// <summary>
     /// Makes one presented scene active without changing scene order.
     /// </summary>
     /// <param name="scene">

@@ -53,7 +53,12 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     /// </summary>
     public GraphicsCapabilities capabilities => m_device.capabilities;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Validates a compiled shader artifact against the current graphics device.
+    /// </summary>
+    /// <param name="artifact">
+    /// The resolved immutable artifact payload returned to the caller.
+    /// </param>
     public void ValidateShaderArtifact(RenderShaderArtifact artifact)
     {
         ThrowIfDisposed();
@@ -393,7 +398,42 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
             out materialPass);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Attempts to resolve material artifact without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="scope">
+    /// The scope consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="artifact">
+    /// The resolved immutable artifact payload returned to the caller.
+    /// </param>
+    /// <param name="material">
+    /// The material consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="contractId">
+    /// The contract id consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="passRoleId">
+    /// The pass role id consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="programKind">
+    /// The program kind consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="vertexLayout">
+    /// The vertex layout consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="overrides">
+    /// The overrides consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="diagnostics">
+    /// The diagnostics consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="materialPass">
+    /// The material pass consumed by try resolve material artifact; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool TryResolveMaterialArtifact(RenderPersistentResourceId scope, RenderShaderArtifact artifact, MaterialAsset material,
         ShaderContractId contractId, ShaderPassRoleId passRoleId, ShaderProgramKind programKind, RenderVertexLayout? vertexLayout,
         MaterialPropertyBlock? overrides, IDiagnosticReporter diagnostics, out RenderMaterialPass? materialPass)

@@ -304,6 +304,25 @@ inno_ui_API_INTERNAL(inno_ui_Result) inno_ui_Runtime_ProcessMouseMove(inno_ui_Ru
 		return {};
 	}
 }
+inno_ui_API_INTERNAL(inno_ui_Result) inno_ui_Runtime_HasElementAtPoint(inno_ui_Runtime* self, unsigned long long context, int x, int y, unsigned char* hit)
+{
+	try
+	{
+		inno_ui_ClearLastError();
+		auto* ptr = reinterpret_cast<Inno::UI::RmlUiAdapter::Runtime*>(self);
+		return static_cast<inno_ui_Result>(ptr->HasElementAtPoint(context, x, y, *hit));
+	}
+	catch (const std::exception& exception)
+	{
+		inno_ui_last_error = exception.what();
+		return {};
+	}
+	catch (...)
+	{
+		inno_ui_last_error = "Unknown C++ exception";
+		return {};
+	}
+}
 inno_ui_API_INTERNAL(inno_ui_Result) inno_ui_Runtime_ProcessMouseButton(inno_ui_Runtime* self, unsigned long long context, int button, unsigned char down, int modifiers)
 {
 	try

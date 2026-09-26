@@ -81,6 +81,7 @@ inno_ui_API(inno_ui_Result) inno_ui_Runtime_SetClass(inno_ui_Runtime* self, unsi
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_LoadFont(inno_ui_Runtime* self, inno_ui_Byte* data, size_t data_count, const char* family, int style, int weight, unsigned char fallback);
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_RegisterTexture(inno_ui_Runtime* self, unsigned long long context, const char* source, int width, int height, inno_ui_Byte* pixels, size_t pixels_count);
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_ProcessMouseMove(inno_ui_Runtime* self, unsigned long long context, int x, int y, int modifiers);
+inno_ui_API(inno_ui_Result) inno_ui_Runtime_HasElementAtPoint(inno_ui_Runtime* self, unsigned long long context, int x, int y, unsigned char* hit);
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_ProcessMouseButton(inno_ui_Runtime* self, unsigned long long context, int button, unsigned char down, int modifiers);
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_ProcessMouseWheel(inno_ui_Runtime* self, unsigned long long context, float x, float y, int modifiers);
 inno_ui_API(inno_ui_Result) inno_ui_Runtime_ProcessKey(inno_ui_Runtime* self, unsigned long long context, int key, unsigned char down, int modifiers);

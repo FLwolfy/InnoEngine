@@ -13,7 +13,9 @@ using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Shaders;
 
-/// <summary>Hosts isolated Shader and Material images using domain-contributed preview pipelines.</summary>
+/// <summary>
+/// Hosts isolated Shader and Material images using domain-contributed preview pipelines.
+/// </summary>
 [EditorModule("rendering.shader-previews", order: 176)]
 public sealed class ShaderPreviews : EditorModule
 {
@@ -27,10 +29,18 @@ public sealed class ShaderPreviews : EditorModule
     internal ShaderPreviews(TypeCatalog types, IEditorPreviewService previews, EditorShaderCompilation compilation)
     { m_types = types; m_registry = new(types); m_previews = previews; m_compilation = compilation; }
 
-    /// <summary>Draws detached Material overrides using its Shader's compiled contract.</summary>
-    /// <param name="ownerId">Persistent document identity; no Material is retained under this identity.</param>
-    /// <param name="material">Invocation-local Material values.</param>
-    /// <param name="logicalSize">Positive square image size in logical pixels.</param>
+    /// <summary>
+    /// Draws detached Material overrides using its Shader's compiled contract.
+    /// </summary>
+    /// <param name="ownerId">
+    /// Persistent document identity; no Material is retained under this identity.
+    /// </param>
+    /// <param name="material">
+    /// Invocation-local Material values.
+    /// </param>
+    /// <param name="logicalSize">
+    /// Positive square image size in logical pixels.
+    /// </param>
     public void DrawMaterial(Guid ownerId, MaterialAsset material, float logicalSize)
     {
         if (material.shader is null || material.shader.isMissing) { Widget.Hint("Preview requires an available Shader."); return; }
@@ -38,11 +48,21 @@ public sealed class ShaderPreviews : EditorModule
         catch (Exception error) when (Recoverable(error)) { Widget.Hint("Preview: " + error.Message); }
     }
 
-    /// <summary>Draws a compiled draft without modifying the source Shader or its canonical runtime publication.</summary>
-    /// <param name="ownerId">Persistent document identity, independent of the canonical Shader publication.</param>
-    /// <param name="material">Detached defaults or overrides with the current Shader reference.</param>
-    /// <param name="compilation">Isolated draft compiler result, including explicit last-good state.</param>
-    /// <param name="logicalSize">Positive square image size in logical pixels.</param>
+    /// <summary>
+    /// Draws a compiled draft without modifying the source Shader or its canonical runtime publication.
+    /// </summary>
+    /// <param name="ownerId">
+    /// Persistent document identity, independent of the canonical Shader publication.
+    /// </param>
+    /// <param name="material">
+    /// Detached defaults or overrides with the current Shader reference.
+    /// </param>
+    /// <param name="compilation">
+    /// Isolated draft compiler result, including explicit last-good state.
+    /// </param>
+    /// <param name="logicalSize">
+    /// Positive square image size in logical pixels.
+    /// </param>
     public void Draw(Guid ownerId, MaterialAsset material, EditorShaderDraftCompilationSnapshot compilation, float logicalSize)
     {
         if (ownerId == Guid.Empty) throw new ArgumentException("A preview owner identity is required.", nameof(ownerId));
@@ -71,20 +91,34 @@ public sealed class ShaderPreviews : EditorModule
         catch (Exception error) when (Recoverable(error)) { Widget.Hint("Preview: " + error.Message); }
     }
 
-    /// <summary>Releases this document's viewport and scoped GPU publication without touching other consumers.</summary>
-    /// <param name="ownerId">Closing or disabled preview owner.</param>
+    /// <summary>
+    /// Releases this document's viewport and scoped GPU publication without touching other consumers.
+    /// </summary>
+    /// <param name="ownerId">
+    /// Closing or disabled preview owner.
+    /// </param>
     public void Release(Guid ownerId)
     {
         if (m_states.Remove(ownerId, out State? state)) m_previews.ReleaseRendered(state.viewportId);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Advances this feature using the current runtime state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnUpdate(EditorContext context)
     {
         m_frame++;
         foreach (Guid id in m_states.Where(pair => m_frame - pair.Value.frame > 2).Select(pair => pair.Key).ToArray()) Release(id);
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
         foreach (Guid id in m_states.Keys.ToArray()) Release(id);
@@ -99,15 +133,48 @@ public sealed class ShaderPreviews : EditorModule
         internal readonly string viewportId = viewportId;
         internal readonly Dictionary<(string code, string? semanticId, Guid? objectId), Diagnostic> errors = [];
         internal ulong frame;
-        public void Publish(Diagnostic diagnostic) => errors[(diagnostic.code, diagnostic.semanticId, diagnostic.objectId)] = diagnostic;
-        public void Resolve(string code, string? semanticId = null, Guid? objectId = null) => errors.Remove((code, semanticId, objectId));
-        public void Replace(IEnumerable<Diagnostic> diagnostics) { errors.Clear(); foreach (Diagnostic value in diagnostics) Publish(value); }
+        /// <summary>
+        /// Publishes the supplied diagnostic to the configured observers.
+        /// </summary>
+        /// <param name="diagnostic">
+        /// The diagnostic consumed by publish; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Publish(Diagnostic diagnostic) => errors[(diagnostic.code, diagnostic.semanticId, diagnostic.objectId)] = diagnostic;
+        /// <summary>
+        /// Resolves the requested stable identity to its current-generation value.
+        /// </summary>
+        /// <param name="code">
+        /// The code text validated by the resolve operation.
+        /// </param>
+        /// <param name="semanticId">
+        /// The semantic id text validated by the resolve operation.
+        /// </param>
+        /// <param name="objectId">
+        /// The object id consumed by resolve; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Resolve(string code, string? semanticId = null, Guid? objectId = null) => errors.Remove((code, semanticId, objectId));
+        /// <summary>
+        /// Records errors from the current diagnostic report.
+        /// </summary>
+        /// <param name="diagnostics">
+        /// The diagnostics consumed by replace; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Replace(IEnumerable<Diagnostic> diagnostics) { errors.Clear(); foreach (Diagnostic value in diagnostics) Publish(value); }
     }
 
     private sealed class Registry(TypeCatalog types) : TypeRegistry<IReadOnlyDictionary<string, ShaderPreviewProvider>>(types)
     {
         internal IReadOnlyDictionary<string, ShaderPreviewProvider> providers => current;
-        protected override IReadOnlyDictionary<string, ShaderPreviewProvider> Build(TypeCacheSnapshot snapshot)
+        /// <summary>
+        /// Builds a validated result from the current immutable input snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
+protected override IReadOnlyDictionary<string, ShaderPreviewProvider> Build(TypeCacheSnapshot snapshot)
         {
             var result = new Dictionary<string, ShaderPreviewProvider>(StringComparer.Ordinal);
             try
@@ -127,6 +194,12 @@ public sealed class ShaderPreviews : EditorModule
                 throw;
             }
         }
-        protected override void DisposeSnapshot(IReadOnlyDictionary<string, ShaderPreviewProvider> snapshot) => DisposeExtensions(snapshot.Values);
+        /// <summary>
+        /// Releases the generation lease retained by an immutable registry snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
+protected override void DisposeSnapshot(IReadOnlyDictionary<string, ShaderPreviewProvider> snapshot) => DisposeExtensions(snapshot.Values);
     }
 }

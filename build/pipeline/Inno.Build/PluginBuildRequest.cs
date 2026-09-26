@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace Inno.Build;
 
@@ -30,6 +31,12 @@ public sealed class PluginBuildRequest
     public bool includeDependencies { get; init; }
 
     /// <summary>
+    /// Gets or initializes the installed plugins this package actually requires.
+    /// Their transitive dependencies are included in the package manifest.
+    /// </summary>
+    public IReadOnlyList<string> dependencies { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Validates package identity and destination syntax.
     /// </summary>
     /// <exception cref="InvalidDataException">
@@ -53,5 +60,8 @@ public sealed class PluginBuildRequest
         {
             throw new InvalidDataException("Plugin destination must use the .iplugin extension.");
         }
+        if (dependencies is null || dependencies.Any(string.IsNullOrWhiteSpace)
+            || dependencies.Distinct(StringComparer.Ordinal).Count() != dependencies.Count)
+            throw new InvalidDataException("Plugin dependencies must be distinct non-empty IDs.");
     }
 }

@@ -40,9 +40,15 @@ public sealed class DefaultAdapterCatalog :
     private readonly RenderingBackendCatalog m_rendering;
     private readonly UiBackendCatalog m_ui;
 
-    /// <summary>Creates the standard adapters with optional complete provider sets.</summary>
-    /// <param name="renderingProviders">Replacement rendering providers, or null to use bundled BGFX.</param>
-    /// <param name="uiProviders">Replacement UI providers, or null to use bundled RmlUi.</param>
+    /// <summary>
+    /// Creates the standard adapters with optional complete provider sets.
+    /// </summary>
+    /// <param name="renderingProviders">
+    /// Replacement rendering providers, or null to use bundled BGFX.
+    /// </param>
+    /// <param name="uiProviders">
+    /// Replacement UI providers, or null to use bundled RmlUi.
+    /// </param>
     public DefaultAdapterCatalog(
         IEnumerable<RenderingBackendProvider>? renderingProviders = null,
         IEnumerable<UiBackendProvider>? uiProviders = null)
@@ -123,9 +129,21 @@ public sealed class DefaultAdapterCatalog :
 
     private sealed class BgfxRenderingProvider : RenderingBackendProvider
     {
-        public override RenderingBackendId id => RenderingBackendId.bgfx;
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
+public override RenderingBackendId id => RenderingBackendId.bgfx;
 
-        public override IRenderDevice CreateDevice(RenderingBackendOptions options)
+        /// <summary>
+        /// Creates and validates a caller-owned device value.
+        /// </summary>
+        /// <param name="options">
+        /// The validated configuration that controls this operation.
+        /// </param>
+        /// <returns>
+        /// The validated irender device that represents the completed operation.
+        /// </returns>
+public override IRenderDevice CreateDevice(RenderingBackendOptions options)
             => new BgfxDevice(new BgfxDeviceOptions
             {
                 window = options.window,
@@ -157,9 +175,18 @@ public sealed class DefaultAdapterCatalog :
 
     private sealed class RmlUiProvider : UiBackendProvider
     {
-        public override UiBackendId id => UiBackendId.rmlUi;
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
+public override UiBackendId id => UiBackendId.rmlUi;
 
-        public override IUiBackend CreateBackend() => new RmlUiBackend();
+        /// <summary>
+        /// Creates and validates a caller-owned backend value.
+        /// </summary>
+        /// <returns>
+        /// The validated iui backend that represents the completed operation.
+        /// </returns>
+public override IUiBackend CreateBackend() => new RmlUiBackend();
     }
 
     private static NotSupportedException Unsupported<TBackend>(string parameterName, TBackend backend)

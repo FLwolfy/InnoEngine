@@ -28,7 +28,8 @@ internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
     {
         GameObject source = context.source;
         GameObject target = context.target.gameObject;
-        if (ReferenceEquals(source, target) || !source.isRuntimeValid || !target.isRuntimeValid)
+        if (ReferenceEquals(source, target) || !source.isRuntimeValid || !target.isRuntimeValid
+            || !edits.CanEdit(source) || !edits.CanEdit(target))
             return EditorDropStatus.rejected;
         return EditorDropStatus.Accept(context.placement switch
         {

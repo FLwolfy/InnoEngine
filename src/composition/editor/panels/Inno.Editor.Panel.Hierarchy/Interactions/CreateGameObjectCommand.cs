@@ -19,7 +19,7 @@ internal sealed class CreateGameObjectCommand(SceneEdits edits) : EditorAction<G
     /// </returns>
     protected override EditorActionState Query(EditorActionContext<GameScene> context)
         => context.target.isLoaded
-            ? EditorActionState.enabled
+            ? edits.CanEdit(context.target) ? EditorActionState.enabled : EditorActionState.disabled
             : EditorActionState.hidden;
 
     /// <summary>

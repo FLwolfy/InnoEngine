@@ -593,16 +593,34 @@ public sealed class ScriptingPipelineTests : IDisposable
             out AssetInfo? templateInfo));
         Guid sourcePersistentId = Assert.IsType<AssetInfo>(templateInfo).persistentId;
 
-        AssetPath imported = fixture.assets.ImportSample(source);
+        ScriptCompilationResult authoring = fixture.Compile();
+        Assert.True(authoring.success, FormatDiagnostics(authoring));
+        Assert.Contains(authoring.compiledAssemblyNames,
+            name => name.EndsWith(".Samples", StringComparison.Ordinal));
+        Assert.DoesNotContain(authoring.runtimeAssemblyPaths,
+            path => Path.GetFileNameWithoutExtension(path).EndsWith(".Samples", StringComparison.Ordinal));
+        ScriptCompilationResult player = fixture.CompileRuntimeDeployment();
+        Assert.True(player.success, FormatDiagnostics(player));
+        Assert.DoesNotContain(player.compiledAssemblyNames,
+            name => name.EndsWith(".Samples", StringComparison.Ordinal));
 
-        Assert.Equal(AssetPath.Project("~Starter"), imported);
+        AssetPath imported = fixture.assets.ImportSample(source, _ =>
+        {
+            ScriptCompilationResult candidate = fixture.Compile();
+            Assert.True(candidate.success, FormatDiagnostics(candidate));
+        });
+
+        Assert.Equal(AssetPath.Project("tests.samples-Starter"), imported);
         Assert.True(File.Exists(Path.Combine(
             fixture.projectRoot,
             "Assets",
-            "~Starter",
+            "tests.samples-Starter",
             "StarterBehavior.cs")));
+        Assert.DoesNotContain("ce3b52c6-2a07-42ea-b632-a307a0ef7407",
+            File.ReadAllText(Path.Combine(fixture.projectRoot, "Assets", "tests.samples-Starter", "StarterBehavior.cs")),
+            StringComparison.OrdinalIgnoreCase);
         Assert.True(fixture.assets.TryGetInfo(
-            AssetPath.Project("~Starter/StarterBehavior.cs"),
+            AssetPath.Project("tests.samples-Starter/StarterBehavior.cs"),
             out AssetInfo? importedInfo));
         Assert.NotEqual(sourcePersistentId, Assert.IsType<AssetInfo>(importedInfo).persistentId);
         Assert.True(fixture.assets.TryGetFileSystemEntry(imported, out AssetFileEntry importedDirectory));
@@ -614,7 +632,24 @@ public sealed class ScriptingPipelineTests : IDisposable
         fixture.compiler.GenerateProjectFiles(compilation);
         string gameProject = File.ReadAllText(
             Path.Combine(fixture.projectRoot, "Inno.GameScripts.csproj"));
-        Assert.Contains("Compile Include=\"Assets/~Starter/StarterBehavior.cs\"", gameProject);
+        Assert.Contains("Compile Include=\"Assets/tests.samples-Starter/StarterBehavior.cs\"", gameProject);
+    }
+
+    [Fact]
+    public void InvalidSampleScriptPreflightLeavesNoProjectCopy()
+    {
+        using var fixture = new ScriptingFixture((root, serialization) =>
+            WriteSamplePlugin(root, serialization, "public sealed class BrokenSample { this is invalid; }"));
+        AssetPath source = new(new AssetSourceId("tests.samples"), "~Starter");
+        Assert.Throws<InvalidOperationException>(() => fixture.assets.ImportSample(source, _ =>
+        {
+            ScriptCompilationResult candidate = fixture.Compile();
+            if (!candidate.success)
+                throw new InvalidOperationException(FormatDiagnostics(candidate));
+        }));
+        Assert.False(Directory.Exists(Path.Combine(fixture.projectRoot, "Assets", "tests.samples-Starter")));
+        Assert.False(fixture.assets.TryGetFileSystemEntry(
+            AssetPath.Project("tests.samples-Starter"), out _));
     }
 
     [Fact]
@@ -1488,7 +1523,17 @@ public sealed class ScriptingPipelineTests : IDisposable
         SerializationRegistry serialization)
     {
         const string c_source =
-            "using InnoEngine.Scene; public sealed class StarterBehavior : GameBehavior { }";
+            "using InnoEngine.Reflection; using InnoEngine.Scene; " +
+            "[StableTypeId(\"ce3b52c6-2a07-42ea-b632-a307a0ef7407\")] " +
+            "public sealed class StarterBehavior : GameBehavior { }";
+        WriteSamplePlugin(projectRoot, serialization, c_source);
+    }
+
+    private static void WriteSamplePlugin(
+        string projectRoot,
+        SerializationRegistry serialization,
+        string source)
+    {
         WritePluginPackage(
             projectRoot,
             "samples.iplugin",
@@ -1507,7 +1552,7 @@ public sealed class ScriptingPipelineTests : IDisposable
                     persistentId = Guid.Parse("7726b1d2-9aee-4d2c-a865-2fd53155095f"),
                     sourceKind = (int)AssetSourceKind.Directory
                 }),
-                ["Assets/~Starter/StarterBehavior.cs"] = System.Text.Encoding.UTF8.GetBytes(c_source),
+                ["Assets/~Starter/StarterBehavior.cs"] = System.Text.Encoding.UTF8.GetBytes(source),
                 ["Assets/~Starter/StarterBehavior.cs.imeta"] = CreateScriptSourceMeta(
                     serialization,
                     Guid.Parse("75f6a70b-93b2-47f0-8747-cc359474b7a3"))

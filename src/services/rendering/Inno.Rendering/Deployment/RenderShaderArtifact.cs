@@ -190,7 +190,9 @@ public sealed class RenderShaderArtifact
     /// <exception cref="ArgumentException">
     /// Thrown when a required identity is empty, no pass exists, or pass names are duplicated.
     /// </exception>
-    /// <param name="definitionData">Native-serialized material, keyword, technique and pass contract captured with these programs; contains stable asset references only.</param>
+    /// <param name="definitionData">
+    /// Native-serialized material, keyword, technique and pass contract captured with these programs; contains stable asset references only.
+    /// </param>
     public RenderShaderArtifact(
         string shaderName,
         string targetKey,
@@ -218,10 +220,14 @@ public sealed class RenderShaderArtifact
         contentHash = Convert.ToHexString(SHA256.HashData(RenderShaderArtifactCodec.Encode(this)));
     }
 
-    /// <summary>Gets the immutable native-serialized runtime contract paired with this exact program publication.</summary>
+    /// <summary>
+    /// Gets the immutable native-serialized runtime contract paired with this exact program publication.
+    /// </summary>
     public ReadOnlyMemory<byte> definitionData => m_definitionData;
 
-    /// <summary>Gets a semantic content identity covering the contract, variant, target, bindings and all compiled stages.</summary>
+    /// <summary>
+    /// Gets a semantic content identity covering the contract, variant, target, bindings and all compiled stages.
+    /// </summary>
     public string contentHash { get; }
 
     /// <summary>

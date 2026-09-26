@@ -113,11 +113,21 @@ public readonly struct RenderShaderVariant : IEquatable<RenderShaderVariant>
         return FromMaterial(material, definition);
     }
 
-    /// <summary>Resolves material keyword selections against an exact published shader contract.</summary>
-    /// <param name="material">Material whose selected options are evaluated.</param>
-    /// <param name="definition">Captured shader contract, which may be the last successful publication.</param>
-    /// <returns>The canonical keyword selection for this publication.</returns>
-    /// <exception cref="InvalidOperationException">A selected option is unknown or conflicts with another option.</exception>
+    /// <summary>
+    /// Resolves material keyword selections against an exact published shader contract.
+    /// </summary>
+    /// <param name="material">
+    /// Material whose selected options are evaluated.
+    /// </param>
+    /// <param name="definition">
+    /// Captured shader contract, which may be the last successful publication.
+    /// </param>
+    /// <returns>
+    /// The canonical keyword selection for this publication.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// A selected option is unknown or conflicts with another option.
+    /// </exception>
     public static RenderShaderVariant FromMaterial(MaterialAsset material, ShaderDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(material);

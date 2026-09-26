@@ -14,9 +14,15 @@ public sealed class EditorMenuBuilder
     /// <summary>
     /// Declares presentation for an intermediate menu group without inventing a no-op action.
     /// </summary>
-    /// <param name="path">The slash-delimited path of the group.</param>
-    /// <param name="order">The stable ordering value among sibling groups and items.</param>
-    /// <param name="separatorBefore">Whether a separator precedes this group at its own level.</param>
+    /// <param name="path">
+    /// The slash-delimited path of the group.
+    /// </param>
+    /// <param name="order">
+    /// The stable ordering value among sibling groups and items.
+    /// </param>
+    /// <param name="separatorBefore">
+    /// Whether a separator precedes this group at its own level.
+    /// </param>
     public void AddGroup(string path, int order = 0, bool separatorBefore = false)
     {
         if (string.IsNullOrWhiteSpace(path))

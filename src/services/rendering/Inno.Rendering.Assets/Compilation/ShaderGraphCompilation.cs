@@ -10,18 +10,41 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Rendering.Assets;
 
+/// <summary>
+/// Carries validated inputs and outputs for one shader compilation stage.
+/// </summary>
 public sealed partial class ShaderCompiler
 {
-    /// <summary>Captures an imported graph in the current owner generation, then starts native compilation without retaining its asset.</summary>
-    /// <param name="shader">Committed graph-backed shader asset.</param>
-    /// <param name="target">Target policy and device capabilities.</param>
-    /// <param name="variant">Exact material keyword selection.</param>
-    /// <param name="types">Shared authoring type generation owner.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner asset/reference context.</param>
-    /// <param name="artifacts">Authoring artifact owner supplying the graph output, which is absent from runtime packages.</param>
-    /// <param name="cancellationToken">Cancellation before candidate publication.</param>
-    /// <returns>A native compilation task for the captured graph, or graph diagnostics without any native work.</returns>
+    /// <summary>
+    /// Captures an imported graph in the current owner generation, then starts native compilation without retaining its asset.
+    /// </summary>
+    /// <param name="shader">
+    /// Committed graph-backed shader asset.
+    /// </param>
+    /// <param name="target">
+    /// Target policy and device capabilities.
+    /// </param>
+    /// <param name="variant">
+    /// Exact material keyword selection.
+    /// </param>
+    /// <param name="types">
+    /// Shared authoring type generation owner.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner asset/reference context.
+    /// </param>
+    /// <param name="artifacts">
+    /// Authoring artifact owner supplying the graph output, which is absent from runtime packages.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation before candidate publication.
+    /// </param>
+    /// <returns>
+    /// A native compilation task for the captured graph, or graph diagnostics without any native work.
+    /// </returns>
     public ValueTask<ShaderCompilationResult> CompileGraphAsync(ShaderAsset shader, ShaderCompileTarget target,
         RenderShaderVariant variant, TypeCatalog types, SerializationRegistry serialization, SerializationContext context, Inno.Assets.IAssetArtifactLookup artifacts,
         CancellationToken cancellationToken = default)
@@ -30,15 +53,33 @@ public sealed partial class ShaderCompiler
         return CompileGraphAsync(ShaderGraphArtifact.Read(shader, artifacts), target, variant, types, serialization, context, cancellationToken);
     }
 
-    /// <summary>Compiles an immutable import or preview candidate without reading or mutating a canonical Shader asset.</summary>
-    /// <param name="artifact">Frozen target-expanded graph and source bundles.</param>
-    /// <param name="target">Target policy and capabilities.</param>
-    /// <param name="variant">Exact keyword selection.</param>
-    /// <param name="types">Current authoring generation.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner references captured before asynchronous native work.</param>
-    /// <param name="cancellationToken">Cancellation of this candidate.</param>
-    /// <returns>A complete immutable compilation result, never published by this method.</returns>
+    /// <summary>
+    /// Compiles an immutable import or preview candidate without reading or mutating a canonical Shader asset.
+    /// </summary>
+    /// <param name="artifact">
+    /// Frozen target-expanded graph and source bundles.
+    /// </param>
+    /// <param name="target">
+    /// Target policy and capabilities.
+    /// </param>
+    /// <param name="variant">
+    /// Exact keyword selection.
+    /// </param>
+    /// <param name="types">
+    /// Current authoring generation.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner references captured before asynchronous native work.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation of this candidate.
+    /// </param>
+    /// <returns>
+    /// A complete immutable compilation result, never published by this method.
+    /// </returns>
     public ValueTask<ShaderCompilationResult> CompileGraphAsync(ReadOnlyMemory<byte> artifact, ShaderCompileTarget target,
         RenderShaderVariant variant, TypeCatalog types, SerializationRegistry serialization, SerializationContext context,
         CancellationToken cancellationToken = default)
@@ -59,15 +100,33 @@ public sealed partial class ShaderCompiler
         return CompileAsync(definition, program, target, variant, serialization, context, cancellationToken);
     }
 
-    /// <summary>Compiles every graph-lowered pass through the adapter's typed stage interface.</summary>
-    /// <param name="definition">Source-free material, technique, capability and pass contract.</param>
-    /// <param name="program">Complete graph lowering result for this exact variant.</param>
-    /// <param name="target">Target compiler policy and capabilities.</param>
-    /// <param name="variant">Keyword selection already applied while lowering source functions and graph nodes.</param>
-    /// <param name="serialization">Current owner registry used to capture the runtime contract before asynchronous work.</param>
-    /// <param name="context">Complete owner reference context; only the encoded stable references cross the asynchronous boundary.</param>
-    /// <param name="cancellationToken">Cancellation before candidate publication.</param>
-    /// <returns>One complete immutable target artifact, or errors without a partial candidate.</returns>
+    /// <summary>
+    /// Compiles every graph-lowered pass through the adapter's typed stage interface.
+    /// </summary>
+    /// <param name="definition">
+    /// Source-free material, technique, capability and pass contract.
+    /// </param>
+    /// <param name="program">
+    /// Complete graph lowering result for this exact variant.
+    /// </param>
+    /// <param name="target">
+    /// Target compiler policy and capabilities.
+    /// </param>
+    /// <param name="variant">
+    /// Keyword selection already applied while lowering source functions and graph nodes.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner registry used to capture the runtime contract before asynchronous work.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context; only the encoded stable references cross the asynchronous boundary.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation before candidate publication.
+    /// </param>
+    /// <returns>
+    /// One complete immutable target artifact, or errors without a partial candidate.
+    /// </returns>
     public ValueTask<ShaderCompilationResult> CompileAsync(ShaderDefinition definition, ShaderGraphProgramResult program,
         ShaderCompileTarget target, RenderShaderVariant variant, SerializationRegistry serialization,
         SerializationContext context, CancellationToken cancellationToken = default)

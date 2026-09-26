@@ -16,7 +16,9 @@ public sealed class AssetBuildProcessorAttribute : Attribute
     /// <summary>
     /// Creates build-processor discovery metadata.
     /// </summary>
-    /// <param name="id">Globally stable build processor identifier.</param>
+    /// <param name="id">
+    /// Globally stable build processor identifier.
+    /// </param>
     public AssetBuildProcessorAttribute(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);

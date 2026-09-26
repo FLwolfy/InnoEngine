@@ -10,8 +10,12 @@ namespace Inno.Assets.Pipeline;
 /// </summary>
 public readonly struct AssetPipelineOptions
 {
-    /// <summary>Gets whether the composition host must still publish its initial authoring extensions.</summary>
-    /// <remarks>Only missing extensions are deferred. The host must call AssetPipeline.CompleteExtensionDiscovery after activation.</remarks>
+    /// <summary>
+    /// Gets whether the composition host must still publish its initial authoring extensions.
+    /// </summary>
+    /// <remarks>
+    /// Only missing extensions are deferred. The host must call AssetPipeline.CompleteExtensionDiscovery after activation.
+    /// </remarks>
     public bool deferUnavailableExtensions { get; init; }
 
     /// <summary>

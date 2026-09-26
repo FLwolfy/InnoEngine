@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\..\src\services\ui\Inno.UI\Inno.UI.csproj" />
     <ProjectReference Include="..\..\..\src\services\ui\Inno.UI.Assets\Inno.UI.Assets.csproj" />
     <ProjectReference Include="..\..\..\src\services\ui\Inno.UI.Runtime\Inno.UI.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\src\services\text\Inno.Text.Assets\Inno.Text.Assets.csproj" />
     <ProjectReference Include="..\..\..\src\services\input\Inno.Input\Inno.Input.csproj" />
     <ProjectReference Include="..\..\..\src\adapters\ui\Inno.Adapter.UI.RmlUi\Inno.Adapter.UI.RmlUi.csproj" />
     <ProjectReference Include="..\..\..\src\adapters\ui\Inno.Adapter.UI.RmlUi.Authoring\Inno.Adapter.UI.RmlUi.Authoring.csproj" />
@@ -26,6 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\..\extern\RmlUi\Samples\assets\LatoLatin-Regular.ttf" Link="TestData\LatoLatin-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\extern\RmlUi\Samples\assets\LatoLatin-Bold.ttf" Link="TestData\LatoLatin-Bold.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

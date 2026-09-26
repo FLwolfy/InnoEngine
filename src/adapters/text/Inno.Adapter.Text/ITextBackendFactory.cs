@@ -10,7 +10,11 @@ public interface ITextBackendFactory
     /// <summary>
     /// Creates one caller-owned text backend.
     /// </summary>
-    /// <param name="backend">The selected backend implementation.</param>
-    /// <returns>A newly allocated text backend.</returns>
+    /// <param name="backend">
+    /// The selected backend implementation.
+    /// </param>
+    /// <returns>
+    /// A newly allocated text backend.
+    /// </returns>
     ITextBackend CreateBackend(TextBackend backend);
 }

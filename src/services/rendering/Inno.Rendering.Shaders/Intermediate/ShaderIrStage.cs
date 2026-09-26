@@ -5,45 +5,83 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Identifies the GPU interface through which a stage receives a value.</summary>
+/// <summary>
+/// Identifies the GPU interface through which a stage receives a value.
+/// </summary>
 public enum ShaderIrInputKind
 {
-    /// <summary>A vertex stream attribute, including instance-rate streams.</summary>
+    /// <summary>
+    /// A vertex stream attribute, including instance-rate streams.
+    /// </summary>
     VertexAttribute,
-    /// <summary>An interpolated value written by the preceding raster stage.</summary>
+    /// <summary>
+    /// An interpolated value written by the preceding raster stage.
+    /// </summary>
     Varying,
-    /// <summary>A material, frame or draw uniform identified by a stable binding identity.</summary>
+    /// <summary>
+    /// A material, frame or draw uniform identified by a stable binding identity.
+    /// </summary>
     Uniform,
-    /// <summary>A sampled texture binding whose slot is assigned by target resource layout.</summary>
+    /// <summary>
+    /// A sampled texture binding whose slot is assigned by target resource layout.
+    /// </summary>
     SampledTexture,
-    /// <summary>A typed storage buffer or image whose access, shape and layout are explicit.</summary>
+    /// <summary>
+    /// A typed storage buffer or image whose access, shape and layout are explicit.
+    /// </summary>
     Storage,
-    /// <summary>A standard GPU stage input identified by a target semantic, not native source text.</summary>
+    /// <summary>
+    /// A standard GPU stage input identified by a target semantic, not native source text.
+    /// </summary>
     Builtin
 }
 
-/// <summary>Identifies where a typed stage output is written.</summary>
+/// <summary>
+/// Identifies where a typed stage output is written.
+/// </summary>
 public enum ShaderIrOutputKind
 {
-    /// <summary>The vertex position in homogeneous clip space.</summary>
+    /// <summary>
+    /// The vertex position in homogeneous clip space.
+    /// </summary>
     ClipPosition,
-    /// <summary>A value interpolated for the next raster stage.</summary>
+    /// <summary>
+    /// A value interpolated for the next raster stage.
+    /// </summary>
     Varying,
-    /// <summary>A fragment color attachment at its explicit location.</summary>
+    /// <summary>
+    /// A fragment color attachment at its explicit location.
+    /// </summary>
     Color,
-    /// <summary>The fragment depth value.</summary>
+    /// <summary>
+    /// The fragment depth value.
+    /// </summary>
     Depth
 }
 
-/// <summary>Describes a stage input without embedding native declarations or expressions.</summary>
+/// <summary>
+/// Describes a stage input without embedding native declarations or expressions.
+/// </summary>
 public sealed class ShaderIrStageInput
 {
-    /// <summary>Creates an immutable stage input binding.</summary>
-    /// <param name="id">Stable binding identity, also used by the block's named Input instruction.</param>
-    /// <param name="type">Complete non-void type.</param>
-    /// <param name="kind">Source of the GPU value.</param>
-    /// <param name="semantic">Target semantic, such as position, texcoord, color, instance-data or fragment-coordinate.</param>
-    /// <param name="location">Attribute/semantic index or assigned texture slot, never a native handle.</param>
+    /// <summary>
+    /// Creates an immutable stage input binding.
+    /// </summary>
+    /// <param name="id">
+    /// Stable binding identity, also used by the block's named Input instruction.
+    /// </param>
+    /// <param name="type">
+    /// Complete non-void type.
+    /// </param>
+    /// <param name="kind">
+    /// Source of the GPU value.
+    /// </param>
+    /// <param name="semantic">
+    /// Target semantic, such as position, texcoord, color, instance-data or fragment-coordinate.
+    /// </param>
+    /// <param name="location">
+    /// Attribute/semantic index or assigned texture slot, never a native handle.
+    /// </param>
     public ShaderIrStageInput(string id, ShaderSourceType type, ShaderIrInputKind kind, string semantic = "", int location = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -61,26 +99,48 @@ public sealed class ShaderIrStageInput
         this.location = location;
     }
 
-    /// <summary>Gets the logical binding identity.</summary>
+    /// <summary>
+    /// Gets the logical binding identity.
+    /// </summary>
     public string id { get; }
-    /// <summary>Gets the complete typed value received by the stage.</summary>
+    /// <summary>
+    /// Gets the complete typed value received by the stage.
+    /// </summary>
     public ShaderSourceType type { get; }
-    /// <summary>Gets the GPU input category.</summary>
+    /// <summary>
+    /// Gets the GPU input category.
+    /// </summary>
     public ShaderIrInputKind kind { get; }
-    /// <summary>Gets the target semantic; an adapter must reject unsupported semantics.</summary>
+    /// <summary>
+    /// Gets the target semantic; an adapter must reject unsupported semantics.
+    /// </summary>
     public string semantic { get; }
-    /// <summary>Gets the target-assigned interface location or sampled-texture slot.</summary>
+    /// <summary>
+    /// Gets the target-assigned interface location or sampled-texture slot.
+    /// </summary>
     public int location { get; }
 }
 
-/// <summary>Describes a named block output's GPU destination.</summary>
+/// <summary>
+/// Describes a named block output's GPU destination.
+/// </summary>
 public sealed class ShaderIrStageOutput
 {
-    /// <summary>Creates an immutable stage output binding.</summary>
-    /// <param name="id">The exact name in the block's output map.</param>
-    /// <param name="kind">GPU output category.</param>
-    /// <param name="semantic">Varying semantic matched by the next stage; otherwise empty.</param>
-    /// <param name="location">Varying index or color attachment index.</param>
+    /// <summary>
+    /// Creates an immutable stage output binding.
+    /// </summary>
+    /// <param name="id">
+    /// The exact name in the block's output map.
+    /// </param>
+    /// <param name="kind">
+    /// GPU output category.
+    /// </param>
+    /// <param name="semantic">
+    /// Varying semantic matched by the next stage; otherwise empty.
+    /// </param>
+    /// <param name="location">
+    /// Varying index or color attachment index.
+    /// </param>
     public ShaderIrStageOutput(string id, ShaderIrOutputKind kind, string semantic = "", int location = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -93,13 +153,21 @@ public sealed class ShaderIrStageOutput
         this.location = location;
     }
 
-    /// <summary>Gets the exact block output identity.</summary>
+    /// <summary>
+    /// Gets the exact block output identity.
+    /// </summary>
     public string id { get; }
-    /// <summary>Gets the GPU output category.</summary>
+    /// <summary>
+    /// Gets the GPU output category.
+    /// </summary>
     public ShaderIrOutputKind kind { get; }
-    /// <summary>Gets the varying semantic, not native assignment syntax.</summary>
+    /// <summary>
+    /// Gets the varying semantic, not native assignment syntax.
+    /// </summary>
     public string semantic { get; }
-    /// <summary>Gets the target-assigned varying or attachment index.</summary>
+    /// <summary>
+    /// Gets the target-assigned varying or attachment index.
+    /// </summary>
     public int location { get; }
 }
 
@@ -109,14 +177,30 @@ public sealed class ShaderIrStageOutput
 /// </summary>
 public sealed class ShaderIrStage
 {
-    /// <summary>Validates and freezes a single stage's interface and ordered body.</summary>
-    /// <param name="stage">Exactly Vertex, Fragment or Compute.</param>
-    /// <param name="body">Immutable typed instructions and named outputs.</param>
-    /// <param name="inputs">Exactly the input bindings read by the body.</param>
-    /// <param name="outputs">Exactly the GPU destinations written by the body.</param>
-    /// <param name="threadsX">Compute workgroup X size; one for raster stages.</param>
-    /// <param name="threadsY">Compute workgroup Y size; one for raster stages.</param>
-    /// <param name="threadsZ">Compute workgroup Z size; one for raster stages.</param>
+    /// <summary>
+    /// Validates and freezes a single stage's interface and ordered body.
+    /// </summary>
+    /// <param name="stage">
+    /// Exactly Vertex, Fragment or Compute.
+    /// </param>
+    /// <param name="body">
+    /// Immutable typed instructions and named outputs.
+    /// </param>
+    /// <param name="inputs">
+    /// Exactly the input bindings read by the body.
+    /// </param>
+    /// <param name="outputs">
+    /// Exactly the GPU destinations written by the body.
+    /// </param>
+    /// <param name="threadsX">
+    /// Compute workgroup X size; one for raster stages.
+    /// </param>
+    /// <param name="threadsY">
+    /// Compute workgroup Y size; one for raster stages.
+    /// </param>
+    /// <param name="threadsZ">
+    /// Compute workgroup Z size; one for raster stages.
+    /// </param>
     public ShaderIrStage(ShaderStage stage, ShaderIrBlock body, IEnumerable<ShaderIrStageInput> inputs,
         IEnumerable<ShaderIrStageOutput> outputs, int threadsX = 1, int threadsY = 1, int threadsZ = 1)
     {
@@ -138,19 +222,33 @@ public sealed class ShaderIrStage
         contentHash = ShaderIrSemanticHash.Compute(this);
     }
 
-    /// <summary>Gets the programmable stage.</summary>
+    /// <summary>
+    /// Gets the programmable stage.
+    /// </summary>
     public ShaderStage stage { get; }
-    /// <summary>Gets its immutable ordered instructions.</summary>
+    /// <summary>
+    /// Gets its immutable ordered instructions.
+    /// </summary>
     public ShaderIrBlock body { get; }
-    /// <summary>Gets all input bindings.</summary>
+    /// <summary>
+    /// Gets all input bindings.
+    /// </summary>
     public IReadOnlyList<ShaderIrStageInput> inputs { get; }
-    /// <summary>Gets all output destinations.</summary>
+    /// <summary>
+    /// Gets all output destinations.
+    /// </summary>
     public IReadOnlyList<ShaderIrStageOutput> outputs { get; }
-    /// <summary>Gets the compute workgroup X size.</summary>
+    /// <summary>
+    /// Gets the compute workgroup X size.
+    /// </summary>
     public int threadsX { get; }
-    /// <summary>Gets the compute workgroup Y size.</summary>
+    /// <summary>
+    /// Gets the compute workgroup Y size.
+    /// </summary>
     public int threadsY { get; }
-    /// <summary>Gets the compute workgroup Z size.</summary>
+    /// <summary>
+    /// Gets the compute workgroup Z size.
+    /// </summary>
     public int threadsZ { get; }
     /// <summary>
     /// Gets a deterministic hash of stage semantics, ordered effects, nested regions, complete types, resource layout and frozen sources.

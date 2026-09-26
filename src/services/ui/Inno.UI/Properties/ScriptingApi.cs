@@ -12,6 +12,7 @@ using Inno.UI;
 [assembly: ScriptingApiExport(typeof(UiDocumentSource), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiDocumentFragment), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiDocumentAsset), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(UiDocumentFontFace), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiTextureData), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiEventType), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiEvent), ScriptingApiScope.Runtime)]
@@ -23,3 +24,4 @@ using Inno.UI;
 [assembly: ScriptingApiExport(typeof(UiMeshUpdate), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiTextureUpdate), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(UiRenderFrame), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(UiInputSnapshot), ScriptingApiScope.Runtime)]

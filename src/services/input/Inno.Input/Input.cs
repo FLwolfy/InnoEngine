@@ -24,6 +24,17 @@ public static class InputExecutionContext
         => S_CURRENT_SCOPE.current;
 
     /// <summary>
+    /// Tries to read input when a host has installed an input subsystem for this frame.
+    /// </summary>
+    /// <param name="input">
+    /// Bound service, or null when unavailable.
+    /// </param>
+    /// <returns>
+    /// Whether a live input service is bound.
+    /// </returns>
+    public static bool TryGet(out IInputService? input) => S_CURRENT_SCOPE.TryGet(out input);
+
+    /// <summary>
     /// Binds an input service until the returned strict last-in-first-out scope is disposed.
     /// </summary>
     /// <param name="input">

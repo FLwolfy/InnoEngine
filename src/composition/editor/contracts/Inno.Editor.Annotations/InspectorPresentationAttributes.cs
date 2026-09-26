@@ -452,7 +452,7 @@ public sealed class HelpBoxAttribute : InspectorPresentationAttribute
     /// Sibling field or property name.
     /// </param>
     /// <param name="expectedValue">
-    /// Compile-time value required to show the message.
+    /// The expected value consumed by help box attribute; ownership remains with the caller unless explicitly stated otherwise.
     /// </param>
     /// <param name="messageType">
     /// Visual severity.

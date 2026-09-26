@@ -42,6 +42,35 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
+    public void IdentityRemapperRewritesNestedSerializedValuesWithoutChangingRawBinary()
+    {
+        Guid oldId = Guid.Parse("ad68b7e0-62aa-47ba-ab94-1b0509d67560");
+        Guid newId = Guid.Parse("02809cba-0be5-4ac4-a690-78e116fc26c1");
+        byte[] nested = m_serialization.Serialize(new DefaultSample
+        {
+            identity = oldId,
+            name = "plugin::~Samples/Document.rml",
+            bytes = [1, 2, 3]
+        });
+        byte[] source = m_serialization.Serialize(new DefaultSample
+        {
+            identity = oldId,
+            bytes = nested
+        });
+
+        byte[] rewritten = SerializedIdentityRemapper.Rewrite(source,
+            new Dictionary<Guid, Guid> { [oldId] = newId },
+            new Dictionary<string, string> { ["plugin::~Samples/Document.rml"] = "plugin-Samples/Document.rml" });
+        DefaultSample outer = m_serialization.Deserialize<DefaultSample>(rewritten);
+        DefaultSample inner = m_serialization.Deserialize<DefaultSample>(outer.bytes);
+
+        Assert.Equal(newId, outer.identity);
+        Assert.Equal(newId, inner.identity);
+        Assert.Equal("plugin-Samples/Document.rml", inner.name);
+        Assert.Equal(new byte[] { 1, 2, 3 }, inner.bytes);
+    }
+
+    [Fact]
     public void ISerializable_IsPureMarkerInterface()
     {
         Assert.Empty(typeof(ISerializable).GetMethods());

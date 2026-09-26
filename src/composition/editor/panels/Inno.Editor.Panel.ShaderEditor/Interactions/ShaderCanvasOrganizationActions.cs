@@ -15,26 +15,65 @@ namespace Inno.Editor.Panel.ShaderEditor;
 
 internal struct ShaderCanvasGroup
 {
-    public string id { get; set; }
-    public string title { get; set; }
-    public string[] nodes { get; set; }
+    /// <summary>
+    /// Gets the stable identity used to reference this value across subsystem boundaries.
+    /// </summary>
+public string id { get; set; }
+    /// <summary>
+    /// Gets the title text used by the current instance.
+    /// </summary>
+public string title { get; set; }
+    /// <summary>
+    /// Gets graph nodes affected by this organization action.
+    /// </summary>
+public string[] nodes { get; set; }
 }
 
 [EditorAction("shader/focus", ShaderEditorCanvas.C_AREA)]
 internal sealed class FocusShaderNodes(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
-    protected override bool writes => false;
-    protected override bool needsSelection => false;
-    protected override void Execute(EditorActionContext<AssetFileEntry> context) => documents.Open(context.target).frameRequested = true;
+    /// <summary>
+    /// Gets whether writes is active for the current instance.
+    /// </summary>
+protected override bool writes => false;
+    /// <summary>
+    /// Gets whether needs selection is active for the current instance.
+    /// </summary>
+protected override bool needsSelection => false;
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context) => documents.Open(context.target).frameRequested = true;
 }
 
 [EditorAction("shader/reroute", ShaderEditorCanvas.C_AREA)]
 internal sealed class InsertShaderReroute(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
-    protected override bool needsSelection => false;
-    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Gets whether needs selection is active for the current instance.
+    /// </summary>
+protected override bool needsSelection => false;
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
+protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
         => base.Query(context).isEnabled && documents.Open(context.target).selectedEdge is not null ? EditorActionState.enabled : EditorActionState.disabled;
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         var controller = documents.Controller(draft);
@@ -63,7 +102,13 @@ internal sealed class GroupShaderNodes(ShaderEditorDocuments documents) : Shader
     internal static ShaderCanvasGroup[] Read(ShaderEditorDocuments documents, GraphDocument graph)
         => graph.metadata.TryGetValue(C_GROUPS, out GraphSerializedValue? value)
             ? ShaderGraphDocument.Decode<ShaderCanvasGroup[]>(value, documents.serialization, documents.context) : [];
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         GraphDocument graph = documents.Controller(draft).document.Clone();
@@ -80,7 +125,13 @@ internal sealed class GroupShaderNodes(ShaderEditorDocuments documents) : Shader
 [EditorAction("shader/ungroup", ShaderEditorCanvas.C_AREA)]
 internal sealed class UngroupShaderNodes(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         GraphDocument graph = documents.Controller(draft).document.Clone();
@@ -98,7 +149,16 @@ internal sealed class UngroupShaderNodes(ShaderEditorDocuments documents) : Shad
 internal sealed class CollapseShaderSubgraph(ShaderEditorDocuments documents, AssetEditorModule browser)
     : ShaderSelectionAction(documents)
 {
-    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
+protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
         if (!base.Query(context).isEnabled) return EditorActionState.disabled;
         ShaderEditorDocuments.Draft draft = documents.Open(context.target);
@@ -119,7 +179,13 @@ internal sealed class CollapseShaderSubgraph(ShaderEditorDocuments documents, As
             : EditorActionState.disabled;
     }
 
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         ShaderEditorDocuments.Draft draft = documents.Open(context.target);
         GraphDocumentController controller = documents.Controller(draft);
@@ -304,8 +370,20 @@ internal sealed class CollapseShaderSubgraph(ShaderEditorDocuments documents, As
 [EditorAction("shader/reveal-source", ShaderEditorCanvas.C_AREA)]
 internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
 {
-    protected override bool writes => false;
-    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Gets whether writes is active for the current instance.
+    /// </summary>
+protected override bool writes => false;
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
+protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
         if (!base.Query(context).isEnabled) return EditorActionState.disabled;
         var draft = documents.Open(context.target);
@@ -316,7 +394,13 @@ internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, Asse
             ? EditorActionState.enabled
             : EditorActionState.disabled;
     }
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         GraphNodeRecord node = documents.Controller(draft).document.FindNode(draft.canvas.selectedNodes.First())!;
@@ -337,9 +421,21 @@ internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, Asse
 [EditorAction("shader/reveal-shader", ShaderEditorCanvas.C_AREA)]
 internal sealed class RevealShaderAsset(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
 {
-    protected override bool writes => false;
-    protected override bool needsSelection => false;
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Gets whether writes is active for the current instance.
+    /// </summary>
+protected override bool writes => false;
+    /// <summary>
+    /// Gets whether needs selection is active for the current instance.
+    /// </summary>
+protected override bool needsSelection => false;
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         string parent = Path.GetDirectoryName(draft.path.localPath)?.Replace('\\', '/') ?? string.Empty;
@@ -354,18 +450,42 @@ internal sealed class RevealShaderAsset(ShaderEditorDocuments documents, AssetEd
 [EditorAction("shader/check", ShaderEditorCanvas.C_AREA)]
 internal sealed class ShowShaderDiagnostics(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
-    protected override bool writes => false;
-    protected override bool needsSelection => false;
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Gets whether writes is active for the current instance.
+    /// </summary>
+protected override bool writes => false;
+    /// <summary>
+    /// Gets whether needs selection is active for the current instance.
+    /// </summary>
+protected override bool needsSelection => false;
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
         => documents.ShowCheck(documents.Open(context.target));
 }
 
 [EditorAction("shader/copy-to-project", ShaderEditorCanvas.C_AREA)]
 internal sealed class CopyShaderToProject(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
 {
-    protected override bool writes => false;
-    protected override bool needsSelection => false;
-    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    /// <summary>
+    /// Gets whether writes is active for the current instance.
+    /// </summary>
+protected override bool writes => false;
+    /// <summary>
+    /// Gets whether needs selection is active for the current instance.
+    /// </summary>
+protected override bool needsSelection => false;
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         var draft = documents.Open(context.target);
         AssetSourceMount mount = documents.assets.sourceMounts.Single(value => value.id == AssetSourceId.project);

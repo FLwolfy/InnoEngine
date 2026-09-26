@@ -20,7 +20,16 @@ internal sealed class AssetCreationRegistry : TypeRegistry<AssetCreationRegistry
     internal bool TryGet(string id, out Registration? registration)
         => current.byId.TryGetValue(id, out registration);
 
-    protected override Snapshot Build(TypeCacheSnapshot types)
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
+protected override Snapshot Build(TypeCacheSnapshot types)
     {
         var registrations = new List<Registration>();
         var byId = new Dictionary<string, Registration>(StringComparer.Ordinal);
@@ -69,7 +78,13 @@ internal sealed class AssetCreationRegistry : TypeRegistry<AssetCreationRegistry
         return new Snapshot(ordered, byId);
     }
 
-    protected override void DisposeSnapshot(Snapshot snapshot)
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
+protected override void DisposeSnapshot(Snapshot snapshot)
         => DisposeExtensions(snapshot.registrations.Select(static value => value.template));
 
     internal sealed record Registration(

@@ -20,6 +20,7 @@ public sealed class AssetImportWriter<TAsset> where TAsset : AssetObject
         new(StringComparer.Ordinal);
     private readonly List<string> m_diagnostics = [];
     private readonly HashSet<string> m_authoringOutputs = new(StringComparer.Ordinal);
+    private AssetDeploymentScope? m_deploymentScope;
 
     internal AssetImportWriter(AssetImportContext context)
     {
@@ -30,6 +31,23 @@ public sealed class AssetImportWriter<TAsset> where TAsset : AssetObject
     /// Gets the candidate asset assigned by the importer.
     /// </summary>
     public TAsset? asset { get; private set; }
+
+    /// <summary>
+    /// Selects the deployment scope for this imported asset.
+    /// This permits one importer to produce runtime assets and editor-only assets
+    /// from different source documents without changing their asset type.
+    /// </summary>
+    /// <param name="deploymentScope">
+    /// The scope of the complete imported asset, including its generated state.
+    /// </param>
+    public void SetDeploymentScope(AssetDeploymentScope deploymentScope)
+    {
+        if (!Enum.IsDefined(deploymentScope))
+            throw new ArgumentOutOfRangeException(nameof(deploymentScope));
+        if (m_deploymentScope.HasValue)
+            throw new InvalidOperationException("An importer can select its deployment scope only once.");
+        m_deploymentScope = deploymentScope;
+    }
 
     /// <summary>
     /// Assigns the managed asset produced by the importer.
@@ -57,7 +75,9 @@ public sealed class AssetImportWriter<TAsset> where TAsset : AssetObject
     /// <param name="cancellationToken">
     /// Cancellation for the write operation.
     /// </param>
-    /// <param name="deploymentScope">Whether this output is retained in runtime packages. Runtime payload and asset state cannot be authoring-only.</param>
+    /// <param name="deploymentScope">
+    /// Whether this output is retained in runtime packages. Runtime payload and asset state cannot be authoring-only.
+    /// </param>
     /// <returns>
     /// A completed operation after the output has been staged.
     /// </returns>
@@ -139,6 +159,6 @@ public sealed class AssetImportWriter<TAsset> where TAsset : AssetObject
     {
         if (asset is null)
             throw new InvalidOperationException("The importer did not assign an asset.");
-        return new AssetImportProduct(asset, m_outputs, m_diagnostics, m_authoringOutputs);
+        return new AssetImportProduct(asset, m_outputs, m_diagnostics, m_authoringOutputs, m_deploymentScope);
     }
 }

@@ -69,7 +69,9 @@ public sealed class PropertyDrawContext
     /// </summary>
     public string? tooltip { get; }
 
-    /// <summary>Gets whether Color values are unclamped linear floating-point channels.</summary>
+    /// <summary>
+    /// Gets whether Color values are unclamped linear floating-point channels.
+    /// </summary>
     public bool hdrColor { get; }
 
     internal object owner => m_owner;

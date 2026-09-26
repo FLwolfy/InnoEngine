@@ -333,7 +333,9 @@ public abstract class RenderPipeline : IDisposable
     /// <param name="state">
     /// Stable type identity and neutral property bytes.
     /// </param>
-    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    /// <param name="settings">
+    /// Native context bound to the canonical Pipeline asset's actual owner.
+    /// </param>
     public void Configure(SerializedRenderExtensionState state, RenderExtensionStateContext settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -375,7 +377,9 @@ public abstract class RenderPipeline : IDisposable
     /// <param name="state">
     /// Reload-safe extension state.
     /// </param>
-    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    /// <param name="settings">
+    /// Native context bound to the canonical Pipeline asset's actual owner.
+    /// </param>
     protected virtual void OnConfigure(SerializedRenderExtensionState state, RenderExtensionStateContext settings) { }
 
     /// <summary>
@@ -401,7 +405,9 @@ public abstract class RenderPipelineFeature
     /// <param name="configuration">
     /// Stable feature configuration.
     /// </param>
-    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    /// <param name="settings">
+    /// Native context bound to the canonical Pipeline asset's actual owner.
+    /// </param>
     public void Configure(RenderFeatureConfiguration configuration, RenderExtensionStateContext settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -422,6 +428,8 @@ public abstract class RenderPipelineFeature
     /// <param name="state">
     /// Reload-safe extension state.
     /// </param>
-    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    /// <param name="settings">
+    /// Native context bound to the canonical Pipeline asset's actual owner.
+    /// </param>
     protected virtual void OnConfigure(SerializedRenderExtensionState state, RenderExtensionStateContext settings) { }
 }

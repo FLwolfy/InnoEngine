@@ -14,12 +14,13 @@
     <ProjectReference Include="..\..\framework\Inno.Editor.Settings\Inno.Editor.Settings.csproj" />
     <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\..\..\..\runtime\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" />
     <ProjectReference Include="..\..\..\..\runtime\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\features\Inno.Editor.Assets\Inno.Editor.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="../../../../foundation/core/Inno.Core.Serialization/Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../foundation/core/Inno.Core.Serialization/Inno.Core.Serialization.csproj" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.IO/Inno.Core.IO.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />

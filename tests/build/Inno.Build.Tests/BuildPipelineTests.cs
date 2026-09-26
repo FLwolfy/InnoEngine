@@ -582,6 +582,7 @@ public sealed class BuildPipelineTests : IDisposable
         Assert.Empty(scan.diagnostics);
         PluginCandidate candidate = Assert.Single(scan.candidates);
         Assert.Equal("tests.export", candidate.manifest.pluginId);
+        Assert.Empty(candidate.manifest.dependencies);
         Assert.Equal(PluginSourceKind.Package, candidate.sourceKind);
     }
 

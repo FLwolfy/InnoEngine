@@ -8,7 +8,9 @@ namespace Inno.Core.Settings;
 /// </summary>
 public interface IProjectSettingsLookup
 {
-    /// <summary>Gets the unique lifetime identity of this settings owner; revisions from different owners are not interchangeable.</summary>
+    /// <summary>
+    /// Gets the unique lifetime identity of this settings owner; revisions from different owners are not interchangeable.
+    /// </summary>
     Guid ownerId { get; }
 
     /// <summary>

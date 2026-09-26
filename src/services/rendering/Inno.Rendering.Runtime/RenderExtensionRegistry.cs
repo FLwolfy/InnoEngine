@@ -81,7 +81,18 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
             types,
             static attribute => attribute.id,
             "render request provider");
-        return new Snapshot(types.version, pipelines, features, requestProviders, CreateExtension<RenderRequestProvider>, Retire);
+        Dictionary<string, Type> contentSources = Discover<
+            ViewContentSourceExtensionAttribute,
+            IViewContentSource>(
+            types,
+            static attribute => attribute.id,
+            "view content source");
+        Dictionary<string, Type> renderModels = Discover<
+            RenderModelExtensionAttribute, IRenderModel>(types,
+            static attribute => attribute.id, "render model");
+        return new Snapshot(types.version, pipelines, features, requestProviders, contentSources, renderModels,
+            CreateExtension<RenderRequestProvider>, CreateExtension<IViewContentSource>,
+            CreateExtension<IRenderModel>, Retire);
     }
 
     internal static string GetConfigurationFingerprint(RenderPipelineAsset asset)
@@ -153,6 +164,8 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
         private readonly IReadOnlyDictionary<string, Type> m_pipelines;
         private readonly IReadOnlyDictionary<string, Type> m_features;
         private readonly IReadOnlyDictionary<string, Type> m_requestProviders;
+        private readonly IReadOnlyDictionary<string, Type> m_contentSources;
+        private readonly IReadOnlyDictionary<string, Type> m_renderModels;
         private readonly Action<IDisposable> m_retire;
 
         internal Snapshot(
@@ -160,25 +173,57 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
             IReadOnlyDictionary<string, Type> pipelines,
             IReadOnlyDictionary<string, Type> features,
             IReadOnlyDictionary<string, Type> requestProviders,
+            IReadOnlyDictionary<string, Type> contentSources,
+            IReadOnlyDictionary<string, Type> renderModels,
             Func<Type, RenderRequestProvider> createProvider,
+            Func<Type, IViewContentSource> createSource,
+            Func<Type, IRenderModel> createModel,
             Action<IDisposable> retire)
         {
             this.typeCacheVersion = typeCacheVersion;
             m_pipelines = pipelines;
             m_features = features;
             m_requestProviders = requestProviders;
+            m_contentSources = contentSources;
+            m_renderModels = renderModels;
             m_retire = retire;
             providers = CreateRequestProviders(createProvider);
+            sources = CreateContentSources(createSource);
+            models = CreateRenderModels(createModel);
         }
 
         internal long typeCacheVersion { get; }
 
         internal RequestProviderGeneration providers { get; }
 
+        internal ContentSourceGeneration sources { get; }
+        internal RenderModelGeneration models { get; }
+
         /// <summary>
         /// Releases providers when their owning type snapshot retires.
         /// </summary>
-        public void Dispose() => providers.Dispose();
+        public void Dispose()
+        {
+            models.Dispose();
+            sources.Dispose();
+            providers.Dispose();
+        }
+
+        private ContentSourceGeneration CreateContentSources(Func<Type, IViewContentSource> createSource)
+        {
+            var sources = new List<ContentSourceEntry>(m_contentSources.Count);
+            foreach ((string id, Type type) in m_contentSources.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+                sources.Add(new ContentSourceEntry(id, createSource(type)));
+            return new ContentSourceGeneration(typeCacheVersion, sources);
+        }
+
+        private RenderModelGeneration CreateRenderModels(Func<Type, IRenderModel> createModel)
+        {
+            var models = new List<RenderModelEntry>(m_renderModels.Count);
+            foreach ((string id, Type type) in m_renderModels.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+                models.Add(new RenderModelEntry(id, createModel(type)));
+            return new RenderModelGeneration(typeCacheVersion, models);
+        }
 
         private RequestProviderGeneration CreateRequestProviders(Func<Type, RenderRequestProvider> createProvider)
         {
@@ -314,5 +359,62 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
         string id,
         int priority,
         RenderRequestProvider provider);
+
+    internal sealed class ContentSourceGeneration : IDisposable
+    {
+        private readonly LifetimeScope m_lifetime = new();
+        private IReadOnlyList<ContentSourceEntry> m_sources;
+
+        internal ContentSourceGeneration(long typeCacheVersion, IReadOnlyList<ContentSourceEntry> sources)
+        {
+            this.typeCacheVersion = typeCacheVersion;
+            m_sources = Array.AsReadOnly(sources.ToArray());
+            foreach (ContentSourceEntry entry in m_sources)
+                m_lifetime.Own(entry.source);
+        }
+
+        internal long typeCacheVersion { get; }
+
+        internal IReadOnlyList<ContentSourceEntry> sources => m_sources;
+
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+public void Dispose()
+        {
+            m_lifetime.Dispose();
+            m_sources = Array.Empty<ContentSourceEntry>();
+        }
+    }
+
+    internal sealed record ContentSourceEntry(string id, IViewContentSource source);
+
+    internal sealed class RenderModelGeneration : IDisposable
+    {
+        private readonly LifetimeScope m_lifetime = new();
+        private IReadOnlyList<RenderModelEntry> m_models;
+
+        internal RenderModelGeneration(long typeCacheVersion, IReadOnlyList<RenderModelEntry> models)
+        {
+            this.typeCacheVersion = typeCacheVersion;
+            m_models = Array.AsReadOnly(models.ToArray());
+            foreach (RenderModelEntry entry in m_models)
+                m_lifetime.Own(entry.model);
+        }
+
+        internal long typeCacheVersion { get; }
+        internal IReadOnlyList<RenderModelEntry> models => m_models;
+
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+public void Dispose()
+        {
+            m_lifetime.Dispose();
+            m_models = Array.Empty<RenderModelEntry>();
+        }
+    }
+
+    internal sealed record RenderModelEntry(string id, IRenderModel model);
 
 }

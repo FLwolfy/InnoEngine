@@ -30,7 +30,9 @@ public abstract class EditorPanel
     /// </remarks>
     public virtual bool allowScrolling => true;
 
-    /// <summary>Gets the initial floating size in UI coordinates; zero leaves native auto-sizing in control. Saved layouts take precedence.</summary>
+    /// <summary>
+    /// Gets the initial floating size in UI coordinates; zero leaves native auto-sizing in control. Saved layouts take precedence.
+    /// </summary>
     public virtual Vector2 initialSize => Vector2.Zero;
 
     /// <summary>

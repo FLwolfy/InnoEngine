@@ -9,7 +9,18 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Inno.Scripting.Compiler;
 
-/// <summary>Removes explicitly declared compile-time annotation types before Player reference binding.</summary>
+/// <summary>
+/// Removes explicitly declared compile-time annotation types before Player reference binding.
+/// </summary>
+/// <param name="semanticModel">
+/// The semantic model value used to initialize this instance.
+/// </param>
+/// <param name="annotationTypes">
+/// The annotation type names removed from Player source.
+/// </param>
+/// <param name="annotationNamespaces">
+/// The annotation namespaces removed from Player source.
+/// </param>
 internal sealed class ScriptAuthoringAnnotationRewriter(
     SemanticModel semanticModel,
     HashSet<string> annotationTypes,
@@ -31,7 +42,15 @@ internal sealed class ScriptAuthoringAnnotationRewriter(
         }).ToArray();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Visits attribute list in deterministic order using the supplied visitor.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by visit attribute list; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated syntax node? that represents the completed operation.
+    /// </returns>
     public override SyntaxNode? VisitAttributeList(AttributeListSyntax node)
     {
         AttributeSyntax[] retained = node.Attributes.Where(attribute =>
@@ -39,11 +58,27 @@ internal sealed class ScriptAuthoringAnnotationRewriter(
         return retained.Length == 0 ? null : node.WithAttributes(SyntaxFactory.SeparatedList(retained));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Visits class declaration in deterministic order using the supplied visitor.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by visit class declaration; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated syntax node? that represents the completed operation.
+    /// </returns>
     public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node)
         => IsAnnotation(semanticModel.GetDeclaredSymbol(node)) ? null : base.VisitClassDeclaration(node);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Visits using directive in deterministic order using the supplied visitor.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by visit using directive; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated syntax node? that represents the completed operation.
+    /// </returns>
     public override SyntaxNode? VisitUsingDirective(UsingDirectiveSyntax node)
     {
         ISymbol? symbol = node.Name is null ? null : semanticModel.GetSymbolInfo(node.Name).Symbol;

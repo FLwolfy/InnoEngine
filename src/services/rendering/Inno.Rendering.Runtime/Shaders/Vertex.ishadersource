@@ -1,0 +1,7 @@
+void Evaluate(vec2 position, vec2 uv, vec4 color, mat4 viewProjection,
+    out vec4 clip, out vec2 texcoord, out vec4 tint)
+{
+    clip = mul(viewProjection, vec4(position, 0.0, 1.0));
+    texcoord = uv;
+    tint = color;
+}

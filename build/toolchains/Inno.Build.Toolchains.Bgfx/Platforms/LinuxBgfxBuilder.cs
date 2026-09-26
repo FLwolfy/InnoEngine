@@ -16,7 +16,10 @@ internal sealed class LinuxBgfxBuilder : BgfxBuilder
 
     private static string ParallelMakeOption => $"-j{Math.Max(1, Environment.ProcessorCount)}";
 
-    public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
+    /// <summary>
+    /// Gets the native platform identifier produced by this builder.
+    /// </summary>
+public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
     {
         Architecture.X64 => LINUX_X64_OUTPUT_PLATFORM,
         Architecture.Arm64 => LINUX_ARM64_OUTPUT_PLATFORM,
@@ -24,7 +27,10 @@ internal sealed class LinuxBgfxBuilder : BgfxBuilder
             $"Unsupported Linux architecture: {RuntimeInformation.ProcessArchitecture}.")
     };
 
-    public override string artifactPathToken => RuntimeInformation.ProcessArchitecture switch
+    /// <summary>
+    /// Gets the artifact path token text used by the current instance.
+    /// </summary>
+public override string artifactPathToken => RuntimeInformation.ProcessArchitecture switch
     {
         Architecture.X64 => "/linux64_gcc/bin/",
         Architecture.Arm64 => "/linux32_arm_gcc/bin/",
@@ -32,17 +38,41 @@ internal sealed class LinuxBgfxBuilder : BgfxBuilder
             $"Unsupported Linux architecture: {RuntimeInformation.ProcessArchitecture}.")
     };
 
-    protected override string debugMakeTarget => LINUX_X64_DEBUG_TARGET;
+    /// <summary>
+    /// Gets the native make target used for debug output.
+    /// </summary>
+protected override string debugMakeTarget => LINUX_X64_DEBUG_TARGET;
 
-    protected override string releaseMakeTarget => LINUX_X64_RELEASE_TARGET;
+    /// <summary>
+    /// Gets the native make target used for optimized output.
+    /// </summary>
+protected override string releaseMakeTarget => LINUX_X64_RELEASE_TARGET;
 
-    public override bool IsSupported()
+    /// <summary>
+    /// Determines whether the current host can execute this implementation.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+public override bool IsSupported()
     {
         return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             && RuntimeInformation.ProcessArchitecture is Architecture.X64 or Architecture.Arm64;
     }
 
-    public override void Build(string bgfxDir, string config, string? makeTargetOverride)
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="bgfxDir">
+    /// The bgfx dir text validated by the build operation.
+    /// </param>
+    /// <param name="config">
+    /// The validated configuration that controls this operation.
+    /// </param>
+    /// <param name="makeTargetOverride">
+    /// The make target override text validated by the build operation.
+    /// </param>
+public override void Build(string bgfxDir, string config, string? makeTargetOverride)
     {
         if (!string.IsNullOrWhiteSpace(makeTargetOverride))
         {
@@ -63,7 +93,16 @@ internal sealed class LinuxBgfxBuilder : BgfxBuilder
             bgfxDir);
     }
 
-    public override void BuildTools(string bgfxDir, string config)
+    /// <summary>
+    /// Builds the native offline tools required by the selected configuration.
+    /// </summary>
+    /// <param name="bgfxDir">
+    /// The bgfx dir text validated by the build tools operation.
+    /// </param>
+    /// <param name="config">
+    /// The validated configuration that controls this operation.
+    /// </param>
+public override void BuildTools(string bgfxDir, string config)
     {
         if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
         {

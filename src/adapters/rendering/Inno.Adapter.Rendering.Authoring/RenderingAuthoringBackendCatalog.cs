@@ -5,15 +5,25 @@ using Inno.Rendering.Assets;
 
 namespace Inno.Adapter.Rendering;
 
-/// <summary>Pairs one immutable authoring provider set with a runtime rendering catalog.</summary>
+/// <summary>
+/// Pairs one immutable authoring provider set with a runtime rendering catalog.
+/// </summary>
 public sealed class RenderingAuthoringBackendCatalog : IRenderingAuthoringBackendFactory
 {
     private readonly Dictionary<RenderingBackendId, RenderingAuthoringBackendProvider> m_providers = [];
 
-    /// <summary>Validates that every runtime backend has exactly one matching authoring provider.</summary>
-    /// <param name="runtime">Runtime provider snapshot paired with these authoring tools.</param>
-    /// <param name="providers">Complete authoring provider set owned by this composition generation.</param>
-    /// <exception cref="ArgumentException">Provider IDs are missing, duplicated, or do not match the runtime set.</exception>
+    /// <summary>
+    /// Validates that every runtime backend has exactly one matching authoring provider.
+    /// </summary>
+    /// <param name="runtime">
+    /// Runtime provider snapshot paired with these authoring tools.
+    /// </param>
+    /// <param name="providers">
+    /// Complete authoring provider set owned by this composition generation.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Provider IDs are missing, duplicated, or do not match the runtime set.
+    /// </exception>
     public RenderingAuthoringBackendCatalog(
         IRenderingBackendFactory runtime,
         IEnumerable<RenderingAuthoringBackendProvider> providers)
@@ -29,15 +39,33 @@ public sealed class RenderingAuthoringBackendCatalog : IRenderingAuthoringBacken
         supportedBackends = new ReadOnlyCollection<RenderingBackendId>(new List<RenderingBackendId>(m_providers.Keys));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets backend registrations available in this type generation.
+    /// </summary>
     public IReadOnlyList<RenderingBackendId> supportedBackends { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a shader compiler toolchain using this implementation's validated inputs.
+    /// </summary>
+    /// <param name="backend">
+    /// The backend consumed by create shader compiler toolchain; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated ishader compiler toolchain that represents the completed operation.
+    /// </returns>
     public IShaderCompilerToolchain CreateShaderCompilerToolchain(RenderingBackendId backend)
         => GetProvider(backend).CreateShaderCompilerToolchain()
            ?? throw new InvalidOperationException($"Rendering provider '{backend}' returned no shader compiler.");
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a texture target compiler using this implementation's validated inputs.
+    /// </summary>
+    /// <param name="backend">
+    /// The backend consumed by create texture target compiler; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated itexture target compiler that represents the completed operation.
+    /// </returns>
     public ITextureTargetCompiler CreateTextureTargetCompiler(RenderingBackendId backend)
         => GetProvider(backend).CreateTextureTargetCompiler()
            ?? throw new InvalidOperationException($"Rendering provider '{backend}' returned no texture compiler.");

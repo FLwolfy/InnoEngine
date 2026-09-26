@@ -21,8 +21,12 @@ public sealed class TextRuntime : RuntimeSubsystem, ITextService
     /// <summary>
     /// Creates a text runtime and assumes ownership of its backend.
     /// </summary>
-    /// <param name="backend">The native shaping backend.</param>
-    /// <param name="artifacts">The immutable asset artifact lookup.</param>
+    /// <param name="backend">
+    /// The native shaping backend.
+    /// </param>
+    /// <param name="artifacts">
+    /// The immutable asset artifact lookup.
+    /// </param>
     public TextRuntime(ITextBackend backend, IAssetArtifactLookup artifacts)
     {
         m_backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -32,14 +36,18 @@ public sealed class TextRuntime : RuntimeSubsystem, ITextService
     /// <summary>
     /// Binds the script-facing text facade for the complete runtime frame.
     /// </summary>
-    /// <param name="frame">The current runtime frame.</param>
+    /// <param name="frame">
+    /// The current runtime frame.
+    /// </param>
     protected override void OnBeginFrame(RuntimeFrame frame)
         => OwnFrameScope(EnterExecutionScope());
 
     /// <summary>
     /// Binds this runtime to the current asynchronous execution context.
     /// </summary>
-    /// <returns>The caller-owned binding scope.</returns>
+    /// <returns>
+    /// The caller-owned binding scope.
+    /// </returns>
     public IDisposable EnterExecutionScope()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -49,11 +57,21 @@ public sealed class TextRuntime : RuntimeSubsystem, ITextService
     /// <summary>
     /// Shapes one Unicode string with an imported font.
     /// </summary>
-    /// <param name="font">The imported font source.</param>
-    /// <param name="text">The Unicode source text.</param>
-    /// <param name="style">Font selection and sizing.</param>
-    /// <param name="options">Language, script, and direction hints.</param>
-    /// <returns>The immutable shaped layout.</returns>
+    /// <param name="font">
+    /// The imported font source.
+    /// </param>
+    /// <param name="text">
+    /// The Unicode source text.
+    /// </param>
+    /// <param name="style">
+    /// Font selection and sizing.
+    /// </param>
+    /// <param name="options">
+    /// Language, script, and direction hints.
+    /// </param>
+    /// <returns>
+    /// The immutable shaped layout.
+    /// </returns>
     public TextLayout Shape(FontAsset font, string text, TextStyle style, TextShapingOptions options)
     {
         ArgumentNullException.ThrowIfNull(font);
@@ -66,11 +84,21 @@ public sealed class TextRuntime : RuntimeSubsystem, ITextService
     /// <summary>
     /// Rasterizes one glyph from an imported font.
     /// </summary>
-    /// <param name="font">The imported font source.</param>
-    /// <param name="faceIndex">The zero-based collection face index.</param>
-    /// <param name="glyphId">The font-specific glyph identifier.</param>
-    /// <param name="fontSize">The positive logical pixel size.</param>
-    /// <returns>The immutable glyph bitmap.</returns>
+    /// <param name="font">
+    /// The imported font source.
+    /// </param>
+    /// <param name="faceIndex">
+    /// The zero-based collection face index.
+    /// </param>
+    /// <param name="glyphId">
+    /// The font-specific glyph identifier.
+    /// </param>
+    /// <param name="fontSize">
+    /// The positive logical pixel size.
+    /// </param>
+    /// <returns>
+    /// The immutable glyph bitmap.
+    /// </returns>
     public GlyphBitmap Rasterize(FontAsset font, int faceIndex, uint glyphId, float fontSize)
     {
         ArgumentNullException.ThrowIfNull(font);

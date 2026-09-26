@@ -829,6 +829,10 @@ internal static partial class Program
             return "src/composition/shell";
         if (string.Equals(projectName, "Inno.Player", StringComparison.Ordinal))
             return "src/composition/player";
+        if (string.Equals(projectName, "Inno.Editor.Annotations", StringComparison.Ordinal))
+            return "src/composition/editor/contracts";
+        if (string.Equals(projectName, "Inno.Editor.Build.Cli", StringComparison.Ordinal))
+            return "src/composition/editor/host";
         if (projectName.StartsWith("Inno.Editor.Panel.", StringComparison.Ordinal))
             return "src/composition/editor/panels";
         if (string.Equals(projectName, "Inno.Editor.Application", StringComparison.Ordinal))
@@ -862,6 +866,10 @@ internal static partial class Program
             return "src/adapters/storage";
         if (projectName.StartsWith("Inno.Adapter.Rendering", StringComparison.Ordinal))
             return "src/adapters/rendering";
+        if (projectName.StartsWith("Inno.Adapter.Text", StringComparison.Ordinal))
+            return "src/adapters/text";
+        if (projectName.StartsWith("Inno.Adapter.UI", StringComparison.Ordinal))
+            return "src/adapters/ui";
         if (projectName.StartsWith("Inno.Adapter.Audio", StringComparison.Ordinal))
             return "src/adapters/audio";
         if (projectName.StartsWith("Inno.References", StringComparison.Ordinal))
@@ -880,6 +888,10 @@ internal static partial class Program
             return "src/services/storage";
         if (projectName.StartsWith("Inno.Rendering", StringComparison.Ordinal))
             return "src/services/rendering";
+        if (projectName.StartsWith("Inno.Text", StringComparison.Ordinal))
+            return "src/services/text";
+        if (projectName.StartsWith("Inno.UI", StringComparison.Ordinal))
+            return "src/services/ui";
         if (projectName.StartsWith("Inno.Audio", StringComparison.Ordinal))
             return "src/services/audio";
         if (string.Equals(projectName, "Inno.Runtime", StringComparison.Ordinal))

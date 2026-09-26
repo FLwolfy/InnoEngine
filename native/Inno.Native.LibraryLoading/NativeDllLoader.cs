@@ -111,9 +111,15 @@ public static class NativeDllLoader
     /// <summary>
     /// Deploys a known native file into a relative path under the current output's native directory.
     /// </summary>
-    /// <param name="sourcePath">Existing source file to deploy.</param>
-    /// <param name="relativeOutputPath">Relative path below the native output directory.</param>
-    /// <returns>The absolute deployed file path.</returns>
+    /// <param name="sourcePath">
+    /// Existing source file to deploy.
+    /// </param>
+    /// <param name="relativeOutputPath">
+    /// Relative path below the native output directory.
+    /// </param>
+    /// <returns>
+    /// The absolute deployed file path.
+    /// </returns>
     public static string DeployNativeFile(string sourcePath, string relativeOutputPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);

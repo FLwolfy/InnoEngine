@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 using Inno.Assets;
 using Inno.Assets.Pipeline;
+using Inno.Build;
 using Inno.Build.Platform.MacOS;
 using Inno.Build.Platform.Windows;
 using Inno.Core.Identity;
@@ -16,7 +17,7 @@ using Inno.Runtime;
 using Inno.Scene;
 using Inno.Scripting.Compiler;
 
-namespace Inno.Build.Cli;
+namespace Inno.Editor.Build.Cli;
 
 internal static class Program
 {
@@ -34,6 +35,11 @@ internal static class Program
             using BuildWorkspace workspace = BuildWorkspace.Open(
                 command.projectDirectory,
                 command.supportPackRoot);
+            if (command.kind == BuildCommandKind.ImportSample)
+            {
+                Console.WriteLine(workspace.ImportSample(command.sampleSource));
+                return 0;
+            }
             BuildResult result = command.kind switch
             {
                 BuildCommandKind.Game => await workspace.pipeline.BuildGameAsync(
@@ -84,6 +90,7 @@ internal sealed class BuildWorkspace : IDisposable
     private readonly ProjectSettingsStore m_settings;
     private readonly AssetPipeline m_assets;
     private readonly PluginEnvironment m_plugins;
+    private readonly ScriptCompiler m_compiler;
     private readonly string m_projectDirectory;
 
     private BuildWorkspace(
@@ -91,6 +98,7 @@ internal sealed class BuildWorkspace : IDisposable
         ProjectSettingsStore settings,
         AssetPipeline assets,
         PluginEnvironment plugins,
+        ScriptCompiler compiler,
         string projectDirectory,
         BuildPipeline pipeline)
     {
@@ -98,12 +106,24 @@ internal sealed class BuildWorkspace : IDisposable
         m_settings = settings;
         m_assets = assets;
         m_plugins = plugins;
+        m_compiler = compiler;
         m_projectDirectory = projectDirectory;
         this.pipeline = pipeline;
     }
 
     internal BuildPipeline pipeline { get; }
     internal ProjectId projectId => m_settings.projectId;
+
+    internal AssetPath ImportSample(AssetPath source)
+        => m_assets.ImportSample(source, _ =>
+        {
+            ScriptCompilationResult result = m_compiler.CompileAuthoringGenerationAsync()
+                .GetAwaiter().GetResult();
+            if (!result.success)
+                throw new InvalidOperationException("Sample script preflight failed:" + Environment.NewLine
+                    + string.Join(Environment.NewLine,
+                        result.diagnostics.Select(static diagnostic => diagnostic.message)));
+        });
 
 
     internal static BuildWorkspace Open(string projectDirectory, string supportPackRoot)
@@ -162,6 +182,13 @@ internal sealed class BuildWorkspace : IDisposable
                 libraryRoot,
                 scan,
                 engine.modules.generations);
+            if (plugins.discovery.diagnostics.Count != 0
+                || plugins.activePlugins.Count != scan.candidates.Count)
+            {
+                throw new InvalidOperationException("Installed Plugin activation failed:" + Environment.NewLine
+                    + string.Join(Environment.NewLine, plugins.discovery.diagnostics.Select(static diagnostic =>
+                        $"{diagnostic.sourcePath}: {diagnostic.message}")));
+            }
             var compiler = new ScriptCompiler(
                 new ScriptCompilerOptions
                 {
@@ -185,7 +212,7 @@ internal sealed class BuildWorkspace : IDisposable
                     new MacOSArm64GameBuildTarget(assets, engine.serialization, engine.types),
                     new WindowsX64GameBuildTarget(assets, engine.serialization, engine.types)
                 ]);
-            return new BuildWorkspace(engine, settings, assets, plugins, projectRoot, pipeline);
+            return new BuildWorkspace(engine, settings, assets, plugins, compiler, projectRoot, pipeline);
         }
         catch
         {
@@ -261,7 +288,8 @@ internal sealed class BuildWorkspace : IDisposable
 internal enum BuildCommandKind
 {
     Game,
-    Plugin
+    Plugin,
+    ImportSample
 }
 
 internal sealed class BuildCommand
@@ -286,6 +314,8 @@ internal sealed class BuildCommand
 
     internal string? profilePath => m_values.GetValueOrDefault("profile");
 
+    internal AssetPath sampleSource => AssetPath.Parse(Require(m_values, "source"));
+
     internal static BuildCommand Parse(IReadOnlyList<string> args)
     {
         if (args.Count == 0 || args[0] is "help" or "--help" or "-h")
@@ -294,6 +324,7 @@ internal sealed class BuildCommand
         {
             "game" => BuildCommandKind.Game,
             "plugin" => BuildCommandKind.Plugin,
+            "import-sample" => BuildCommandKind.ImportSample,
             _ => throw new ArgumentException($"Unknown command '{args[0]}'.{Environment.NewLine}{Usage()}")
         };
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -316,11 +347,16 @@ internal sealed class BuildCommand
     }
 
     internal GameBuildRequest CreateGameRequest(BuildProfile profile)
-        => new()
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (m_values.TryGetValue("startup-scene", out string? scene))
+            profile.startupScene = AssetPath.Parse(scene).ToString();
+        return new GameBuildRequest
         {
-            profile = profile ?? throw new ArgumentNullException(nameof(profile)),
+            profile = profile,
             outputDirectory = Require(m_values, "output")
         };
+    }
 
     internal PluginBuildRequest CreatePluginRequest(ProjectId projectId)
         => new()
@@ -328,6 +364,9 @@ internal sealed class BuildCommand
             pluginId = projectId.value,
             displayName = Require(m_values, "display-name"),
             outputPath = Require(m_values, "output"),
+            dependencies = m_values.TryGetValue("dependencies", out string? dependencyList)
+                ? dependencyList.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                : Array.Empty<string>(),
             includeDependencies = m_values.ContainsKey("include-dependencies")
         };
 
@@ -338,6 +377,7 @@ internal sealed class BuildCommand
 
     private static string Usage()
         => "Usage:\n"
-           + "  Inno.Build.Cli game --project <dir> --support-packs <dir> --output <dir> [--profile <BuildProfile.inno>]\n"
-           + "  Inno.Build.Cli plugin --project <dir> --output <package.iplugin> --display-name <name> [--include-dependencies]";
+           + "  Inno.Editor.Build.Cli game --project <dir> --support-packs <dir> --output <dir> [--profile <BuildProfile.inno>] [--startup-scene <scene>]\n"
+           + "  Inno.Editor.Build.Cli plugin --project <dir> --output <package.iplugin> --display-name <name> [--dependencies <id,id>] [--include-dependencies]\n"
+           + "  Inno.Editor.Build.Cli import-sample --project <dir> --source <plugin-id::~Sample>";
 }

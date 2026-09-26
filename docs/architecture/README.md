@@ -9,6 +9,7 @@ Wiki，也不把未来规划描述为当前能力。
 
 | 页面 | 内容 | 维护要求 |
 | --- | --- | --- |
+| [2026-09-26 Rendering / Canvas 验收记录](RENDER_CANVAS_ACCEPTANCE_2026_09_26.md) | 本轮实现边界、TestProject 实测、包核对和未收口门禁 | 未通过项目不得标记为完整验收 |
 | [2026-09-08 实现交付与集中验收](ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md) | 全清单剩余实现、公开 API、资源 owner 与集中验收 | 当前唯一状态入口，实现与验证分开 |
 | [2026-09-07—09-08 累积收口报告](ENGINE_CLOSURE_CONTINUATION_2026_09_07.md) | 之前 Source/Scene Recovery、Asset/Audio/Rendering 退休与 996 项基线 | 保留历史证据，不代替最新验收 |
 | [2026-09-07 前轮收口报告](ENGINE_CLOSURE_ACCEPTANCE_2026_09_07.md) | 前轮实现与 742 项测试、发布证据 | 保留历史证据；当前状态以续轮报告为准 |

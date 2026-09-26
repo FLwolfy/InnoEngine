@@ -8,16 +8,30 @@ using Inno.Rendering;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
-/// <summary>Displays transient draft-check progress and publishes completed diagnostics to the shared Console.</summary>
+/// <summary>
+/// Displays transient draft-check progress and publishes completed diagnostics to the shared Console.
+/// </summary>
+/// <param name="documents">
+/// The shader editor documents value used to initialize this instance.
+/// </param>
 [EditorModal("shader.check", "Checking Shader", order: 220)]
 internal sealed class ShaderCheckModal(ShaderEditorDocuments documents) : EditorModal
 {
     private const string C_DIAGNOSTIC_GROUP = "Shader Check";
     private string m_status = "Checking the current Shader draft…";
 
-    public override bool isVisible => documents.TryGetCheckDraft(out _);
+    /// <summary>
+    /// Gets whether this value is visible.
+    /// </summary>
+public override bool isVisible => documents.TryGetCheckDraft(out _);
 
-    protected override void OnDraw(EditorContext context)
+    /// <summary>
+    /// Renders this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+protected override void OnDraw(EditorContext context)
     {
         _ = context;
         if (documents.TryGetCheckDraft(out ShaderEditorDocuments.Draft? draft))

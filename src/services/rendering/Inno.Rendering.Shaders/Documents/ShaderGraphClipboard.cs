@@ -6,15 +6,29 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Copies and pastes shader structures as detached atomic candidates, including their parameter and Pass contracts.</summary>
+/// <summary>
+/// Copies and pastes shader structures as detached atomic candidates, including their parameter and Pass contracts.
+/// </summary>
 public static class ShaderGraphClipboard
 {
-    /// <summary>Captures selected nodes and the owned contents of selected stage outputs.</summary>
-    /// <param name="graph">Source document, never changed.</param>
-    /// <param name="nodes">Selected stable identities.</param>
-    /// <param name="serialization">Current native converter registry.</param>
-    /// <param name="context">Owner reference context.</param>
-    /// <returns>Detached fragment retaining source declarations for a later paste.</returns>
+    /// <summary>
+    /// Captures selected nodes and the owned contents of selected stage outputs.
+    /// </summary>
+    /// <param name="graph">
+    /// Source document, never changed.
+    /// </param>
+    /// <param name="nodes">
+    /// Selected stable identities.
+    /// </param>
+    /// <param name="serialization">
+    /// Current native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Owner reference context.
+    /// </param>
+    /// <returns>
+    /// Detached fragment retaining source declarations for a later paste.
+    /// </returns>
     public static GraphDocument Copy(GraphDocument graph, IEnumerable<GraphNodeId> nodes, SerializationRegistry serialization, SerializationContext context)
     {
         GraphDocument fragment = graph.Clone();
@@ -26,14 +40,30 @@ public static class ShaderGraphClipboard
         return fragment;
     }
 
-    /// <summary>Creates a detached paste candidate with new node identities and remapped program, Pass and Technique references.</summary>
-    /// <param name="graph">Destination document, never changed.</param>
-    /// <param name="fragment">Detached copied fragment, never changed.</param>
-    /// <param name="preserveExternalStageReferences">Whether references to existing destination stages belong to the same document.</param>
-    /// <param name="activeStage">Destination stage for copied non-stage nodes.</param>
-    /// <param name="serialization">Current native converter registry.</param>
-    /// <param name="context">Owner reference context.</param>
-    /// <returns>A complete candidate suitable for one History transaction.</returns>
+    /// <summary>
+    /// Creates a detached paste candidate with new node identities and remapped program, Pass and Technique references.
+    /// </summary>
+    /// <param name="graph">
+    /// Destination document, never changed.
+    /// </param>
+    /// <param name="fragment">
+    /// Detached copied fragment, never changed.
+    /// </param>
+    /// <param name="preserveExternalStageReferences">
+    /// Whether references to existing destination stages belong to the same document.
+    /// </param>
+    /// <param name="activeStage">
+    /// Destination stage for copied non-stage nodes.
+    /// </param>
+    /// <param name="serialization">
+    /// Current native converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Owner reference context.
+    /// </param>
+    /// <returns>
+    /// A complete candidate suitable for one History transaction.
+    /// </returns>
     public static ShaderGraphPasteResult Paste(GraphDocument graph, GraphDocument fragment, bool preserveExternalStageReferences,
         GraphNodeId? activeStage, SerializationRegistry serialization, SerializationContext context)
     {
@@ -116,12 +146,18 @@ public static class ShaderGraphClipboard
     }
 }
 
-/// <summary>Contains a detached paste candidate and its newly allocated node identities.</summary>
+/// <summary>
+/// Contains a detached paste candidate and its newly allocated node identities.
+/// </summary>
 public sealed class ShaderGraphPasteResult
 {
     internal ShaderGraphPasteResult(GraphDocument graph, GraphNodeId[] nodes) { document = graph; insertedNodes = Array.AsReadOnly(nodes); }
-    /// <summary>Gets the complete detached candidate; the caller owns its subsequent edits.</summary>
+    /// <summary>
+    /// Gets the complete detached candidate; the caller owns its subsequent edits.
+    /// </summary>
     public GraphDocument document { get; }
-    /// <summary>Gets new identities suitable for selecting the pasted nodes.</summary>
+    /// <summary>
+    /// Gets new identities suitable for selecting the pasted nodes.
+    /// </summary>
     public IReadOnlyList<GraphNodeId> insertedNodes { get; }
 }

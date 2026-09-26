@@ -866,7 +866,9 @@ public class ShaderAsset : AssetObject
     /// <param name="serialization">
     /// The serialization registry that owns the active shader converter generation.
     /// </param>
-    /// <param name="context">The complete owner reference context used for material texture defaults.</param>
+    /// <param name="context">
+    /// The complete owner reference context used for material texture defaults.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// A declaration collection is null. The previous committed definition remains unchanged.
     /// </exception>

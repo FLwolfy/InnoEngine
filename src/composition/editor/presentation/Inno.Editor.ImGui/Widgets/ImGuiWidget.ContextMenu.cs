@@ -94,8 +94,12 @@ public static partial class ImGuiWidget
         DrawTooltip(text);
     }
 
-    /// <summary>Draws the standard viewport-clamped tooltip when a custom-drawn canvas element is hovered.</summary>
-    /// <param name="text">Tooltip contents. The caller owns hit testing; empty text draws nothing.</param>
+    /// <summary>
+    /// Draws the standard viewport-clamped tooltip when a custom-drawn canvas element is hovered.
+    /// </summary>
+    /// <param name="text">
+    /// Tooltip contents. The caller owns hit testing; empty text draws nothing.
+    /// </param>
     public static void DrawTooltip(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;

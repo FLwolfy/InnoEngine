@@ -31,7 +31,7 @@ internal sealed class RenameHierarchyTargetCommand(SceneEdits edits) :
     /// </returns>
     protected override EditorActionState Query(EditorActionContext<EngineObject> context)
         => IsAvailable(context.target)
-            ? EditorActionState.enabled
+            ? edits.CanEdit(context.target) ? EditorActionState.enabled : EditorActionState.disabled
             : EditorActionState.hidden;
 
     /// <summary>

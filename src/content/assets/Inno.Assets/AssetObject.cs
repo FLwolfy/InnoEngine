@@ -48,12 +48,24 @@ public abstract class AssetObject : IdentityObject, ISerializable
     /// </summary>
     public ReadOnlyMemory<byte> runtimePayload => m_runtimePayload;
 
-    /// <summary>Restores detached extension settings using this asset's actual owner and converter generation.</summary>
-    /// <typeparam name="TValue">Current settings contract with a stable type identity.</typeparam>
-    /// <param name="stableTypeId">Persisted settings type identity.</param>
-    /// <param name="propertyData">Native property payload to restore.</param>
-    /// <param name="target">Detached target, never retained by the asset.</param>
-    /// <exception cref="InvalidOperationException">The asset is unowned, retired, or lacks property-state services.</exception>
+    /// <summary>
+    /// Restores detached extension settings using this asset's actual owner and converter generation.
+    /// </summary>
+    /// <typeparam name="TValue">
+    /// Current settings contract with a stable type identity.
+    /// </typeparam>
+    /// <param name="stableTypeId">
+    /// Persisted settings type identity.
+    /// </param>
+    /// <param name="propertyData">
+    /// Native property payload to restore.
+    /// </param>
+    /// <param name="target">
+    /// Detached target, never retained by the asset.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// The asset is unowned, retired, or lacks property-state services.
+    /// </exception>
     public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
     {
         if (m_runtimeResourcesReleased || m_propertyStateOwner is null || !m_propertyStateOwner.TryGetTarget(out var owner))

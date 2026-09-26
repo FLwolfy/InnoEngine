@@ -51,6 +51,7 @@ public sealed class AssetLoaderTests : IDisposable
         m_serialization = new SerializationRegistry(m_types);
         SlowAssetImporter.Reset();
         ImporterConflictProbe.duplicateExtension = false;
+        MutableAssetImporter.attempts = 0;
     }
 
     public void Dispose()
@@ -786,6 +787,25 @@ public sealed class AssetLoaderTests : IDisposable
         Assert.Null(identities.Get<AssetObject>(identity));
         Assert.Equal(2, asset.unloadingCount);
         Assert.True(asset.runtimePayload.IsEmpty);
+    }
+
+    [Fact]
+    public void OneImporterCanKeepGraphInputsInAuthoringWhileExportingExecutableAssets()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("node.mixedscope", "authoring");
+        workspace.WriteText("shader.mixedscope", "runtime");
+        using var loader = workspace.CreateLoader(m_types, m_serialization, m_identities, m_diagnostics, m_logs);
+        Assert.NotNull(loader.Load(AssetPath.Project("node.mixedscope"), typeof(DependencyAsset)));
+        Assert.NotNull(loader.Load(AssetPath.Project("shader.mixedscope"), typeof(DependencyAsset)));
+        string contentRoot = Path.Combine(workspace.libraryRoot, "Runtime");
+        loader.ExportRuntimeArtifacts(contentRoot);
+        using SerializationGeneration serialization = m_serialization.CaptureGeneration();
+        using var database = new AssetDatabase(contentRoot, serialization, m_types.current, new IdentityAllocator());
+        Assert.True(database.TryLoad(AssetPath.Project("shader.mixedscope"), out DependencyAsset? shader));
+        Assert.NotNull(shader);
+        Assert.False(database.TryLoad(AssetPath.Project("node.mixedscope"), out DependencyAsset? node));
+        Assert.Null(node);
     }
 
     [Fact]
@@ -1637,6 +1657,25 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void UnchangedFailedSourceIsNotRetriedUntilItsInputChanges()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Data/retry.mutableasset", "!invalid!");
+        using var loader = workspace.CreateLoader(m_types, m_serialization, m_identities, m_diagnostics, m_logs);
+        AssetPath path = AssetPath.Project("Data/retry.mutableasset");
+        Assert.False(loader.Import(path));
+        int failedAttempts = MutableAssetImporter.attempts;
+        for (int index = 0; index < 5; index++)
+            loader.Rescan();
+        Assert.Equal(failedAttempts, MutableAssetImporter.attempts);
+
+        workspace.WriteText("Data/retry.mutableasset", "repaired");
+        loader.Rescan();
+        Assert.Equal(failedAttempts + 1, MutableAssetImporter.attempts);
+        Assert.Equal("repaired", Assert.IsType<MutableAsset>(loader.Load(path, typeof(MutableAsset))).value);
+    }
+
+    [Fact]
     public void FailedSave_PreservesCommittedSourceMetaArtifactAndVersion()
     {
         using TestWorkspace workspace = new();
@@ -2161,6 +2200,25 @@ internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
     }
 }
 
+[AssetImporter("inno.tests.mixed-scope")]
+internal sealed class MixedScopeAssetImporter : AssetImporter<DependencyAsset>
+{
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".mixedscope"];
+
+    protected override ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<DependencyAsset> output,
+        CancellationToken cancellationToken)
+    {
+        output.SetAsset(new DependencyAsset());
+        if (context.ReadUtf8Text() == "authoring")
+        {
+            output.SetDeploymentScope(AssetDeploymentScope.AuthoringOnly);
+            return output.WriteArtifactAsync("graph", context.sourceBytes, cancellationToken,
+                AssetDeploymentScope.AuthoringOnly);
+        }
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
+
 [AssetImporter("inno.tests.build-consumer")]
 internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset>
 {
@@ -2243,6 +2301,7 @@ internal sealed class MutableAsset : AssetObject
 [AssetImporter("inno.tests.mutable")]
 internal sealed class MutableAssetImporter : AssetImporter<MutableAsset>
 {
+    internal static int attempts;
     public override IReadOnlyList<string> supportedExtensions { get; } = [".mutableasset"];
 
     protected override ValueTask ImportAsync(
@@ -2250,6 +2309,7 @@ internal sealed class MutableAssetImporter : AssetImporter<MutableAsset>
         AssetImportWriter<MutableAsset> output,
         CancellationToken cancellationToken)
     {
+        attempts++;
         string value = context.ReadUtf8Text();
         if (value == "!invalid!")
             throw new InvalidDataException("The mutable asset source is invalid.");

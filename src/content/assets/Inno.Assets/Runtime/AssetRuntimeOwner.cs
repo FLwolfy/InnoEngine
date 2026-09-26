@@ -15,8 +15,12 @@ public sealed class AssetRuntimeOwner
     private readonly object m_authority = new();
     private readonly WeakReference<IAssetPropertyStateResolver>? m_properties;
 
-    /// <summary>Creates exclusive mutation authority with optional owner-bound extension state restoration.</summary>
-    /// <param name="properties">Owner resolver, weakly referenced so stale assets cannot retain a retired database.</param>
+    /// <summary>
+    /// Creates exclusive mutation authority with optional owner-bound extension state restoration.
+    /// </summary>
+    /// <param name="properties">
+    /// Owner resolver, weakly referenced so stale assets cannot retain a retired database.
+    /// </param>
     public AssetRuntimeOwner(IAssetPropertyStateResolver? properties = null)
         => m_properties = properties is null ? null : new(properties);
 

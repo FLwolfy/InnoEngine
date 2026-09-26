@@ -4,12 +4,24 @@ using Inno.Core.Graphs;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Extracts one statically selected component from a vector or matrix.</summary>
+/// <summary>
+/// Extracts one statically selected component from a vector or matrix.
+/// </summary>
 public sealed class ShaderExtractNodeCompiler : IShaderNodeCompiler
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the definition id text used by the current instance.
+    /// </summary>
     public string definitionId => "inno.shader.extract";
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
     {
         ShaderSourceType type = ShaderSourceType.Atomic(context.Read("type", "float4"));
@@ -17,17 +29,37 @@ public sealed class ShaderExtractNodeCompiler : IShaderNodeCompiler
         ShaderIrValue member = builder.Extract(builder.Input("input", type), context.Read("index", 0));
         return [new("input", type, GraphPortDirection.Input), new("value", member.type, GraphPortDirection.Output)];
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Lowers this graph node to typed shader IR after validating its inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
         => new Dictionary<string, ShaderIrValue> { ["value"] = context.builder.Extract(context.Input("input"), context.description.Read("index", 0)) };
 }
 
-/// <summary>Samples a graph-connected texture with implicit derivatives or an explicit level of detail.</summary>
+/// <summary>
+/// Samples a graph-connected texture with implicit derivatives or an explicit level of detail.
+/// </summary>
 public sealed class ShaderSampleNodeCompiler : IShaderNodeCompiler
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the definition id text used by the current instance.
+    /// </summary>
     public string definitionId => "inno.shader.sample";
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
     {
         string type = context.Read("type", "sampled-texture2d");
@@ -37,7 +69,15 @@ public sealed class ShaderSampleNodeCompiler : IShaderNodeCompiler
         ports.Add(new("value", ShaderSourceType.Atomic("float4"), GraphPortDirection.Output));
         return ports;
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Lowers this graph node to typed shader IR after validating its inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
         => new Dictionary<string, ShaderIrValue> { ["value"] = context.description.Read("explicitLevel", false)
             ? context.builder.SampleLevel(context.Input("texture"), context.Input("coordinate"), context.Input("level"))

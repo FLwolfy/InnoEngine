@@ -8,10 +8,28 @@ namespace Inno.Scripting.Compiler;
 // For example, a using-static Input() function must not become a reference to the Inno.Input namespace.
 internal sealed class ScriptStaticMemberRewriter(SemanticModel model) : CSharpSyntaxRewriter
 {
-    public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+    /// <summary>
+    /// Visits identifier name in deterministic order using the supplied visitor.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by visit identifier name; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated syntax node? that represents the completed operation.
+    /// </returns>
+public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         => Qualify(node) ?? base.VisitIdentifierName(node);
 
-    public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
+    /// <summary>
+    /// Visits generic name in deterministic order using the supplied visitor.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by visit generic name; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated syntax node? that represents the completed operation.
+    /// </returns>
+public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
         => Qualify(node) ?? base.VisitGenericName(node);
 
     private SyntaxNode? Qualify(SimpleNameSyntax node)

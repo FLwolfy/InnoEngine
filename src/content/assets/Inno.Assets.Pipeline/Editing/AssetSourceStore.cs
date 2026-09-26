@@ -6,7 +6,9 @@ using Inno.Core.IO;
 
 namespace Inno.Assets.Pipeline;
 
-/// <summary>Reads detached authoring bytes and saves them independently of successful import.</summary>
+/// <summary>
+/// Reads detached authoring bytes and saves them independently of successful import.
+/// </summary>
 public sealed class AssetSourceStore
 {
     private readonly AssetPipeline m_assets;
@@ -15,9 +17,15 @@ public sealed class AssetSourceStore
     internal AssetSourceStore(AssetPipeline assets, AssetSerializationServices serialization)
     { m_assets = assets; m_serialization = serialization; }
 
-    /// <summary>Reads a mounted source without modifying its canonical asset or compiled artifacts.</summary>
-    /// <param name="path">Exact mounted source identity.</param>
-    /// <returns>A detached source and optimistic concurrency fingerprint.</returns>
+    /// <summary>
+    /// Reads a mounted source without modifying its canonical asset or compiled artifacts.
+    /// </summary>
+    /// <param name="path">
+    /// Exact mounted source identity.
+    /// </param>
+    /// <returns>
+    /// A detached source and optimistic concurrency fingerprint.
+    /// </returns>
     public AssetSourceSnapshot Read(AssetPath path)
     {
         AssetSourceMount mount = Mount(path);
@@ -25,25 +33,51 @@ public sealed class AssetSourceStore
         return new(bytes, Hash(bytes), mount.isReadOnly);
     }
 
-    /// <summary>Encodes native asset properties with the owner's reference context and dependency capture.</summary>
-    /// <typeparam name="TAsset">Native asset source type.</typeparam>
-    /// <param name="asset">Detached editable value.</param>
-    /// <returns>Native source bytes, with no canonical asset mutation.</returns>
+    /// <summary>
+    /// Encodes native asset properties with the owner's reference context and dependency capture.
+    /// </summary>
+    /// <typeparam name="TAsset">
+    /// Native asset source type.
+    /// </typeparam>
+    /// <param name="asset">
+    /// Detached editable value.
+    /// </param>
+    /// <returns>
+    /// Native source bytes, with no canonical asset mutation.
+    /// </returns>
     public byte[] Encode<TAsset>(TAsset asset) where TAsset : AssetObject
         => NativeAssetSourceSerialization.Export(asset, m_serialization);
 
-    /// <summary>Restores a detached native value using current-generation asset references.</summary>
-    /// <typeparam name="TAsset">Native asset source type.</typeparam>
-    /// <param name="bytes">Native source bytes.</param>
-    /// <returns>A detached value; referenced assets remain canonical read-only inputs.</returns>
+    /// <summary>
+    /// Restores a detached native value using current-generation asset references.
+    /// </summary>
+    /// <typeparam name="TAsset">
+    /// Native asset source type.
+    /// </typeparam>
+    /// <param name="bytes">
+    /// Native source bytes.
+    /// </param>
+    /// <returns>
+    /// A detached value; referenced assets remain canonical read-only inputs.
+    /// </returns>
     public TAsset Decode<TAsset>(ReadOnlySpan<byte> bytes) where TAsset : AssetObject
         => NativeAssetSourceSerialization.Import<TAsset>(bytes, m_serialization, out _);
 
-    /// <summary>Atomically saves bytes after checking the source fingerprint; import is a separate operation.</summary>
-    /// <param name="path">Writable mounted destination.</param>
-    /// <param name="bytes">Complete serializable source, including invalid authoring states.</param>
-    /// <param name="expectedHash">Last read/save fingerprint; null requires a nonexistent destination.</param>
-    /// <returns>The saved fingerprint.</returns>
+    /// <summary>
+    /// Atomically saves bytes after checking the source fingerprint; import is a separate operation.
+    /// </summary>
+    /// <param name="path">
+    /// Writable mounted destination.
+    /// </param>
+    /// <param name="bytes">
+    /// Complete serializable source, including invalid authoring states.
+    /// </param>
+    /// <param name="expectedHash">
+    /// Last read/save fingerprint; null requires a nonexistent destination.
+    /// </param>
+    /// <returns>
+    /// The saved fingerprint.
+    /// </returns>
     public string Save(AssetPath path, byte[] bytes, string? expectedHash)
     {
         ArgumentNullException.ThrowIfNull(bytes);
@@ -91,16 +125,24 @@ public sealed class AssetSourceStore
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 }
 
-/// <summary>Contains detached authoring bytes and conflict-detection state.</summary>
+/// <summary>
+/// Contains detached authoring bytes and conflict-detection state.
+/// </summary>
 public sealed class AssetSourceSnapshot
 {
     private readonly byte[] m_bytes;
     internal AssetSourceSnapshot(byte[] bytes, string hash, bool readOnly)
     { m_bytes = bytes; contentHash = hash; isReadOnly = readOnly; }
-    /// <summary>Gets a copy of the captured native source bytes.</summary>
+    /// <summary>
+    /// Gets a copy of the captured native source bytes.
+    /// </summary>
     public byte[] bytes => (byte[])m_bytes.Clone();
-    /// <summary>Gets the source fingerprint required by a subsequent save.</summary>
+    /// <summary>
+    /// Gets the source fingerprint required by a subsequent save.
+    /// </summary>
     public string contentHash { get; }
-    /// <summary>Gets whether the installation source cannot be edited in place.</summary>
+    /// <summary>
+    /// Gets whether the installation source cannot be edited in place.
+    /// </summary>
     public bool isReadOnly { get; }
 }

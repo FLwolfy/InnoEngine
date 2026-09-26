@@ -3,12 +3,14 @@ using System;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Editor.Interactions;
+using Inno.Scripting.Compiler;
+using System.Linq;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(FileBrowserInteractionIds.C_IMPORT_SAMPLE, FileBrowserInteractionIds.C_AREA)]
 [EditorMenu(FileBrowserInteractionIds.C_AREA, "Import Sample", order: 120)]
-internal sealed class ImportAssetSampleCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
+internal sealed class ImportAssetSampleCommand(AssetEditorModule assets, ScriptCompiler compiler) : EditorAction<AssetFileEntry>
 {
     /// <summary>
     /// Determines whether the selected asset sample can be imported into the Project source.
@@ -44,7 +46,15 @@ internal sealed class ImportAssetSampleCommand(AssetEditorModule assets) : Edito
     /// </param>
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
-        AssetPath imported = assets.pipeline.ImportSample(context.target.assetPath);
+        AssetPath imported = assets.pipeline.ImportSample(context.target.assetPath, _ =>
+        {
+            ScriptCompilationResult result = compiler.CompileAuthoringGenerationAsync()
+                .GetAwaiter().GetResult();
+            if (!result.success)
+                throw new InvalidOperationException("Sample script preflight failed:" + Environment.NewLine
+                    + string.Join(Environment.NewLine,
+                        result.diagnostics.Select(static diagnostic => diagnostic.message)));
+        });
         byte[] archive = AssetSourceArchive.Capture(
             assets.pipeline,
             imported.localPath,

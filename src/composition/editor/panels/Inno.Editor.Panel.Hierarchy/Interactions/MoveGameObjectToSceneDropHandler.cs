@@ -25,7 +25,8 @@ internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
     {
         GameObject source = context.source;
         GameScene target = context.target.scene;
-        return source.isRuntimeValid && target is { isLoaded: true, isDestroyed: false }
+        return source.isRuntimeValid && edits.CanEdit(source) && edits.CanEdit(target)
+            && target is { isLoaded: true, isDestroyed: false }
             ? EditorDropStatus.Accept()
             : EditorDropStatus.rejected;
     }

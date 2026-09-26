@@ -32,7 +32,7 @@ Runtime 先退休 reload/Pipeline/Provider，再释放 GPU targets、uploads、r
 
 | 类型 | 公开职责与成员 |
 | --- | --- |
-| `RenderRuntime` | 构造注入、`targets`、`EnterExecutionScope`、`RegisterContributor`/`UnregisterContributor`、`Submit`、`TryActivateDefaultPipeline`、`BeginExtensionReload`；帧和退出入口继承 `RuntimeSubsystem` |
+| `RenderRuntime` | 构造注入、`targets`、`viewContent`、`currentFrameIndex`、`SetPrimaryRoute`、`EnterExecutionScope`、`RegisterContributor`/`UnregisterContributor`、`Submit`、`TryActivateDefaultPipeline`、`BeginExtensionReload`；帧和退出入口继承 `RuntimeSubsystem` |
 | `RenderTargetStore` | `Import`、`TryGetTexture`、`Release`、`PrepareFrame`、`Dispose`；退出开始后不再接受操作，Pending 时保留未释放资源 |
 | `IRenderRuntimeReloadTransaction` | `Prepare`、`Activate`、`Complete`、`Rollback`；只有真实退休完成后才释放事务引用，Pending/timeout 不 Finish |
 | `RenderRuntimeFactory` | 构造注入 runtime factory，`descriptor` 和 `Create` 接入统一 Runtime subsystem 装配 |
@@ -41,6 +41,8 @@ Runtime 先退休 reload/Pipeline/Provider，再释放 GPU targets、uploads、r
 | `FileRenderTargetArtifactProvider` | 从部署目录读取 `GetShaderArtifact` / `GetTextureArtifact`，不访问创作源或运行编译器 |
 
 `RenderRuntime : RuntimeSubsystem, IRenderRequestSink` 不包含任何具体 Pipeline。它组合请求队列、Pipeline/Feature generation、GPU 资源缓存和 ImGui 等 frame-final contributor。它不是 Core Layer；领域 Feature 也不是 RuntimeSubsystem。Host pipeline 负责每设备每帧唯一的 prepare/produce/complete output，Session 不再重复提交 GPU device frame。
+
+Player 在 Session Tick 完成后才收集渲染请求，因此 `inputSnapshotProvider` 从已完成的 InputRuntime 帧读取快照。`primaryInputSurfaceSizeProvider` 提供宿主窗口的逻辑宽高；Runtime 将鼠标位置按物理呈现尺寸换算，再扣除输出 viewport 的偏移。Retina 等高 DPI 窗口中，2D 命中与实际绘制因此使用同一像素坐标。Editor GameView 自己按 ImGui framebuffer 比例生成物理坐标，不使用这两个主窗口 callback。
 
 构造注入 Core `IDiagnosticReporter`，不再定义 Render diagnostic sink/severity；Shader 和 Graph 的领域结果仍可携带自己的结构信息，但 severity 与当前问题状态只有 Core 一套。Content 输入使用 `Inno.References.ContentReadScope`，Scene 通过 SceneContentSource 产生 scope，读取结束后显式释放。
 
@@ -54,7 +56,9 @@ OnPrepareOutput
   ├─ 捕获完整主表面与 Host 选定的 content viewport
   └─ 接收当前帧 RenderRequest
 OnProduceOutput
-  └─ 调用 TypeRegistry 发现的 RenderRequestProvider，并接受 Host 提交
+  ├─ 从 TypeRegistry 候选中选择接受 Session 的 IRenderModel
+  ├─ 唯一模型直接构建；多个模型给出诊断并拒绝错误合成
+  └─ 调用 TypeRegistry 发现的 RenderRequestProvider，并接受独立预览等显式请求
 OnCompleteOutput
   ├─ content viewport 未覆盖完整主表面时先清除黑色背景
   ├─ 按 priority/name 将全部请求构建进一个全帧 Graph
@@ -80,11 +84,11 @@ Runtime 通过活动 TypeCache 创建 Pipeline 和 Feature 候选。同一 TypeC
 
 扩展缺席不是候选构造失败。若候选 TypeCache 已经不包含资产引用的 Pipeline Stable ID，或不包含任一已启用 Feature Stable ID，Runtime 会提交一个显式 unavailable generation：旧 Pipeline、Feature 与 Request Provider 在提交后释放，资产配置继续保留 Stable ID，但不再执行旧 Plugin 代码。此状态与“Editor 在 Plugin 缺失时冷启动”完全一致；Editor Viewport Contributor registry 同步移除对应模型，Scene reload 把 Plugin Component/System 保存为 Missing。相同 Stable ID 回归后，Runtime 会在同一 reload transaction 内重新构建被跟踪的资产。只有扩展类型仍存在而构造、配置或状态恢复失败时，才视为坏候选并保留 last-good。Host 直接重建 TypeCache 而未使用 Editor 协调器时，Runtime 仍会在下一帧清理退休 generation，避免固定 collectible ALC。无 Pipeline 时不执行该请求，Editor 和 ImGui 仍继续提交。
 
-## 多模型 Presentation 合成
+## Presentation 保留与多模型图层
 
 Runtime 不把一次请求假定为整个 target 的唯一 owner。请求仍按 `priority` 与名称确定性排序；每个请求成功完成 Pipeline 建图后，Runtime 才把它的 `RenderTarget + RenderViewport` 记录为已呈现区域。后续请求若写入同一 target 的重叠区域，`RenderPipelineContext.preservePresentationTarget` 为 true，Pipeline 必须使用 Load/Preserve 语义，而不能清除此前模型的颜色。区域不相交时该值保持 false，所以 split-screen 的每个区域都能独立清屏。
 
-该协议只声明跨 Pipeline 的 presentation color 所有权，不向 Core 引入 2D、3D、Camera 或 Scene。Editor 可以把多个 `EditorViewportContributor` 的层提交到同一离屏 target；Player 也可以用普通 `RenderRequest` 构建相同组合。建图异常会通过 Graph mutation scope 回滚，并且失败请求不会登记 presentation region，因此后续有效模型可以正常初始化目标。当前协议支持 3D 底图加 2D/UI overlay；需要跨独立模型共享并读写同一 depth buffer 时，应在 Rendering 公共层新增显式、后端中立的 depth composition contract，不能依靠隐式附件或 Plugin 互相引用。
+上述保留机制只适用于有意共享目标的显式 `RenderRequest`。多个 `IRenderModel` 需要 `RenderOutputRoute`：每个 `RenderOutputLayer` 指定模型 ID 和只分给这一层的内容源 ID，重复分配会在构造 route 时失败。Runtime 检查模型集合与颜色格式，为每层建立独立可采样目标，再以预乘 Alpha 按 route 顺序合成；Editor GameView 使用同一机制。模型层的视口从 `(0,0)` 开始，最终合成才使用输出视口偏移。图层合成不支持跨模型几何深度交错；需要这类排序的内容应由同一模型接纳。`IViewContentFrameSource.CompleteFrame` 在所有输出收集完输入后、RenderGraph 建图前执行一次。
 
 ## 资源与代际
 

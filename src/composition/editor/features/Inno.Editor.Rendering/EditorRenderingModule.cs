@@ -6,6 +6,7 @@ using System.Numerics;
 
 using Inno.Scripting.Api;
 using Inno.Extensibility.Types;
+using Inno.Core.Identity;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Rendering;
@@ -30,9 +31,12 @@ public sealed class EditorRenderingModule : EditorModule
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, EditorViewportPresentation> m_presentations =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RenderOutputInput> m_outputInputs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RenderOutputRoute> m_outputRoutes = new(StringComparer.Ordinal);
     private readonly IEditorRenderingHost m_host;
     private readonly EditorInteractions m_interactions;
     private readonly EditorViewportContributorRegistry m_contributors;
+    private readonly EditorGizmoProviderRegistry m_gizmos;
     private EditorContext? m_context;
 
     /// <summary>
@@ -57,6 +61,37 @@ public sealed class EditorRenderingModule : EditorModule
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_contributors = new EditorViewportContributorRegistry(
             types ?? throw new ArgumentNullException(nameof(types)));
+        m_gizmos = new EditorGizmoProviderRegistry(types);
+    }
+
+    /// <summary>
+    /// Collects Editor-only icons and bounds for the current Scene viewport.
+    /// </summary>
+    /// <param name="viewportId">
+    /// The Scene viewport identity.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// The viewport width.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// The viewport height.
+    /// </param>
+    /// <returns>
+    /// Transient gizmo primitives for the submitted frame.
+    /// </returns>
+    [ScriptingApiIgnore]
+    public EditorGizmoFrame CollectGizmos(string viewportId, int pixelWidth, int pixelHeight)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        var frame = new EditorGizmoFrame();
+        if (!m_contentScopes.TryGetValue(viewportId, out ContentReadScope? content))
+            return frame;
+        RuntimeIdentity? selected = (m_interactions.selection.selectedTarget as IdentityObject)?
+            .identity.runtimeIdentity;
+        var context = new EditorGizmoContext(content, selected, pixelWidth, pixelHeight);
+        foreach (EditorGizmoProviderRegistry.Registration provider in m_gizmos.providers.registrations)
+            provider.provider.Collect(context, frame);
+        return frame;
     }
 
     /// <summary>
@@ -70,6 +105,37 @@ public sealed class EditorRenderingModule : EditorModule
     /// </returns>
     public bool HasContributors(EditorViewportKindId kind)
         => kind.isValid && m_contributors.contributors.byKind.ContainsKey(kind);
+
+    /// <summary>
+    /// Supplies viewport-local input captured by the output panel for this frame.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable output identity.
+    /// </param>
+    /// <param name="input">
+    /// Physical-pixel input snapshot.
+    /// </param>
+    public void SetOutputInput(string viewportId, RenderOutputInput input)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        m_outputInputs[viewportId] = input ?? throw new ArgumentNullException(nameof(input));
+    }
+
+    /// <summary>
+    /// Sets the exact model contributor order for an output with several applicable models.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable output identity.
+    /// </param>
+    /// <param name="route">
+    /// Explicit contributor route, or null for single-model selection.
+    /// </param>
+    public void SetOutputRoute(string viewportId, RenderOutputRoute? route)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        if (route is null) m_outputRoutes.Remove(viewportId);
+        else m_outputRoutes[viewportId] = route;
+    }
 
     /// <summary>
     /// Gets the most recent isolated contribution or composition failure for one stable viewport.
@@ -315,13 +381,33 @@ public sealed class EditorRenderingModule : EditorModule
             return false;
         }
 
+        RenderOutputRoute? route = null;
+        if (contributors.Length > 1)
+        {
+            if (!m_outputRoutes.TryGetValue(viewportId, out route)
+                || route.layers.Count != contributors.Length
+                || route.layers.Any(layer => contributors.All(entry => entry.attribute.id != layer.modelId)))
+            {
+                failures.Add("Multiple rendering models accept this output; configure a RenderOutputRoute naming every contributor exactly once: "
+                    + string.Join(", ", contributors.Select(static entry => entry.attribute.id)));
+                HandleViewportFailure(kind, viewportId, pixelWidth, pixelHeight, contributors, failures);
+                return false;
+            }
+            contributors = route.layers
+                .Select(layer => contributors.Single(entry => entry.attribute.id == layer.modelId))
+                .ToArray();
+        }
         var accepted = new List<AcceptedContribution>(contributors.Length);
         RenderTextureFormat? targetFormat = null;
-        foreach (EditorViewportContributorRegistry.Registration registration in contributors)
+        for (int index = 0; index < contributors.Length; index++)
         {
+            EditorViewportContributorRegistry.Registration registration = contributors[index];
             try
             {
-                EditorViewportContribution contribution = registration.contributor.Build(context!)
+                EditorViewportContext modelContext = route is null
+                    ? context!
+                    : context!.ForLayer(route.layers[index]);
+                EditorViewportContribution contribution = registration.contributor.Build(modelContext)
                     ?? throw new InvalidOperationException("Viewport contributor returned a null contribution.");
                 if (targetFormat is RenderTextureFormat selectedFormat
                     && contribution.targetFormat != selectedFormat)
@@ -344,6 +430,11 @@ public sealed class EditorRenderingModule : EditorModule
             HandleViewportFailure(kind, viewportId, pixelWidth, pixelHeight, contributors, failures);
             return false;
         }
+        if (accepted.Count != contributors.Length)
+        {
+            HandleViewportFailure(kind, viewportId, pixelWidth, pixelHeight, contributors, failures);
+            return false;
+        }
 
         try
         {
@@ -352,11 +443,11 @@ public sealed class EditorRenderingModule : EditorModule
                 pixelWidth,
                 pixelHeight,
                 targetFormat!.Value,
-                accepted.Select(static value => new EditorViewportLayer(
+                accepted.Select((value, index) => new EditorViewportLayer(
                     value.registration.attribute.id,
                     value.contribution.pipeline,
                     value.contribution.data,
-                    value.registration.attribute.order))));
+                    route is null ? value.registration.attribute.order : index))));
             EditorViewportContributorRegistry.Registration? controller = SelectController(viewportId, contributors);
             EditorViewportContribution? controllerContribution = controller is null
                 ? null
@@ -460,6 +551,8 @@ public sealed class EditorRenderingModule : EditorModule
     public void Release(string viewportId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        m_outputInputs.Remove(viewportId);
+        m_outputRoutes.Remove(viewportId);
         m_manipulationSpaces.Remove(viewportId);
         if (m_contentScopes.Remove(viewportId, out ContentReadScope? content))
             content.Dispose();
@@ -546,6 +639,8 @@ public sealed class EditorRenderingModule : EditorModule
         m_controllerIds.Clear();
         m_manipulationSpaces.Clear();
         m_presentations.Clear();
+        m_outputInputs.Clear();
+        m_outputRoutes.Clear();
     }
 
     /// <summary>
@@ -554,12 +649,15 @@ public sealed class EditorRenderingModule : EditorModule
     protected override void OnDispose()
     {
         m_contributors.Dispose();
+        m_gizmos.Dispose();
         m_navigationStates.Clear();
         ClearContentScopes();
         m_compositionErrors.Clear();
         m_controllerIds.Clear();
         m_manipulationSpaces.Clear();
         m_presentations.Clear();
+        m_outputInputs.Clear();
+        m_outputRoutes.Clear();
         m_host.ReleaseAll();
     }
 
@@ -596,7 +694,10 @@ public sealed class EditorRenderingModule : EditorModule
             m_contentScopes.GetValueOrDefault(viewportId, ContentReadScope.empty),
             m_presentations.GetValueOrDefault(
                 viewportId,
-                new EditorViewportPresentation(EngineColor.DARKGRAY)));
+                new EditorViewportPresentation(EngineColor.DARKGRAY)),
+            m_host.viewContent,
+            m_host.currentFrameIndex,
+            m_outputInputs.GetValueOrDefault(viewportId, RenderOutputInput.empty));
         return true;
     }
 

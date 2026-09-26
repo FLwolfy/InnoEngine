@@ -92,16 +92,28 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     [ScriptingApiIgnore]
     public IdentityAllocator identities => m_identities;
 
-    /// <summary>Creates a detached source editor sharing this owner's mounts, native converters and references.</summary>
-    /// <returns>A source store that must not outlive this asset pipeline.</returns>
+    /// <summary>
+    /// Creates a detached source editor sharing this owner's mounts, native converters and references.
+    /// </summary>
+    /// <returns>
+    /// A source store that must not outlive this asset pipeline.
+    /// </returns>
     [ScriptingApiIgnore]
     public AssetSourceStore CreateSourceStore()
         => new(this, new AssetSerializationServices(m_types, m_serialization, this, null));
 
-    /// <summary>Captures native settings and nested asset dependencies through this explicit authoring owner.</summary>
-    /// <typeparam name="TValue">Current settings type.</typeparam>
-    /// <param name="value">Typed settings, never retained by the returned snapshot.</param>
-    /// <returns>Complete stable properties and dependencies without writing or importing an asset.</returns>
+    /// <summary>
+    /// Captures native settings and nested asset dependencies through this explicit authoring owner.
+    /// </summary>
+    /// <typeparam name="TValue">
+    /// Current settings type.
+    /// </typeparam>
+    /// <param name="value">
+    /// Typed settings, never retained by the returned snapshot.
+    /// </param>
+    /// <returns>
+    /// Complete stable properties and dependencies without writing or importing an asset.
+    /// </returns>
     public AssetPropertySnapshot CaptureProperties<TValue>(TValue value) where TValue : class, ISerializable
     {
         EnsureOwnerThread();
@@ -109,7 +121,21 @@ public sealed class AssetPipeline : AssetResidencyProvider,
         return new AssetSerializationServices(m_types, m_serialization, this, null).CaptureProperties(value);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores serialized properties to the existing asset object.
+    /// </summary>
+    /// <param name="stableTypeId">
+    /// The stable type id consumed by restore properties; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="propertyData">
+    /// The property data consumed by restore properties; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <typeparam name="TValue">
+    /// Serialized asset object type receiving restored properties.
+    /// </typeparam>
     public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -813,8 +839,12 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// <summary>
     /// Reads a detached settings copy for the currently registered importer.
     /// </summary>
-    /// <param name="path">The isolated source path.</param>
-    /// <returns>The settings copy and the fingerprint required for saving it.</returns>
+    /// <param name="path">
+    /// The isolated source path.
+    /// </param>
+    /// <returns>
+    /// The settings copy and the fingerprint required for saving it.
+    /// </returns>
     public AssetImportSettingsSnapshot GetImportSettings(AssetPath path)
     {
         EnsureOwnerThread();
@@ -825,11 +855,21 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// <summary>
     /// Saves import settings with conflict detection and immediately attempts to reimport the source.
     /// </summary>
-    /// <param name="path">The writable isolated source path.</param>
-    /// <param name="settings">The edited settings, or null to reset to importer defaults.</param>
-    /// <param name="expectedFingerprint">The fingerprint obtained when reading the settings.</param>
-    /// <returns>True when settings were saved and reimport succeeded; false when the saved settings failed import.</returns>
-    /// <exception cref="IOException">The settings changed externally or could not be written.</exception>
+    /// <param name="path">
+    /// The writable isolated source path.
+    /// </param>
+    /// <param name="settings">
+    /// The edited settings, or null to reset to importer defaults.
+    /// </param>
+    /// <param name="expectedFingerprint">
+    /// The fingerprint obtained when reading the settings.
+    /// </param>
+    /// <returns>
+    /// True when settings were saved and reimport succeeded; false when the saved settings failed import.
+    /// </returns>
+    /// <exception cref="IOException">
+    /// The settings changed externally or could not be written.
+    /// </exception>
     public bool SaveImportSettings(AssetPath path, ISerializable? settings, string expectedFingerprint)
     {
         EnsureOwnerThread();
@@ -1125,6 +1165,10 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// <returns>
     /// The new writable project path with the original sample directory name preserved.
     /// </returns>
+    /// <param name="validateCandidate">
+    /// Optional authoring check, such as script compilation, run after the candidate is indexed
+    /// but before observers see it. An exception rolls the entire import back.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="source"/> is not an indexed sample directory.
     /// </exception>
@@ -1132,7 +1176,7 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// Thrown when the destination exists, the source contains symbolic links, or the source changes
     /// while its stable import snapshot is being copied.
     /// </exception>
-    public AssetPath ImportSample(AssetPath source)
+    public AssetPath ImportSample(AssetPath source, Action<AssetPath>? validateCandidate = null)
     {
         EnsureOwnerThread();
         using IDisposable operationScope = AcquireOperation();
@@ -1176,6 +1220,8 @@ public sealed class AssetPipeline : AssetResidencyProvider,
                 stagedSource,
                 target.localPath,
                 sourcePolicy);
+            AssetSampleSnapshot.RemapIdentities(stagedSource, source, target, m_serialization,
+                TransformSampleSources);
 
             Directory.Move(stagedSource, absoluteTarget);
             sourceCommitted = true;
@@ -1193,6 +1239,17 @@ public sealed class AssetPipeline : AssetResidencyProvider,
                 new AssetChangedEvent(path, WatcherChangeTypes.Created)));
             loader.Rescan();
             fileSystem.Refresh();
+            foreach (string localPath in copiedEntries)
+            {
+                AssetPath candidate = AssetPath.Project(localPath);
+                if (!loader.TryGetAssetType(candidate, out Type? assetType)
+                    || assetType is null)
+                    continue;
+                AssetObject? imported = loader.Load(candidate, assetType);
+                if (imported is null || imported.isMissing)
+                    throw new InvalidDataException($"Sample asset '{candidate}' failed pre-publication import validation.");
+            }
+            validateCandidate?.Invoke(target);
             AssetChange[] committed = CreateCommittedChanges(
                 loader,
                 changes,
@@ -1222,6 +1279,23 @@ public sealed class AssetPipeline : AssetResidencyProvider,
         }
     }
 
+    private void TransformSampleSources(AssetSampleTransformContext context)
+    {
+        Type[] transformerTypes = m_types.GetTypesWithAttribute<AssetSampleSourceRewriterAttribute>()
+            .Select(reference => reference.Resolve(m_types))
+            .OrderBy(type => type.GetCustomAttributes(typeof(AssetSampleSourceRewriterAttribute), false)
+                .Cast<AssetSampleSourceRewriterAttribute>().Single().id, StringComparer.Ordinal)
+            .ToArray();
+        foreach (Type type in transformerTypes)
+        {
+            if (type.IsAbstract || !typeof(IAssetSampleSourceRewriter).IsAssignableFrom(type))
+                throw new InvalidOperationException($"Sample transformer '{type.FullName}' is not concrete or does not implement its contract.");
+            if (Activator.CreateInstance(type) is not IAssetSampleSourceRewriter transformer)
+                throw new InvalidOperationException($"Sample transformer '{type.FullName}' could not be created.");
+            transformer.Transform(context);
+        }
+    }
+
     /// <summary>
     /// Reconciles source files, generated files and the persistent catalog.
     /// </summary>
@@ -1234,8 +1308,12 @@ public sealed class AssetPipeline : AssetResidencyProvider,
         GetFileSystem().Refresh();
     }
 
-    /// <summary>Ends initial authoring extension discovery and strictly retries dependent imports.</summary>
-    /// <remarks>Call on the initialization thread after successful extension activation. Failed compilation must not call this method.</remarks>
+    /// <summary>
+    /// Ends initial authoring extension discovery and strictly retries dependent imports.
+    /// </summary>
+    /// <remarks>
+    /// Call on the initialization thread after successful extension activation. Failed compilation must not call this method.
+    /// </remarks>
     [ScriptingApiIgnore]
     public void CompleteExtensionDiscovery()
     {

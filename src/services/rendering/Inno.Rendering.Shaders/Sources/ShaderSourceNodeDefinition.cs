@@ -6,13 +6,19 @@ using Inno.Core.Graphs;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Projects one resolved source interface into immutable graph ports without duplicating authored port declarations.</summary>
+/// <summary>
+/// Projects one resolved source interface into immutable graph ports without duplicating authored port declarations.
+/// </summary>
 public sealed class ShaderSourceNodeDefinition : GraphNodeDefinition
 {
     private readonly IReadOnlyList<GraphPortDefinition> m_ports;
 
-    /// <summary>Creates a source node definition for the currently resolved source generation.</summary>
-    /// <param name="function">The single function derived by the source frontend.</param>
+    /// <summary>
+    /// Creates a source node definition for the currently resolved source generation.
+    /// </summary>
+    /// <param name="function">
+    /// The single function derived by the source frontend.
+    /// </param>
     public ShaderSourceNodeDefinition(ShaderSourceFunction function)
         : base("inno.shader.source", function?.name ?? throw new ArgumentNullException(nameof(function)), "Code")
     {
@@ -39,10 +45,20 @@ public sealed class ShaderSourceNodeDefinition : GraphNodeDefinition
         }
     }
 
-    /// <summary>Gets the immutable parsed source interface belonging to this definition.</summary>
+    /// <summary>
+    /// Gets the immutable parsed source interface belonging to this definition.
+    /// </summary>
     public ShaderSourceFunction function { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a ports required by the implemented contract.
+    /// </summary>
+    /// <param name="node">
+    /// The node consumed by get ports; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
     {
         ArgumentNullException.ThrowIfNull(node);

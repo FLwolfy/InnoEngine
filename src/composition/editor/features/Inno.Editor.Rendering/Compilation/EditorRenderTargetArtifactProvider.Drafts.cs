@@ -11,6 +11,9 @@ using Inno.Rendering.Assets;
 
 namespace Inno.Editor.Rendering;
 
+/// <summary>
+/// Stages Editor shader artifacts for device validation and preview.
+/// </summary>
 public sealed partial class EditorRenderTargetArtifactProvider
 {
     private readonly Dictionary<Guid, DraftEntry> m_drafts = [];

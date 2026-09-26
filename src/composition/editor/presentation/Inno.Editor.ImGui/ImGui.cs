@@ -93,12 +93,24 @@ public static class ImGui
     /// <summary>
     /// Draws and edits a bounded UTF-8 text value with placeholder text.
     /// </summary>
-    /// <param name="label">The control label.</param>
-    /// <param name="hint">The placeholder shown while the value is empty.</param>
-    /// <param name="value">The managed string to display and update.</param>
-    /// <param name="capacity">The positive maximum UTF-8 buffer capacity, including the terminator.</param>
-    /// <param name="flags">Text editing behavior.</param>
-    /// <returns><see langword="true"/> when the control reports an edit or submit event.</returns>
+    /// <param name="label">
+    /// The control label.
+    /// </param>
+    /// <param name="hint">
+    /// The placeholder shown while the value is empty.
+    /// </param>
+    /// <param name="value">
+    /// The managed string to display and update.
+    /// </param>
+    /// <param name="capacity">
+    /// The positive maximum UTF-8 buffer capacity, including the terminator.
+    /// </param>
+    /// <param name="flags">
+    /// Text editing behavior.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the control reports an edit or submit event.
+    /// </returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="capacity"/> is not positive.
     /// </exception>

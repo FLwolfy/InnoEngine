@@ -135,6 +135,25 @@ internal sealed class EditorSceneWorkspace :
     public bool canPersist => !m_isPreparingPlayMode && m_playModeSession is null;
 
     /// <summary>
+    /// Checks whether the scene is a writable Edit document.
+    /// </summary>
+    /// <param name="scene">
+    /// The scene consumed by can edit; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool CanEdit(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (!canPersist || scene.isDestroyed || !scene.isLoaded)
+            return false;
+        return !m_documents.TryGetValue(scene.identity.persistentId, out SceneDocument? document)
+            || string.IsNullOrEmpty(document.sourcePath)
+            || AssetPath.Parse(document.sourcePath).source == AssetSourceId.project;
+    }
+
+    /// <summary>
     /// Captures the scene set that represents the game for the current Editor frame.
     /// </summary>
     /// <returns>
@@ -295,6 +314,7 @@ internal sealed class EditorSceneWorkspace :
         ArgumentNullException.ThrowIfNull(scene);
         EnsureCanPersist();
         SceneDocument document = GetOrCreateDocument(scene);
+        EnsureEditable(scene);
         string relativePath;
         if (string.IsNullOrEmpty(document.sourcePath))
         {
@@ -325,6 +345,7 @@ internal sealed class EditorSceneWorkspace :
         ArgumentNullException.ThrowIfNull(scene);
         EnsureCanPersist();
         SceneDocument document = GetOrCreateDocument(scene);
+        EnsureEditable(scene);
         string currentPath = document.sourcePath;
         string currentParent = NormalizePath(Path.GetDirectoryName(currentPath));
         string targetDirectory = NormalizePath(currentDirectory);
@@ -358,6 +379,7 @@ internal sealed class EditorSceneWorkspace :
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         EnsureCanPersist();
+        EnsureEditable(gameObject.scene);
         string relativePath = CreateUniquePath(currentDirectory, gameObject.name, C_PREFAB_EXTENSION);
         if (!m_assets.Save(
                 AssetPath.Project(relativePath),
@@ -1165,6 +1187,13 @@ internal sealed class EditorSceneWorkspace :
             throw new InvalidOperationException(
                 "Scene and prefab persistence is unavailable while Play Mode runtime copies are active.");
         }
+    }
+
+    internal void EnsureEditable(GameScene scene)
+    {
+        if (!CanEdit(scene))
+            throw new InvalidOperationException(
+                "This Plugin scene is read-only. Use Import Sample to create a writable Project copy.");
     }
 
     private void EnsurePresentedScene(GameScene scene)

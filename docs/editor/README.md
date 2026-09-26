@@ -34,6 +34,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Assets](Inno.Editor.Assets.md) | Material/Pipeline 共用的原生资产草稿、显式保存与中立 History 生命周期。 |
 | [Inno.Editor.Panel.ShaderEditor](Inno.Editor.Panel.ShaderEditor.md) | Shader 图画布、模板创建菜单、手势历史与显式 Save/Revert；完整验收进行中。 |
 | [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、EngineHost/Edit Session、Build、ImGui 和全部 feature 的组合根。 |
+| [Inno.Editor.Build.Cli](Inno.Editor.Build.Cli.md) | 与 Editor 共用作者端脚本 API 和构建服务的无界面入口。 |
 
 ## 依赖方向
 

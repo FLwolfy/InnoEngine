@@ -14,20 +14,65 @@ namespace Inno.Editor.Rendering;
 [InspectionDrawer(typeof(RenderPipelineAsset))]
 internal sealed class PipelineInspectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<RenderPipelineAsset>
 {
-    public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
-    protected override string GetIcon(InspectionDrawContext context, RenderPipelineAsset target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, RenderPipelineAsset target)
         => context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetInfo(target.identity.persistentId, out AssetInfo? info) && info is not null
             && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, RenderPipelineAsset target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, RenderPipelineAsset target)
         => (target.name, null);
-    protected override void DrawHeader(InspectionDrawContext context, RenderPipelineAsset target)
+    /// <summary>
+    /// Renders the header presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void DrawHeader(InspectionDrawContext context, RenderPipelineAsset target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetInfo(target.identity.persistentId, out AssetInfo? info) && info is not null)
             PipelineInspector.DrawHeader(context, documents, documents.Open(info.assetPath));
     }
-    protected override void Draw(InspectionDrawContext context, RenderPipelineAsset target)
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, RenderPipelineAsset target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetInfo(target.identity.persistentId, out AssetInfo? info) && info is not null)
@@ -38,18 +83,72 @@ internal sealed class PipelineInspectionDrawer(IInspectionIconProvider<AssetFile
 [InspectionDrawer(typeof(AssetFileEntry), priority: 100, conditional: true)]
 internal sealed class PipelineSourceDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetFileEntry>
 {
-    public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
-    protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
-    protected override bool CanInspect(AssetFileEntry target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
+    /// <summary>
+    /// Checks whether this drawer supports the selected Inspector target.
+    /// </summary>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+protected override bool CanInspect(AssetFileEntry target)
         => !target.isDirectory && target.extension.Equals(".irenderpipeline", StringComparison.OrdinalIgnoreCase);
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
         => (target.nameWithoutExtension, null);
-    protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
+    /// <summary>
+    /// Renders the header presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null)
             PipelineInspector.DrawHeader(context, documents, documents.Open(target.assetPath));
     }
-    protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null)
             PipelineInspector.Draw(context, documents, documents.Open(target.assetPath));
@@ -141,13 +240,49 @@ internal static class PipelineInspector
 
     private sealed class DraftEdits(PipelineDocuments documents, Guid id, RenderPipelineAsset pipeline) : IInspectionPropertyEditService
     {
-        public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
+        /// <summary>
+        /// Applies one serialized property edit and records its reversible history payload.
+        /// </summary>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <param name="propertyName">
+        /// The property name text validated by the change property operation.
+        /// </param>
+        /// <param name="mutation">
+        /// The callback invoked by change property within the operation's owned lifetime.
+        /// </param>
+        /// <param name="historyName">
+        /// The history name text validated by the change property operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
         { mutation(); documents.Replace(id, pipeline, !ImGuiApi.IsAnyItemActive()); return true; }
     }
 
     private sealed class SettingsEdits(DraftEdits edits, Action capture) : IInspectionPropertyEditService
     {
-        public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
+        /// <summary>
+        /// Applies one serialized property edit and records its reversible history payload.
+        /// </summary>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <param name="propertyName">
+        /// The property name text validated by the change property operation.
+        /// </param>
+        /// <param name="mutation">
+        /// The callback invoked by change property within the operation's owned lifetime.
+        /// </param>
+        /// <param name="historyName">
+        /// The history name text validated by the change property operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
             => edits.ChangeProperty(owner, propertyName, () => { mutation(); capture(); }, historyName);
     }
 }

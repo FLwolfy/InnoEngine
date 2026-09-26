@@ -14,13 +14,24 @@ namespace Inno.Editor.Panel.ShaderEditor;
 [EditorPanel("rendering.shader-editor", "Shader Editor", order: 230, menuPath: "Authoring")]
 internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : EditorPanel
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
     public override bool useWindowPadding => true;
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether allow scrolling is enabled for this implementation.
+    /// </summary>
     public override bool allowScrolling => false;
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the preferred initial window size in logical editor units.
+    /// </summary>
     public override Vector2 initialSize => new(960f, 640f);
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         AssetFileEntry? entry = documents.interactions.selection.selectedTarget as AssetFileEntry;
@@ -47,10 +58,23 @@ internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : Edito
 [EditorAction("editor/open", priority: 1000)]
 internal sealed class OpenShaderEditorAction : EditorAction<ShaderAsset, string>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Evaluates the operation's current availability and presentation state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext<ShaderAsset, string> context)
         => EditorActionState.enabled;
-    /// <inheritdoc />
+    /// <summary>
+    /// Applies the editor action to the supplied interaction context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void Execute(EditorActionContext<ShaderAsset, string> context)
     {
         context.interactions.SetSelection(context.target);

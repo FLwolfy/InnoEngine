@@ -14,6 +14,9 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Build.Toolchains.Bgfx.Tools;
 
+/// <summary>
+/// Compiles typed shader stages with the bgfx shader toolchain.
+/// </summary>
 public sealed partial class BgfxShadercToolchain
 {
     private const byte C_SHADER_BINARY_VERSION = 11;
@@ -21,13 +24,28 @@ public sealed partial class BgfxShadercToolchain
     private const int C_SHADER_UNIFORM_METADATA_SIZE = 10;
     private static readonly IReadOnlyList<string> s_languages = Array.AsReadOnly(new[] { "inno.shader-language.bgfx-sc" });
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets shader source languages accepted by this toolchain.
+    /// </summary>
     public IReadOnlyList<string> supportedSourceLanguages => s_languages;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the implementation id text used by the current instance.
+    /// </summary>
     public string implementationId => "bgfx";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Compiles the supplied source into a validated runtime artifact.
+    /// </summary>
+    /// <param name="request">
+    /// The validated immutable request that defines this operation.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The token that cancels the operation before it commits.
+    /// </param>
+    /// <returns>
+    /// An asynchronous operation that completes after all requested work has finished.
+    /// </returns>
     public async ValueTask<ShaderStageToolResult> CompileAsync(ShaderStageToolRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

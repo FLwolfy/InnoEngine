@@ -703,7 +703,9 @@ public sealed class RenderShaderBindingDescriptor
     /// <param name="storageAccess">
     /// Storage texture or buffer access.
     /// </param>
-    /// <param name="nativeName">Adapter-generated reflected symbol, or null when the logical ID is also the symbol.</param>
+    /// <param name="nativeName">
+    /// Adapter-generated reflected symbol, or null when the logical ID is also the symbol.
+    /// </param>
     public RenderShaderBindingDescriptor(
         RenderBindingId id,
         RenderShaderBindingKind kind,
@@ -764,7 +766,9 @@ public sealed class RenderShaderBindingDescriptor
     /// </summary>
     public RenderStorageAccess storageAccess { get; }
 
-    /// <summary>Gets the exact adapter-generated symbol used only for reflection and native resource creation.</summary>
+    /// <summary>
+    /// Gets the exact adapter-generated symbol used only for reflection and native resource creation.
+    /// </summary>
     public string nativeName { get; }
 }
 

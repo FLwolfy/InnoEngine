@@ -26,10 +26,18 @@ public sealed class DefaultAuthoringAdapterCatalog :
     private readonly DefaultAdapterCatalog m_runtime;
     private readonly RenderingAuthoringBackendCatalog m_renderingAuthoring;
 
-    /// <summary>Creates paired runtime and authoring registrations before any native device is initialized.</summary>
-    /// <param name="renderingProviders">Complete runtime rendering registrations, or null for bundled BGFX.</param>
-    /// <param name="authoringProviders">Complete matching authoring registrations, or null for bundled BGFX.</param>
-    /// <exception cref="ArgumentException">The runtime and authoring backend registrations do not match.</exception>
+    /// <summary>
+    /// Creates paired runtime and authoring registrations before any native device is initialized.
+    /// </summary>
+    /// <param name="renderingProviders">
+    /// Complete runtime rendering registrations, or null for bundled BGFX.
+    /// </param>
+    /// <param name="authoringProviders">
+    /// Complete matching authoring registrations, or null for bundled BGFX.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The runtime and authoring backend registrations do not match.
+    /// </exception>
     public DefaultAuthoringAdapterCatalog(
         IEnumerable<RenderingBackendProvider>? renderingProviders = null,
         IEnumerable<RenderingAuthoringBackendProvider>? authoringProviders = null)
@@ -98,9 +106,24 @@ public sealed class DefaultAuthoringAdapterCatalog :
 
     private sealed class BgfxAuthoringProvider : RenderingAuthoringBackendProvider
     {
-        public override RenderingBackendId id => RenderingBackendId.bgfx;
-        public override IShaderCompilerToolchain CreateShaderCompilerToolchain() => new BgfxShadercToolchain();
-        public override ITextureTargetCompiler CreateTextureTargetCompiler() => new BgfxTextureTargetCompiler();
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
+public override RenderingBackendId id => RenderingBackendId.bgfx;
+        /// <summary>
+        /// Creates and validates a caller-owned shader compiler toolchain value.
+        /// </summary>
+        /// <returns>
+        /// The validated ishader compiler toolchain that represents the completed operation.
+        /// </returns>
+public override IShaderCompilerToolchain CreateShaderCompilerToolchain() => new BgfxShadercToolchain();
+        /// <summary>
+        /// Creates and validates a caller-owned texture target compiler value.
+        /// </summary>
+        /// <returns>
+        /// The validated itexture target compiler that represents the completed operation.
+        /// </returns>
+public override ITextureTargetCompiler CreateTextureTargetCompiler() => new BgfxTextureTargetCompiler();
     }
 
     IPresentationContext IPresentationBackendFactory.CreateContext(

@@ -4,13 +4,21 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Declares immutable creation metadata for a Shader graph template.</summary>
+/// <summary>
+/// Declares immutable creation metadata for a Shader graph template.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ShaderGraphTemplateAttribute : Attribute
 {
-    /// <summary>Creates Shader graph template discovery metadata.</summary>
-    /// <param name="id">Stable template identity used by creation commands.</param>
-    /// <param name="displayName">User-facing creation menu label.</param>
+    /// <summary>
+    /// Creates Shader graph template discovery metadata.
+    /// </summary>
+    /// <param name="id">
+    /// Stable template identity used by creation commands.
+    /// </param>
+    /// <param name="displayName">
+    /// User-facing creation menu label.
+    /// </param>
     public ShaderGraphTemplateAttribute(string id, string displayName)
     {
         this.id = string.IsNullOrWhiteSpace(id)
@@ -21,34 +29,71 @@ public sealed class ShaderGraphTemplateAttribute : Attribute
             : displayName;
     }
 
-    /// <summary>Gets the stable template identity used by creation commands.</summary>
+    /// <summary>
+    /// Gets the stable template identity used by creation commands.
+    /// </summary>
     public string id { get; }
 
-    /// <summary>Gets the user-facing creation menu label.</summary>
+    /// <summary>
+    /// Gets the user-facing creation menu label.
+    /// </summary>
     public string displayName { get; }
 }
 
-/// <summary>Contributes an ordinary shader graph to the shared asset creation workflow.</summary>
+/// <summary>
+/// Contributes an ordinary shader graph to the shared asset creation workflow.
+/// </summary>
 public abstract class ShaderGraphTemplate
 {
-    /// <summary>Creates a fresh detached graph with its target and parameter declarations.</summary>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>A graph ready for native serialization and ordinary shader import.</returns>
+    /// <summary>
+    /// Creates a fresh detached graph with its target and parameter declarations.
+    /// </summary>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// A graph ready for native serialization and ordinary shader import.
+    /// </returns>
     public abstract GraphDocument Create(SerializationRegistry serialization, SerializationContext context);
 }
 
 [ShaderGraphTemplate(ShaderBuiltInIds.rasterTemplate, "Raster")]
 internal sealed class RasterShaderGraphTemplate : ShaderGraphTemplate
 {
-    public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
+    /// <summary>
+    /// Creates and validates a caller-owned value value.
+    /// </summary>
+    /// <param name="serialization">
+    /// The serialization consumed by create; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated graph document that represents the completed operation.
+    /// </returns>
+public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
         => ShaderGraphTemplates.CreateRaster(serialization, context);
 }
 
 [ShaderGraphTemplate(ShaderBuiltInIds.nodeTemplate, "Reusable Node")]
 internal sealed class ReusableShaderGraphNodeTemplate : ShaderGraphTemplate
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a value using this implementation's validated inputs.
+    /// </summary>
+    /// <param name="serialization">
+    /// The serialization consumed by create; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// The validated graph document that represents the completed operation.
+    /// </returns>
     public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
     {
         GraphDocument graph = ShaderGraphDocument.Create(new("Graph Node", [], [], []), serialization, context);

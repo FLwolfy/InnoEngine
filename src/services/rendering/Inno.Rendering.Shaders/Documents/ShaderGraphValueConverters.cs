@@ -5,17 +5,41 @@ namespace Inno.Rendering.Shaders;
 
 internal sealed class ShaderGraphLiteralConverter : SerializationConverter<ShaderGraphLiteral>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphLiteral value)
     { writer.Write("type", value.type); writer.Write("scalarBits", value.scalarBits); }
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph literal that represents the completed operation.
+    /// </returns>
     public override ShaderGraphLiteral Read(SerializationReader reader)
         => new() { type = reader.Read<ShaderGraphType>("type"), scalarBits = reader.Read<uint[]>("scalarBits") };
 }
 
 internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter<ShaderGraphStageSettings>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphStageSettings value)
     {
         writer.Write("stage", value.stage);
@@ -24,7 +48,15 @@ internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter
         writer.Write("threadsY", value.threadsY);
         writer.Write("threadsZ", value.threadsZ);
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph stage settings that represents the completed operation.
+    /// </returns>
     public override ShaderGraphStageSettings Read(SerializationReader reader) => new()
     {
         stage = reader.Read<ShaderStage>("stage"),
@@ -37,7 +69,15 @@ internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter
 
 internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter<ShaderGraphInputSettings>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphInputSettings value)
     {
         writer.Write("id", value.id);
@@ -46,7 +86,15 @@ internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter
         writer.Write("semantic", value.semantic);
         writer.Write("location", value.location);
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph input settings that represents the completed operation.
+    /// </returns>
     public override ShaderGraphInputSettings Read(SerializationReader reader) => new()
     {
         id = reader.Read<string>("id"),
@@ -59,7 +107,15 @@ internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter
 
 internal sealed class ShaderGraphNodePortDefinitionConverter : SerializationConverter<ShaderGraphNodePortDefinition>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphNodePortDefinition value)
     {
         writer.Write("id", value.id);
@@ -67,7 +123,15 @@ internal sealed class ShaderGraphNodePortDefinitionConverter : SerializationConv
         writer.Write("required", value.required);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph node port definition that represents the completed operation.
+    /// </returns>
     public override ShaderGraphNodePortDefinition Read(SerializationReader reader) => new()
     {
         id = reader.Read<string>("id"),
@@ -78,7 +142,15 @@ internal sealed class ShaderGraphNodePortDefinitionConverter : SerializationConv
 
 internal sealed class ShaderGraphNodeSettingsConverter : SerializationConverter<ShaderGraphNodeSettings>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphNodeSettings value)
     {
         writer.Write("displayName", value.displayName);
@@ -89,7 +161,15 @@ internal sealed class ShaderGraphNodeSettingsConverter : SerializationConverter<
         writer.Write("role", value.role);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph node settings that represents the completed operation.
+    /// </returns>
     public override ShaderGraphNodeSettings Read(SerializationReader reader) => new()
     {
         displayName = reader.Read<string>("displayName"),
@@ -103,11 +183,27 @@ internal sealed class ShaderGraphNodeSettingsConverter : SerializationConverter<
 
 internal sealed class ShaderGraphNodeInputSettingsConverter : SerializationConverter<ShaderGraphNodeInputSettings>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphNodeInputSettings value)
         => writer.Write("ports", value.ports);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph node input settings that represents the completed operation.
+    /// </returns>
     public override ShaderGraphNodeInputSettings Read(SerializationReader reader) => new()
     {
         ports = reader.Read<ShaderGraphNodePortDefinition[]>("ports")
@@ -116,18 +212,42 @@ internal sealed class ShaderGraphNodeInputSettingsConverter : SerializationConve
 
 internal sealed class ShaderGraphNodeOutputSettingsConverter : SerializationConverter<ShaderGraphNodeOutputSettings>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphNodeOutputSettings value)
         => writer.Write("ports", value.ports);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph node output settings that represents the completed operation.
+    /// </returns>
     public override ShaderGraphNodeOutputSettings Read(SerializationReader reader)
         => new() { ports = reader.Read<ShaderGraphNodePortDefinition[]>("ports") };
 }
 
 internal sealed class ShaderGraphNodeInterfaceConverter : SerializationConverter<ShaderGraphNodeInterface>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphNodeInterface value)
     {
         writer.Write("displayName", value.displayName);
@@ -140,7 +260,15 @@ internal sealed class ShaderGraphNodeInterfaceConverter : SerializationConverter
         writer.Write("outputs", value.outputs);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph node interface that represents the completed operation.
+    /// </returns>
     public override ShaderGraphNodeInterface Read(SerializationReader reader) => new()
     {
         displayName = reader.Read<string>("displayName"),
@@ -156,7 +284,15 @@ internal sealed class ShaderGraphNodeInterfaceConverter : SerializationConverter
 
 internal sealed class ShaderGraphTypeConverter : SerializationConverter<ShaderGraphType>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="writer">
+    /// The writer that receives the serialized representation.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Write(SerializationWriter writer, ShaderGraphType value)
     {
         writer.Write("id", value.id);
@@ -172,7 +308,15 @@ internal sealed class ShaderGraphTypeConverter : SerializationConverter<ShaderGr
         writer.Write("dimension", value.dimension);
         writer.Write("isArray", value.isArray);
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Reconstructs a complete value through the configured serialization contract.
+    /// </summary>
+    /// <param name="reader">
+    /// The reader that supplies the serialized representation.
+    /// </param>
+    /// <returns>
+    /// The validated shader graph type that represents the completed operation.
+    /// </returns>
     public override ShaderGraphType Read(SerializationReader reader) => new()
     {
         id = reader.Read<string>("id"),

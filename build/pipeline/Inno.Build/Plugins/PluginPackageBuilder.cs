@@ -139,8 +139,25 @@ internal sealed class PluginPackageBuilder
     {
         AssetSourceMount projectMount = m_assets.sourceMounts.Single(
             static mount => mount.id == AssetSourceId.project);
-        PluginCandidate[] activePlugins = m_plugins.activePlugins.ToArray();
-        ValidateDependencyGraph(activePlugins);
+        PluginCandidate[] installedPlugins = m_plugins.activePlugins.ToArray();
+        ValidateDependencyGraph(installedPlugins);
+        var selectedIds = new HashSet<string>(StringComparer.Ordinal);
+        var installedById = installedPlugins.ToDictionary(
+            static plugin => plugin.manifest.pluginId, StringComparer.Ordinal);
+        void SelectDependency(string id)
+        {
+            if (!installedById.TryGetValue(id, out PluginCandidate? plugin))
+                throw new InvalidOperationException($"Declared plugin dependency '{id}' is not installed and active.");
+            if (!selectedIds.Add(id))
+                return;
+            foreach (string upstream in plugin.manifest.dependencies)
+                SelectDependency(upstream);
+        }
+        foreach (string id in request.dependencies)
+            SelectDependency(id);
+        PluginCandidate[] activePlugins = installedPlugins
+            .Where(plugin => selectedIds.Contains(plugin.manifest.pluginId))
+            .ToArray();
         string[] dependencyIds = activePlugins.Select(static plugin => plugin.manifest.pluginId).ToArray();
         ProjectSettingsDocument settingsDocument = m_serialization.Deserialize<ProjectSettingsDocument>(
             m_settings.CaptureDocument());
@@ -232,7 +249,7 @@ internal sealed class PluginPackageBuilder
             projectEntries,
             dependencies,
             projectFiles.Length,
-            activePlugins.Select(static plugin => (plugin.manifest.pluginId, plugin.contentHash)).ToArray());
+            installedPlugins.Select(static plugin => (plugin.manifest.pluginId, plugin.contentHash)).ToArray());
     }
 
     private static async ValueTask WriteSourceAsync(

@@ -70,12 +70,24 @@ internal static class Program
 
     private sealed class DiagnosticOutput : IDiagnosticSink
     {
-        public void Replace(DiagnosticReport report)
+        /// <summary>
+        /// Records errors from the current diagnostic report.
+        /// </summary>
+        /// <param name="report">
+        /// The report consumed by replace; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Replace(DiagnosticReport report)
         {
             foreach (Diagnostic diagnostic in report.diagnostics)
                 if (diagnostic.severity == DiagnosticSeverity.Error)
                     Console.Error.WriteLine($"{diagnostic.code}: {diagnostic.message}");
         }
-        public void Clear(DiagnosticSource source) { }
+        /// <summary>
+        /// Removes all retained entries and returns the instance to an empty reusable state.
+        /// </summary>
+        /// <param name="source">
+        /// The source value or location read by this operation.
+        /// </param>
+public void Clear(DiagnosticSource source) { }
     }
 }

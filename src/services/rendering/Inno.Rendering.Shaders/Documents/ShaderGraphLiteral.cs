@@ -4,18 +4,32 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Stores an exact typed value for an unconnected node input, independently of source-language syntax.</summary>
+/// <summary>
+/// Stores an exact typed value for an unconnected node input, independently of source-language syntax.
+/// </summary>
 public sealed class ShaderGraphLiteral : ISerializable
 {
-    /// <summary>Gets or sets the complete value type, including named aggregates and fixed arrays.</summary>
+    /// <summary>
+    /// Gets or sets the complete value type, including named aggregates and fixed arrays.
+    /// </summary>
     [SerializableProperty] public ShaderGraphType type { get; set; } = new() { id = "float" };
-    /// <summary>Gets or sets scalar bit patterns in declaration order; matrices use column-major order.</summary>
+    /// <summary>
+    /// Gets or sets scalar bit patterns in declaration order; matrices use column-major order.
+    /// </summary>
     [SerializableProperty] public uint[] scalarBits { get; set; } = [0];
 
-    /// <summary>Creates an explicit zero value for a supported scalar, vector, matrix, structure or array.</summary>
-    /// <param name="type">Complete numeric or boolean value type; resources and effect tokens are not values.</param>
-    /// <returns>A detached zero literal with an exact type and component count.</returns>
-    /// <exception cref="NotSupportedException">The type is opaque or exceeds the bounded literal size.</exception>
+    /// <summary>
+    /// Creates an explicit zero value for a supported scalar, vector, matrix, structure or array.
+    /// </summary>
+    /// <param name="type">
+    /// Complete numeric or boolean value type; resources and effect tokens are not values.
+    /// </param>
+    /// <returns>
+    /// A detached zero literal with an exact type and component count.
+    /// </returns>
+    /// <exception cref="NotSupportedException">
+    /// The type is opaque or exceeds the bounded literal size.
+    /// </exception>
     public static ShaderGraphLiteral Zero(ShaderSourceType type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -24,8 +38,12 @@ public sealed class ShaderGraphLiteral : ISerializable
         return new() { type = ShaderGraphType.Capture(type), scalarBits = new uint[scalars.Count] };
     }
 
-    /// <summary>Gets the exact scalar type of each stored component for shared Inspector value controls.</summary>
-    /// <returns>Detached scalar identities in the same order as the bit patterns.</returns>
+    /// <summary>
+    /// Gets the exact scalar type of each stored component for shared Inspector value controls.
+    /// </summary>
+    /// <returns>
+    /// Detached scalar identities in the same order as the bit patterns.
+    /// </returns>
     public IReadOnlyList<string> GetScalarTypes()
     {
         if (type is null || scalarBits is null) throw new InvalidOperationException("The input default must retain a type and scalar bits.");
@@ -37,11 +55,21 @@ public sealed class ShaderGraphLiteral : ISerializable
         return scalars;
     }
 
-    /// <summary>Emits ordinary typed constants and aggregate construction into the common IR.</summary>
-    /// <param name="builder">Current region's instruction owner.</param>
-    /// <param name="expectedType">Current port type; stale defaults never undergo implicit conversion.</param>
-    /// <returns>A value owned by the supplied builder.</returns>
-    /// <exception cref="InvalidOperationException">The stored type, component count or boolean bits are invalid.</exception>
+    /// <summary>
+    /// Emits ordinary typed constants and aggregate construction into the common IR.
+    /// </summary>
+    /// <param name="builder">
+    /// Current region's instruction owner.
+    /// </param>
+    /// <param name="expectedType">
+    /// Current port type; stale defaults never undergo implicit conversion.
+    /// </param>
+    /// <returns>
+    /// A value owned by the supplied builder.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The stored type, component count or boolean bits are invalid.
+    /// </exception>
     public ShaderIrValue Emit(ShaderIrBuilder builder, ShaderSourceType expectedType)
     {
         ArgumentNullException.ThrowIfNull(builder);

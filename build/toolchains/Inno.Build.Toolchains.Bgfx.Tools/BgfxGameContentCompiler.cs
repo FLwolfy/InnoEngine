@@ -58,7 +58,9 @@ public sealed class BgfxGameContentCompiler
     /// <param name="serialization">
     /// The serialization registry that owns Shader IR contracts.
     /// </param>
-    /// <param name="types">The authoring extension generation owner.</param>
+    /// <param name="types">
+    /// The authoring extension generation owner.
+    /// </param>
     public static BgfxGameContentCompiler CreateMacOSArm64(
         AssetPipeline assets,
         SerializationRegistry serialization,
@@ -82,7 +84,9 @@ public sealed class BgfxGameContentCompiler
     /// <param name="serialization">
     /// The serialization registry that owns Shader IR contracts.
     /// </param>
-    /// <param name="types">The authoring extension generation owner.</param>
+    /// <param name="types">
+    /// The authoring extension generation owner.
+    /// </param>
     public static BgfxGameContentCompiler CreateWindowsX64(
         AssetPipeline assets,
         SerializationRegistry serialization,
@@ -210,7 +214,9 @@ public sealed class BgfxGameContentCompiler
             if (typeof(ShaderAsset).IsAssignableFrom(assetType))
             {
                 ShaderAsset shader = m_assets.Load<ShaderAsset>(entry.assetPath);
-                AddShader(shaders, mounts, shader, RenderShaderVariant.empty);
+                // Passless graphs are reusable authoring nodes, not executable shaders.
+                if (shader.definition is { passes.Length: > 0 })
+                    AddShader(shaders, mounts, shader, RenderShaderVariant.empty);
             }
             if (typeof(IRenderTextureArtifactSource).IsAssignableFrom(assetType))
             {

@@ -4,25 +4,45 @@ using System.Linq;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Declares value flow across a source function parameter.</summary>
+/// <summary>
+/// Declares value flow across a source function parameter.
+/// </summary>
 public enum ShaderSourceParameterDirection
 {
-    /// <summary>The caller supplies a value.</summary>
+    /// <summary>
+    /// The caller supplies a value.
+    /// </summary>
     Input,
-    /// <summary>The function produces a value.</summary>
+    /// <summary>
+    /// The function produces a value.
+    /// </summary>
     Output,
-    /// <summary>The caller supplies a value and the function produces its replacement.</summary>
+    /// <summary>
+    /// The caller supplies a value and the function produces its replacement.
+    /// </summary>
     InputOutput
 }
 
-/// <summary>Describes one parameter parsed from a public source declaration.</summary>
+/// <summary>
+/// Describes one parameter parsed from a public source declaration.
+/// </summary>
 public sealed class ShaderSourceParameter
 {
-    /// <summary>Creates a validated function parameter.</summary>
-    /// <param name="name">Public parameter name, used for semantic port matching rather than ordinal matching.</param>
-    /// <param name="type">Canonical value type.</param>
-    /// <param name="direction">Declared value flow.</param>
-    /// <exception cref="ArgumentException">The parameter has void type.</exception>
+    /// <summary>
+    /// Creates a validated function parameter.
+    /// </summary>
+    /// <param name="name">
+    /// Public parameter name, used for semantic port matching rather than ordinal matching.
+    /// </param>
+    /// <param name="type">
+    /// Canonical value type.
+    /// </param>
+    /// <param name="direction">
+    /// Declared value flow.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The parameter has void type.
+    /// </exception>
     public ShaderSourceParameter(string name, ShaderSourceType type, ShaderSourceParameterDirection direction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -32,23 +52,43 @@ public sealed class ShaderSourceParameter
         this.type = type ?? throw new ArgumentNullException(nameof(type));
         this.direction = direction;
     }
-    /// <summary>Gets the public parameter name.</summary>
+    /// <summary>
+    /// Gets the public parameter name.
+    /// </summary>
     public string name { get; }
-    /// <summary>Gets the complete canonical value type.</summary>
+    /// <summary>
+    /// Gets the complete canonical value type.
+    /// </summary>
     public ShaderSourceType type { get; }
-    /// <summary>Gets the declared value flow.</summary>
+    /// <summary>
+    /// Gets the declared value flow.
+    /// </summary>
     public ShaderSourceParameterDirection direction { get; }
 }
 
-/// <summary>Contains the single callable interface exported by a source asset.</summary>
+/// <summary>
+/// Contains the single callable interface exported by a source asset.
+/// </summary>
 public sealed class ShaderSourceFunction
 {
-    /// <summary>Captures a source function declaration without retaining parser or provider objects.</summary>
-    /// <param name="name">Implementation function name selected by import settings.</param>
-    /// <param name="returnType">Canonical result type; void has no result port.</param>
-    /// <param name="parameters">Unique named parameters in call order.</param>
-    /// <param name="location">Original declaration location.</param>
-    /// <exception cref="ArgumentException">The name is reserved or parameters have duplicate names.</exception>
+    /// <summary>
+    /// Captures a source function declaration without retaining parser or provider objects.
+    /// </summary>
+    /// <param name="name">
+    /// Implementation function name selected by import settings.
+    /// </param>
+    /// <param name="returnType">
+    /// Canonical result type; void has no result port.
+    /// </param>
+    /// <param name="parameters">
+    /// Unique named parameters in call order.
+    /// </param>
+    /// <param name="location">
+    /// Original declaration location.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// The name is reserved or parameters have duplicate names.
+    /// </exception>
     public ShaderSourceFunction(string name, ShaderSourceType returnType,
         IEnumerable<ShaderSourceParameter> parameters, ShaderSourcePosition location)
     {
@@ -64,18 +104,32 @@ public sealed class ShaderSourceFunction
         this.parameters = Array.AsReadOnly(snapshot);
         this.location = location;
     }
-    /// <summary>Gets the implementation function name.</summary>
+    /// <summary>
+    /// Gets the implementation function name.
+    /// </summary>
     public string name { get; }
-    /// <summary>Gets the canonical result type.</summary>
+    /// <summary>
+    /// Gets the canonical result type.
+    /// </summary>
     public ShaderSourceType returnType { get; }
-    /// <summary>Gets the immutable function parameters.</summary>
+    /// <summary>
+    /// Gets the immutable function parameters.
+    /// </summary>
     public IReadOnlyList<ShaderSourceParameter> parameters { get; }
-    /// <summary>Gets the original declaration position.</summary>
+    /// <summary>
+    /// Gets the original declaration position.
+    /// </summary>
     public ShaderSourcePosition location { get; }
 
-    /// <summary>Validates alternative implementations by semantic names, types, direction, and call order.</summary>
-    /// <param name="other">Candidate interface, whose private implementation function name may differ.</param>
-    /// <returns>True when both implementations expose the same graph ports and calling interface.</returns>
+    /// <summary>
+    /// Validates alternative implementations by semantic names, types, direction, and call order.
+    /// </summary>
+    /// <param name="other">
+    /// Candidate interface, whose private implementation function name may differ.
+    /// </param>
+    /// <returns>
+    /// True when both implementations expose the same graph ports and calling interface.
+    /// </returns>
     public bool HasSameInterface(ShaderSourceFunction? other)
     {
         if (other is null || !returnType.IsEquivalentTo(other.returnType) || parameters.Count != other.parameters.Count)

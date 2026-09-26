@@ -9,7 +9,9 @@ using Inno.Extensibility.Types;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-/// <summary>Applies importer configuration through the common sidecar pipeline and stable-identity Editor history.</summary>
+/// <summary>
+/// Applies importer configuration through the common sidecar pipeline and stable-identity Editor history.
+/// </summary>
 [EditorModule("assets.import-settings-edits", order: 60)]
 public sealed class AssetImportSettingsEdits : EditorModule
 {
@@ -18,11 +20,21 @@ public sealed class AssetImportSettingsEdits : EditorModule
     private readonly SerializationRegistry m_serialization;
     private readonly TypeCatalog m_types;
     private readonly EditorInteractions m_interactions;
-    /// <summary>Uses the authoring owners responsible for source identity, converter generations and shared undo.</summary>
-    /// <param name="assets">Authoritative asset pipeline.</param>
-    /// <param name="serialization">Current owner converter registry.</param>
-    /// <param name="types">Current type generation owner.</param>
-    /// <param name="interactions">Shared Editor history owner.</param>
+    /// <summary>
+    /// Uses the authoring owners responsible for source identity, converter generations and shared undo.
+    /// </summary>
+    /// <param name="assets">
+    /// Authoritative asset pipeline.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converter registry.
+    /// </param>
+    /// <param name="types">
+    /// Current type generation owner.
+    /// </param>
+    /// <param name="interactions">
+    /// Shared Editor history owner.
+    /// </param>
     [Inno.Scripting.Api.ScriptingApiIgnore]
     public AssetImportSettingsEdits(AssetPipeline assets, SerializationRegistry serialization, TypeCatalog types, EditorInteractions interactions)
     {
@@ -32,11 +44,21 @@ public sealed class AssetImportSettingsEdits : EditorModule
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
     }
 
-    /// <summary>Saves one settings gesture, recording neutral before/after properties even when reimport reports an error.</summary>
-    /// <param name="path">Writable source asset path.</param>
-    /// <param name="settings">Detached current-generation settings value.</param>
-    /// <param name="expectedFingerprint">Sidecar fingerprint captured when editing began.</param>
-    /// <returns>Whether the saved configuration reimported successfully; false does not mean the settings were discarded.</returns>
+    /// <summary>
+    /// Saves one settings gesture, recording neutral before/after properties even when reimport reports an error.
+    /// </summary>
+    /// <param name="path">
+    /// Writable source asset path.
+    /// </param>
+    /// <param name="settings">
+    /// Detached current-generation settings value.
+    /// </param>
+    /// <param name="expectedFingerprint">
+    /// Sidecar fingerprint captured when editing began.
+    /// </param>
+    /// <returns>
+    /// Whether the saved configuration reimported successfully; false does not mean the settings were discarded.
+    /// </returns>
     public bool Apply(AssetPath path, ISerializable settings, string expectedFingerprint)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -106,13 +128,43 @@ public sealed class AssetImportSettingsEdits : EditorModule
 [EditorHistoryHandler(AssetImportSettingsEdits.C_HISTORY)]
 internal sealed class AssetImportSettingsHistory(AssetImportSettingsEdits edits) : EditorHistoryHandler
 {
-    protected override EditorHistoryAvailability Query(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
+protected override EditorHistoryAvailability Query(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
     {
         try { edits.Validate(change, direction); return EditorHistoryAvailability.Available(); }
         catch (Exception failure) when ((failure is IOException or InvalidOperationException or ArgumentException or FormatException) && Inno.Core.Execution.RetirementPendingException.Find(failure) is null)
         { return EditorHistoryAvailability.Unavailable(failure.Message); }
     }
-    protected override EditorHistoryResult Apply(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
+protected override EditorHistoryResult Apply(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
     {
         try { edits.ApplyHistory(change, direction); return EditorHistoryResult.Success(); }
         catch (Exception failure) when ((failure is IOException or InvalidOperationException or ArgumentException or FormatException) && Inno.Core.Execution.RetirementPendingException.Find(failure) is null)

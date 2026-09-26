@@ -99,7 +99,18 @@ internal sealed class EditorDocumentService : IEditorDocumentService
         return context;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates asset path state from the current authoritative inputs.
+    /// </summary>
+    /// <param name="documentId">
+    /// The document id consumed by update asset path; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="assetPath">
+    /// The asset path text validated by the update asset path operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool UpdateAssetPath(Guid documentId, string assetPath)
     {
         EditorDocumentContext? document = Find(documentId);
@@ -122,7 +133,9 @@ internal sealed class EditorDocumentService : IEditorDocumentService
     /// <param name="documentId">
     /// Stable identity of the open document to mark.
     /// </param>
-    /// <param name="isDirty">True when the provider retains unsaved changes.</param>
+    /// <param name="isDirty">
+    /// True when the provider retains unsaved changes.
+    /// </param>
     public void SetDirty(Guid documentId, bool isDirty = true)
         => Get(documentId).isDirty = isDirty;
 

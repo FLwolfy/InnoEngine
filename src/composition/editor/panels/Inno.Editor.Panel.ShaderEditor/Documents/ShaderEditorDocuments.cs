@@ -312,7 +312,12 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         { draft.error = failure.Message; return false; }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="editor">
+    /// The editor consumed by on start; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnStart(EditorContext editor)
     {
         m_lifetime = new();
@@ -333,7 +338,12 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Advances this feature using the current runtime state.
+    /// </summary>
+    /// <param name="editor">
+    /// The editor consumed by on update; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnUpdate(EditorContext editor)
     {
         foreach (AssetPath path in m_pendingImports.ToArray())
@@ -358,14 +368,24 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         foreach (Draft draft in m_drafts.Values) RememberView(draft);
         state.Set("views", m_views.Values.ToArray());
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         m_views.Clear();
@@ -374,7 +394,12 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
                 m_views[view.assetId] = view;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="editor">
+    /// The editor consumed by on stop; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnStop(EditorContext editor)
     {
         m_checkDraftId = null;
@@ -521,12 +546,54 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
 
     private sealed class Provider(ShaderEditorDocuments owner) : EditorDocumentProvider
     {
-        public override string id => "inno.shader.graph";
-        public override bool CanOpen(string assetPath) => assetPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase);
-        public override void Open(EditorDocumentContext context) => owner.Open(context);
-        public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
-        public override bool Revert(EditorDocumentContext context) => owner.Reload(owner.m_drafts[context.assetId]);
-        public override void Close(EditorDocumentContext context)
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
+public override string id => "inno.shader.graph";
+        /// <summary>
+        /// Checks whether this document handler supports the selected asset.
+        /// </summary>
+        /// <param name="assetPath">
+        /// The asset path text validated by the can open operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool CanOpen(string assetPath) => assetPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// Opens the requested resource and establishes its active lifetime.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+public override void Open(EditorDocumentContext context) => owner.Open(context);
+        /// <summary>
+        /// Persists the supplied value through the configured storage contract.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
+        /// <summary>
+        /// Restores the draft from the latest imported asset state.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool Revert(EditorDocumentContext context) => owner.Reload(owner.m_drafts[context.assetId]);
+        /// <summary>
+        /// Closes the active resource and releases its operation-scoped state.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+public override void Close(EditorDocumentContext context)
         {
             // The shared host already applied Save/Discard/Cancel policy. Close must never turn Discard into Save.
             if (!owner.m_drafts.TryGetValue(context.assetId, out Draft? draft)) return;
@@ -594,21 +661,41 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
 
     private sealed class RecoveryData : ISerializable
     {
-        /// <summary>Gets or sets the persistent asset identity.</summary>
+        /// <summary>
+        /// Gets or sets the persistent asset identity.
+        /// </summary>
         [SerializableProperty] public Guid assetId { get; set; }
-        /// <summary>Gets or sets the diagnostic source path.</summary>
+        /// <summary>
+        /// Gets or sets the diagnostic source path.
+        /// </summary>
         [SerializableProperty] public string path { get; set; } = "";
-        /// <summary>Gets or sets the expected disk source fingerprint.</summary>
+        /// <summary>
+        /// Gets or sets the expected disk source fingerprint.
+        /// </summary>
         [SerializableProperty] public string hash { get; set; } = "";
-        /// <summary>Gets or sets the complete neutral unsaved graph.</summary>
+        /// <summary>
+        /// Gets or sets the complete neutral unsaved graph.
+        /// </summary>
         [SerializableProperty] public byte[] graph { get; set; } = [];
     }
 }
 
 internal struct ShaderPortSnapshot
 {
-    public string id { get; set; }
-    public ShaderGraphType type { get; set; }
-    public GraphPortDirection direction { get; set; }
-    public bool required { get; set; }
+    /// <summary>
+    /// Gets the stable identity used to reference this value across subsystem boundaries.
+    /// </summary>
+public string id { get; set; }
+    /// <summary>
+    /// Gets the graph port's shader value type.
+    /// </summary>
+public ShaderGraphType type { get; set; }
+    /// <summary>
+    /// Gets the graph port's input or output direction.
+    /// </summary>
+public GraphPortDirection direction { get; set; }
+    /// <summary>
+    /// Gets whether required is active for the current instance.
+    /// </summary>
+public bool required { get; set; }
 }

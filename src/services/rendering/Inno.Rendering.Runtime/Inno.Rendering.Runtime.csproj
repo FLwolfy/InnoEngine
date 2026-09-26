@@ -22,8 +22,46 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../runtime/contracts/Inno.Runtime.Contracts/Inno.Runtime.Contracts.csproj" />
+    <ProjectReference Include="../../../services/input/Inno.Input/Inno.Input.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../content/references/Inno.References/Inno.References.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <_CompositionShaderSource Include="Shaders/**/*" />
+    <_CompositionShaderApi Include="Metal;Vulkan;OpenGL" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+    <_CompositionShaderApi Include="Direct3D11;Direct3D12;Vulkan;OpenGL" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  </ItemGroup>
+  <PropertyGroup>
+    <_CompositionShaderPlatform Condition="$([MSBuild]::IsOSPlatform('OSX'))">MacOSArm64</_CompositionShaderPlatform>
+    <_CompositionShaderPlatform Condition="$([MSBuild]::IsOSPlatform('Windows'))">WindowsX64</_CompositionShaderPlatform>
+    <_CompositionDotnet Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_CompositionDotnet>
+    <_CompositionDotnet Condition="'$(_CompositionDotnet)' == '' and '$(NetCoreRoot)' != ''">$(NetCoreRoot)dotnet</_CompositionDotnet>
+    <_CompositionDotnet Condition="$([MSBuild]::IsOSPlatform('Windows')) and '$(_CompositionDotnet)' != '' and !$([System.String]::Copy('$(_CompositionDotnet)').EndsWith('.exe'))">$(_CompositionDotnet).exe</_CompositionDotnet>
+    <_CompositionDotnet Condition="'$(_CompositionDotnet)' == ''">dotnet</_CompositionDotnet>
+    <_CompositionCompiler>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../../build/toolchains/Inno.Build.Toolchains.Bgfx.Shaders/bin/$(Configuration)/net9.0/Inno.Build.Toolchains.Bgfx.Shaders.dll'))</_CompositionCompiler>
+  </PropertyGroup>
+  <Target Name="BuildCompositionShaderCompiler">
+    <MSBuild Projects="../../../../build/toolchains/Inno.Build.Toolchains.Bgfx.Shaders/Inno.Build.Toolchains.Bgfx.Shaders.csproj"
+             Targets="Build" Properties="Configuration=$(Configuration)" />
+  </Target>
+  <Target Name="CollectCompositionShaderCompilerInputs" DependsOnTargets="BuildCompositionShaderCompiler">
+    <ItemGroup>
+      <_CompositionShaderCompilerInput Include="$([System.IO.Path]::GetDirectoryName('$(_CompositionCompiler)'))/*.dll" />
+      <_CompositionShaderCompilerInput Include="../../../../extern/bgfx/src/*.sh;../../../../extern/bgfx/tools/bin/**/*" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CompileCompositionShaderGraphs" DependsOnTargets="CollectCompositionShaderCompilerInputs"
+          Inputs="@(_CompositionShaderSource);@(_CompositionShaderCompilerInput);$(_CompositionCompiler);$(MSBuildProjectFullPath)"
+          Outputs="@(_CompositionShaderApi->'$(IntermediateOutputPath)Shaders/%(Identity).bin')">
+    <Error Condition="'$(_CompositionShaderPlatform)' == ''" Text="No built-in composition shader distribution target exists for this host." />
+    <Exec Command="&quot;$(_CompositionDotnet)&quot; &quot;$(_CompositionCompiler)&quot; &quot;$(MSBuildProjectDirectory)/Shaders&quot; Composition.ishader $(_CompositionShaderPlatform) %(_CompositionShaderApi.Identity) &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)Shaders/%(_CompositionShaderApi.Identity).bin&quot;" />
+  </Target>
+  <Target Name="IncludeCompositionShaderArtifacts" BeforeTargets="AssignTargetPaths" DependsOnTargets="CompileCompositionShaderGraphs">
+    <ItemGroup>
+      <EmbeddedResource Include="@(_CompositionShaderApi->'$(IntermediateOutputPath)Shaders/%(Identity).bin')">
+        <LogicalName>Inno.BuiltInShaders.Composition.$(_CompositionShaderPlatform).%(Filename)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 </Project>

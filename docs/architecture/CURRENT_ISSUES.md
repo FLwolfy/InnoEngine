@@ -2,6 +2,8 @@
 
 [架构治理](README.md) · [Wiki 首页](../README.md) · [正式问题台账](../issues/2026-08-31-complete-issue-register.md)
 
+2026-09-26 更新：[Rendering / Canvas / Plugin Samples 验收记录](RENDER_CANVAS_ACCEPTANCE_2026_09_26.md)显示：当前单模型 Canvas 可在 TestProject Editor 中显示，自动测试和架构门禁通过；多模型图层合成、跨 View 输入时序、Import Sample 后 Player 构建仍未达到批准方案，整体状态为**未验收**。旧报告中的通过结果不得覆盖这些新门禁。
+
 2026-09-12 更新：[MaterialGraph 双资产路径清理](../issues/2026-09-11-material-graph-dual-asset-path.md)
 已按后续用户授权完成；单一 Shader 创作链及尚未完成的验收见
 [统一 Shader 实施记录](../issues/2026-09-11-unified-shader-implementation.md)。历史全引擎验收不能替代本次改动的验证。

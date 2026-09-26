@@ -14,10 +14,26 @@ namespace Inno.Rendering.Assets;
 [AssetImporter("inno.rendering.shader")]
 internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the normalized source extensions accepted by this importer.
+    /// </summary>
     public override IReadOnlyList<string> supportedExtensions { get; } = [".ishader"];
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Imports source content into a validated runtime asset and artifact set.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="output">
+    /// The import output writer that receives runtime data and dependency declarations.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The token that cancels the operation before it commits.
+    /// </param>
+    /// <returns>
+    /// An asynchronous operation that completes after all requested work has finished.
+    /// </returns>
     protected override async ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<ShaderAsset> output,
         CancellationToken cancellationToken)
     {
@@ -60,12 +76,29 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         var asset = new ShaderAsset();
         asset.SetDefinition(definition, context.serialization, owner);
         output.SetAsset(asset);
-        await output.WriteArtifactAsync("runtime", ReadOnlyMemory<byte>.Empty, cancellationToken).ConfigureAwait(false);
+        if (definition.passes.Length == 0)
+            output.SetDeploymentScope(AssetDeploymentScope.AuthoringOnly);
+        else
+            await output.WriteArtifactAsync("runtime", ReadOnlyMemory<byte>.Empty, cancellationToken).ConfigureAwait(false);
         await output.WriteArtifactAsync(ShaderGraphArtifact.outputName, captured,
             cancellationToken, AssetDeploymentScope.AuthoringOnly).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes a validated asset representation to its writable source mount.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="asset">
+    /// The validated asset instance exported by this operation.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The token that cancels the operation before it commits.
+    /// </param>
+    /// <returns>
+    /// An asynchronous operation that completes after all requested work has finished.
+    /// </returns>
     protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(AssetExportContext context, ShaderAsset asset,
         CancellationToken cancellationToken)
     {

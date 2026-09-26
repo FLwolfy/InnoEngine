@@ -18,6 +18,7 @@
     <ProjectReference Include="../../../../content/references/Inno.References/Inno.References.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../../foundation/core/Inno.Core.Identity/Inno.Core.Identity.csproj" />
     <ProjectReference Include="../Inno.Editor.Assets/Inno.Editor.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../framework/Inno.Editor.Inspection/Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../presentation/Inno.Editor.ImGui/Inno.Editor.ImGui.csproj" PrivateAssets="compile" />

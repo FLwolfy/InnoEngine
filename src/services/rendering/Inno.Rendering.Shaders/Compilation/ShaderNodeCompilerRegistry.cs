@@ -8,16 +8,24 @@ using Inno.Extensibility.Types;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Owns reloadable shader node compilers through the shared candidate, rollback and retirement protocol.</summary>
+/// <summary>
+/// Owns reloadable shader node compilers through the shared candidate, rollback and retirement protocol.
+/// </summary>
 public sealed class ShaderNodeCompilerRegistry : TypeRegistry<ShaderNodeCompilerCatalog>
 {
     private readonly TypeCatalog m_types;
 
-    /// <summary>Registers the compiler generation owner with the shared type catalog.</summary>
-    /// <param name="types">Owner catalog, which must outlive this registry.</param>
+    /// <summary>
+    /// Registers the compiler generation owner with the shared type catalog.
+    /// </summary>
+    /// <param name="types">
+    /// Owner catalog, which must outlive this registry.
+    /// </param>
     public ShaderNodeCompilerRegistry(TypeCatalog types) : base(types) => m_types = types;
 
-    /// <summary>Gets stable compiler identities without exposing provider instances.</summary>
+    /// <summary>
+    /// Gets stable compiler identities without exposing provider instances.
+    /// </summary>
     public IReadOnlyList<string> definitionIds
     {
         get
@@ -27,12 +35,24 @@ public sealed class ShaderNodeCompilerRegistry : TypeRegistry<ShaderNodeCompiler
         }
     }
 
-    /// <summary>Lowers a whole region under one shared generation operation.</summary>
-    /// <param name="request">Frozen graph region and resolved immutable inputs.</param>
-    /// <param name="serialization">The current owner converter registry.</param>
-    /// <param name="context">The complete owner reference/asset serialization context.</param>
-    /// <param name="cancellationToken">Cancellation between node invocations.</param>
-    /// <returns>A detached region or neutral diagnostics, never compiler instances.</returns>
+    /// <summary>
+    /// Lowers a whole region under one shared generation operation.
+    /// </summary>
+    /// <param name="request">
+    /// Frozen graph region and resolved immutable inputs.
+    /// </param>
+    /// <param name="serialization">
+    /// The current owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// The complete owner reference/asset serialization context.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation between node invocations.
+    /// </param>
+    /// <returns>
+    /// A detached region or neutral diagnostics, never compiler instances.
+    /// </returns>
     public ShaderGraphLoweringResult Lower(ShaderGraphLoweringRequest request, SerializationRegistry serialization,
         SerializationContext context, CancellationToken cancellationToken = default)
     {
@@ -40,14 +60,30 @@ public sealed class ShaderNodeCompilerRegistry : TypeRegistry<ShaderNodeCompiler
         return current.Lower(request, serialization, context, cancellationToken);
     }
 
-    /// <summary>Captures a node's current typed ports under the shared generation lease.</summary>
-    /// <param name="node">Neutral node properties.</param>
-    /// <param name="serialization">Owner converter registry.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <param name="source">Resolved frozen source function, or null.</param>
-    /// <param name="implementationId">Selected source implementation identity.</param>
-    /// <param name="input">Resolved stage input interface, or null.</param>
-    /// <returns>An immutable provider-free port snapshot.</returns>
+    /// <summary>
+    /// Captures a node's current typed ports under the shared generation lease.
+    /// </summary>
+    /// <param name="node">
+    /// Neutral node properties.
+    /// </param>
+    /// <param name="serialization">
+    /// Owner converter registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <param name="source">
+    /// Resolved frozen source function, or null.
+    /// </param>
+    /// <param name="implementationId">
+    /// Selected source implementation identity.
+    /// </param>
+    /// <param name="input">
+    /// Resolved stage input interface, or null.
+    /// </param>
+    /// <returns>
+    /// An immutable provider-free port snapshot.
+    /// </returns>
     public IReadOnlyList<ShaderNodePort> DescribePorts(GraphNodeRecord node, SerializationRegistry serialization,
         SerializationContext context, ShaderSourceModuleAnalysis? source = null, string implementationId = "",
         ShaderIrStageInput? input = null)
@@ -56,7 +92,15 @@ public sealed class ShaderNodeCompilerRegistry : TypeRegistry<ShaderNodeCompiler
         return current.DescribePorts(node, serialization, context, source, implementationId, input);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated shader node compiler catalog that represents the completed operation.
+    /// </returns>
     protected override ShaderNodeCompilerCatalog Build(TypeCacheSnapshot types)
     {
         var providers = new List<IShaderNodeCompiler>();
@@ -66,6 +110,11 @@ public sealed class ShaderNodeCompilerRegistry : TypeRegistry<ShaderNodeCompiler
         return new(providers);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
     protected override void DisposeSnapshot(ShaderNodeCompilerCatalog snapshot) => DisposeExtensions(snapshot.providers);
 }

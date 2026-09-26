@@ -15,13 +15,27 @@ public sealed class AssetCreationMenuAttribute : Attribute
     /// <summary>
     /// Creates one asset creation menu declaration.
     /// </summary>
-    /// <param name="id">Globally stable template identifier.</param>
-    /// <param name="menuPath">Slash-delimited path below the File Browser Create menu.</param>
-    /// <param name="extension">Native source extension, including its leading dot.</param>
-    /// <param name="defaultName">Default source name without an extension or numeric suffix.</param>
-    /// <param name="groupOrder">Stable order of the top-level category below Create.</param>
-    /// <param name="itemOrder">Stable order of the leaf within its immediate category.</param>
-    /// <param name="separatorBeforeGroup">Whether the top-level category starts after a separator.</param>
+    /// <param name="id">
+    /// Globally stable template identifier.
+    /// </param>
+    /// <param name="menuPath">
+    /// Slash-delimited path below the File Browser Create menu.
+    /// </param>
+    /// <param name="extension">
+    /// Native source extension, including its leading dot.
+    /// </param>
+    /// <param name="defaultName">
+    /// Default source name without an extension or numeric suffix.
+    /// </param>
+    /// <param name="groupOrder">
+    /// Stable order of the top-level category below Create.
+    /// </param>
+    /// <param name="itemOrder">
+    /// Stable order of the leaf within its immediate category.
+    /// </param>
+    /// <param name="separatorBeforeGroup">
+    /// Whether the top-level category starts after a separator.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when an identifier, path, source name, or native extension is invalid.
     /// </exception>
@@ -64,25 +78,39 @@ public sealed class AssetCreationMenuAttribute : Attribute
         this.separatorBeforeGroup = separatorBeforeGroup;
     }
 
-    /// <summary>Gets the globally stable template identifier.</summary>
+    /// <summary>
+    /// Gets the globally stable template identifier.
+    /// </summary>
     public string id { get; }
 
-    /// <summary>Gets the slash-delimited path below the File Browser Create menu.</summary>
+    /// <summary>
+    /// Gets the slash-delimited path below the File Browser Create menu.
+    /// </summary>
     public string menuPath { get; }
 
-    /// <summary>Gets the native source extension, including its leading dot.</summary>
+    /// <summary>
+    /// Gets the native source extension, including its leading dot.
+    /// </summary>
     public string extension { get; }
 
-    /// <summary>Gets the default source name without an extension or numeric suffix.</summary>
+    /// <summary>
+    /// Gets the default source name without an extension or numeric suffix.
+    /// </summary>
     public string defaultName { get; }
 
-    /// <summary>Gets the stable order of the top-level category below Create.</summary>
+    /// <summary>
+    /// Gets the stable order of the top-level category below Create.
+    /// </summary>
     public int groupOrder { get; }
 
-    /// <summary>Gets the stable order of the leaf within its immediate category.</summary>
+    /// <summary>
+    /// Gets the stable order of the leaf within its immediate category.
+    /// </summary>
     public int itemOrder { get; }
 
-    /// <summary>Gets whether the top-level category starts after a separator.</summary>
+    /// <summary>
+    /// Gets whether the top-level category starts after a separator.
+    /// </summary>
     public bool separatorBeforeGroup { get; }
 }
 
@@ -95,19 +123,31 @@ public sealed class AssetCreationMenuAttribute : Attribute
 /// </remarks>
 public abstract class AssetCreationTemplate
 {
-    /// <summary>Gets the concrete asset type produced by this template.</summary>
+    /// <summary>
+    /// Gets the concrete asset type produced by this template.
+    /// </summary>
     public abstract Type assetType { get; }
 
-    /// <summary>Creates a detached default value that has not been imported or published.</summary>
-    /// <returns>A new asset value owned by the caller.</returns>
+    /// <summary>
+    /// Creates a detached default value that has not been imported or published.
+    /// </summary>
+    /// <returns>
+    /// A new asset value owned by the caller.
+    /// </returns>
     public abstract AssetObject Create();
 
     /// <summary>
     /// Encodes the detached initial value into the source representation owned by this template.
     /// </summary>
-    /// <param name="context">Creation services scoped to the current Asset source pipeline.</param>
-    /// <param name="asset">The exact value returned by <see cref="Create"/>.</param>
-    /// <returns>Complete source bytes ready for an atomic File Browser create operation.</returns>
+    /// <param name="context">
+    /// Creation services scoped to the current Asset source pipeline.
+    /// </param>
+    /// <param name="asset">
+    /// The exact value returned by <see cref="Create"/>.
+    /// </param>
+    /// <returns>
+    /// Complete source bytes ready for an atomic File Browser create operation.
+    /// </returns>
     /// <remarks>
     /// The default implementation uses native structured Asset serialization. Templates paired
     /// with a textual or custom binary importer can override this method without changing the
@@ -128,15 +168,25 @@ public sealed class AssetCreationContext
 {
     private readonly AssetSourceStore m_sources;
 
-    /// <summary>Creates a context over the source serializer owned by the active Asset pipeline.</summary>
-    /// <param name="sources">Source serializer carrying the active reference context.</param>
+    /// <summary>
+    /// Creates a context over the source serializer owned by the active Asset pipeline.
+    /// </summary>
+    /// <param name="sources">
+    /// Source serializer carrying the active reference context.
+    /// </param>
     [ScriptingApiIgnore]
     public AssetCreationContext(AssetSourceStore sources)
         => m_sources = sources ?? throw new ArgumentNullException(nameof(sources));
 
-    /// <summary>Encodes an Asset value through the current native structured source serializer.</summary>
-    /// <param name="asset">Detached Asset value to encode.</param>
-    /// <returns>Complete native source bytes, including the concrete serialized type identity.</returns>
+    /// <summary>
+    /// Encodes an Asset value through the current native structured source serializer.
+    /// </summary>
+    /// <param name="asset">
+    /// Detached Asset value to encode.
+    /// </param>
+    /// <returns>
+    /// Complete native source bytes, including the concrete serialized type identity.
+    /// </returns>
     public byte[] EncodeNative(AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
@@ -147,17 +197,30 @@ public sealed class AssetCreationContext
 /// <summary>
 /// Creates a default-constructed native source for an authorable asset type.
 /// </summary>
-/// <typeparam name="TAsset">Concrete serializable asset type.</typeparam>
+/// <typeparam name="TAsset">
+/// Concrete serializable asset type.
+/// </typeparam>
 public abstract class AssetCreationTemplate<TAsset> : AssetCreationTemplate
     where TAsset : AssetObject, new()
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the asset type created by this Editor template.
+    /// </summary>
     public sealed override Type assetType => typeof(TAsset);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a value using this implementation's validated inputs.
+    /// </summary>
+    /// <returns>
+    /// The validated asset object that represents the completed operation.
+    /// </returns>
     public override AssetObject Create() => CreateAsset();
 
-    /// <summary>Creates the initial detached value, allowing specialized deterministic defaults.</summary>
-    /// <returns>A new asset value owned by the caller.</returns>
+    /// <summary>
+    /// Creates the initial detached value, allowing specialized deterministic defaults.
+    /// </summary>
+    /// <returns>
+    /// A new asset value owned by the caller.
+    /// </returns>
     protected virtual TAsset CreateAsset() => new();
 }

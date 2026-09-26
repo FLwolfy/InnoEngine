@@ -30,8 +30,12 @@ public sealed class ShaderInterfaceBinding
     /// <param name="storageAccess">
     /// Required access for storage resources.
     /// </param>
-    /// <param name="nativeName">Adapter-generated reflected symbol, or null when the logical ID is also the symbol.</param>
-    /// <param name="location">Explicit resource slot, or null when the caller assigns an ordered layout.</param>
+    /// <param name="nativeName">
+    /// Adapter-generated reflected symbol, or null when the logical ID is also the symbol.
+    /// </param>
+    /// <param name="location">
+    /// Explicit resource slot, or null when the caller assigns an ordered layout.
+    /// </param>
     public ShaderInterfaceBinding(
         ShaderPropertyId id,
         ShaderPropertyType type,
@@ -89,9 +93,13 @@ public sealed class ShaderInterfaceBinding
     /// </summary>
     public RenderStorageAccess storageAccess { get; }
 
-    /// <summary>Gets the exact reflected symbol emitted by the adapter, distinct from the logical property ID.</summary>
+    /// <summary>
+    /// Gets the exact reflected symbol emitted by the adapter, distinct from the logical property ID.
+    /// </summary>
     public string nativeName { get; }
-    /// <summary>Gets an explicitly compiled resource slot, or null for a caller-assigned layout.</summary>
+    /// <summary>
+    /// Gets an explicitly compiled resource slot, or null for a caller-assigned layout.
+    /// </summary>
     public int? location { get; }
 }
 

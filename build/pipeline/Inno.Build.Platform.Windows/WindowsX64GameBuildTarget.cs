@@ -26,7 +26,9 @@ public sealed class WindowsX64GameBuildTarget : IGameBuildTarget
     /// <param name="serialization">
     /// The serialization registry that owns Shader IR contracts.
     /// </param>
-    /// <param name="types">The active shader extension generation owner.</param>
+    /// <param name="types">
+    /// The active shader extension generation owner.
+    /// </param>
     public WindowsX64GameBuildTarget(
         AssetPipeline assets,
         SerializationRegistry serialization,

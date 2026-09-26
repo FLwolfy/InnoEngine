@@ -11,11 +11,21 @@ namespace Inno.UI;
 /// </summary>
 public readonly record struct UiContextOptions
 {
-    /// <summary>Creates validated context options.</summary>
-    /// <param name="name">A non-empty diagnostic context name.</param>
-    /// <param name="width">The positive initial width in pixels.</param>
-    /// <param name="height">The positive initial height in pixels.</param>
-    /// <param name="density">The positive density-independent pixel ratio.</param>
+    /// <summary>
+    /// Creates validated context options.
+    /// </summary>
+    /// <param name="name">
+    /// A non-empty diagnostic context name.
+    /// </param>
+    /// <param name="width">
+    /// The positive initial width in pixels.
+    /// </param>
+    /// <param name="height">
+    /// The positive initial height in pixels.
+    /// </param>
+    /// <param name="density">
+    /// The positive density-independent pixel ratio.
+    /// </param>
     public UiContextOptions(string name, int width, int height, float density = 1f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -29,23 +39,41 @@ public readonly record struct UiContextOptions
         this.density = density;
     }
 
-    /// <summary>Gets the diagnostic context name.</summary>
+    /// <summary>
+    /// Gets the diagnostic context name.
+    /// </summary>
     public string name { get; }
-    /// <summary>Gets the initial width in pixels.</summary>
+    /// <summary>
+    /// Gets the initial width in pixels.
+    /// </summary>
     public int width { get; }
-    /// <summary>Gets the initial height in pixels.</summary>
+    /// <summary>
+    /// Gets the initial height in pixels.
+    /// </summary>
     public int height { get; }
-    /// <summary>Gets the density-independent pixel ratio.</summary>
+    /// <summary>
+    /// Gets the density-independent pixel ratio.
+    /// </summary>
     public float density { get; }
 }
 
-/// <summary>Contains immutable text in one explicitly selected UI document language.</summary>
+/// <summary>
+/// Contains immutable text in one explicitly selected UI document language.
+/// </summary>
 public sealed class UiDocumentSource
 {
-    /// <summary>Creates a validated in-memory document source.</summary>
-    /// <param name="language">Explicit source language understood by a registered backend.</param>
-    /// <param name="text">Complete immutable document text.</param>
-    /// <param name="sourceUri">Virtual source address used only for diagnostics and relative dependency identity.</param>
+    /// <summary>
+    /// Creates a validated in-memory document source.
+    /// </summary>
+    /// <param name="language">
+    /// Explicit source language understood by a registered backend.
+    /// </param>
+    /// <param name="text">
+    /// Complete immutable document text.
+    /// </param>
+    /// <param name="sourceUri">
+    /// Virtual source address used only for diagnostics and relative dependency identity.
+    /// </param>
     public UiDocumentSource(UiDocumentLanguageId language, string text, string sourceUri = "memory://ui-document")
     {
         if (!language.isValid) throw new ArgumentException("A document source requires an assigned language.", nameof(language));
@@ -56,20 +84,34 @@ public sealed class UiDocumentSource
         this.sourceUri = sourceUri;
     }
 
-    /// <summary>Gets the explicitly selected source language.</summary>
+    /// <summary>
+    /// Gets the explicitly selected source language.
+    /// </summary>
     public UiDocumentLanguageId language { get; }
-    /// <summary>Gets the complete immutable source text.</summary>
+    /// <summary>
+    /// Gets the complete immutable source text.
+    /// </summary>
     public string text { get; }
-    /// <summary>Gets the virtual source address.</summary>
+    /// <summary>
+    /// Gets the virtual source address.
+    /// </summary>
     public string sourceUri { get; }
 }
 
-/// <summary>Contains a language-tagged fragment for a backend-specific document mutation.</summary>
+/// <summary>
+/// Contains a language-tagged fragment for a backend-specific document mutation.
+/// </summary>
 public readonly record struct UiDocumentFragment
 {
-    /// <summary>Creates a validated source fragment.</summary>
-    /// <param name="language">Explicit fragment language.</param>
-    /// <param name="text">Complete fragment text.</param>
+    /// <summary>
+    /// Creates a validated source fragment.
+    /// </summary>
+    /// <param name="language">
+    /// Explicit fragment language.
+    /// </param>
+    /// <param name="text">
+    /// Complete fragment text.
+    /// </param>
     public UiDocumentFragment(UiDocumentLanguageId language, string text)
     {
         if (!language.isValid) throw new ArgumentException("A document fragment requires an assigned language.", nameof(language));
@@ -78,9 +120,13 @@ public readonly record struct UiDocumentFragment
         this.text = text;
     }
 
-    /// <summary>Gets the explicitly selected fragment language.</summary>
+    /// <summary>
+    /// Gets the explicitly selected fragment language.
+    /// </summary>
     public UiDocumentLanguageId language { get; }
-    /// <summary>Gets the complete fragment text.</summary>
+    /// <summary>
+    /// Gets the complete fragment text.
+    /// </summary>
     public string text { get; }
 }
 
@@ -91,10 +137,18 @@ public sealed class UiTextureData
 {
     private readonly byte[] m_pixels;
 
-    /// <summary>Creates a validated immutable texture.</summary>
-    /// <param name="width">The positive texture width.</param>
-    /// <param name="height">The positive texture height.</param>
-    /// <param name="pixels">Tightly packed RGBA8 pixels.</param>
+    /// <summary>
+    /// Creates a validated immutable texture.
+    /// </summary>
+    /// <param name="width">
+    /// The positive texture width.
+    /// </param>
+    /// <param name="height">
+    /// The positive texture height.
+    /// </param>
+    /// <param name="pixels">
+    /// Tightly packed RGBA8 pixels.
+    /// </param>
     public UiTextureData(int width, int height, ReadOnlySpan<byte> pixels)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
@@ -106,11 +160,17 @@ public sealed class UiTextureData
         m_pixels = pixels.ToArray();
     }
 
-    /// <summary>Gets the texture width.</summary>
+    /// <summary>
+    /// Gets the texture width.
+    /// </summary>
     public int width { get; }
-    /// <summary>Gets the texture height.</summary>
+    /// <summary>
+    /// Gets the texture height.
+    /// </summary>
     public int height { get; }
-    /// <summary>Gets the immutable RGBA8 pixels.</summary>
+    /// <summary>
+    /// Gets the immutable RGBA8 pixels.
+    /// </summary>
     public ReadOnlyMemory<byte> pixels => m_pixels;
 }
 
@@ -119,25 +179,48 @@ public sealed class UiTextureData
 /// </summary>
 public enum UiEventType
 {
-    /// <summary>The target was clicked.</summary>
+    /// <summary>
+    /// The target was clicked.
+    /// </summary>
     Click,
-    /// <summary>The target value changed.</summary>
+    /// <summary>
+    /// The target value changed.
+    /// </summary>
     Change,
-    /// <summary>A form was submitted.</summary>
+    /// <summary>
+    /// A form was submitted.
+    /// </summary>
     Submit,
-    /// <summary>The target gained focus.</summary>
+    /// <summary>
+    /// The target gained focus.
+    /// </summary>
     Focus,
-    /// <summary>The target lost focus.</summary>
+    /// <summary>
+    /// The target lost focus.
+    /// </summary>
     Blur,
-    /// <summary>A pointer entered the target.</summary>
+    /// <summary>
+    /// A pointer entered the target.
+    /// </summary>
     MouseEnter,
-    /// <summary>A pointer left the target.</summary>
+    /// <summary>
+    /// A pointer left the target.
+    /// </summary>
     MouseLeave
 }
 
 /// <summary>
 /// Describes one queued document event after a context update.
 /// </summary>
+/// <param name="type">
+/// The ui event type value used to initialize this instance.
+/// </param>
+/// <param name="document">
+/// The ui document handle value used to initialize this instance.
+/// </param>
+/// <param name="targetId">
+/// The string value used to initialize this instance.
+/// </param>
 public readonly record struct UiEvent(
     UiEventType type,
     UiDocumentHandle document,
@@ -148,15 +231,33 @@ public readonly record struct UiEvent(
 /// </summary>
 public sealed class UiInputSnapshot
 {
-    /// <summary>Creates one backend-neutral UI input snapshot.</summary>
-    /// <param name="mousePosition">Pointer position in surface coordinates.</param>
-    /// <param name="scrollDelta">Pointer wheel movement.</param>
-    /// <param name="modifiers">Active keyboard modifiers.</param>
-    /// <param name="keysPressed">Physical keys pressed this frame.</param>
-    /// <param name="keysReleased">Physical keys released this frame.</param>
-    /// <param name="buttonsPressed">Pointer buttons pressed this frame.</param>
-    /// <param name="buttonsReleased">Pointer buttons released this frame.</param>
-    /// <param name="textInput">Ordered Unicode text commits.</param>
+    /// <summary>
+    /// Creates one backend-neutral UI input snapshot.
+    /// </summary>
+    /// <param name="mousePosition">
+    /// Pointer position in surface coordinates.
+    /// </param>
+    /// <param name="scrollDelta">
+    /// Pointer wheel movement.
+    /// </param>
+    /// <param name="modifiers">
+    /// Active keyboard modifiers.
+    /// </param>
+    /// <param name="keysPressed">
+    /// Physical keys pressed this frame.
+    /// </param>
+    /// <param name="keysReleased">
+    /// Physical keys released this frame.
+    /// </param>
+    /// <param name="buttonsPressed">
+    /// Pointer buttons pressed this frame.
+    /// </param>
+    /// <param name="buttonsReleased">
+    /// Pointer buttons released this frame.
+    /// </param>
+    /// <param name="textInput">
+    /// Ordered Unicode text commits.
+    /// </param>
     public UiInputSnapshot(
         Vector2 mousePosition,
         Vector2 scrollDelta,
@@ -177,20 +278,36 @@ public sealed class UiInputSnapshot
         this.textInput = textInput ?? throw new ArgumentNullException(nameof(textInput));
     }
 
-    /// <summary>Gets the pointer position.</summary>
+    /// <summary>
+    /// Gets the pointer position.
+    /// </summary>
     public Vector2 mousePosition { get; }
-    /// <summary>Gets pointer wheel movement.</summary>
+    /// <summary>
+    /// Gets pointer wheel movement.
+    /// </summary>
     public Vector2 scrollDelta { get; }
-    /// <summary>Gets active keyboard modifiers.</summary>
+    /// <summary>
+    /// Gets active keyboard modifiers.
+    /// </summary>
     public KeyModifier modifiers { get; }
-    /// <summary>Gets physical keys pressed this frame.</summary>
+    /// <summary>
+    /// Gets physical keys pressed this frame.
+    /// </summary>
     public IReadOnlyCollection<KeyCode> keysPressed { get; }
-    /// <summary>Gets physical keys released this frame.</summary>
+    /// <summary>
+    /// Gets physical keys released this frame.
+    /// </summary>
     public IReadOnlyCollection<KeyCode> keysReleased { get; }
-    /// <summary>Gets pointer buttons pressed this frame.</summary>
+    /// <summary>
+    /// Gets pointer buttons pressed this frame.
+    /// </summary>
     public IReadOnlyCollection<MouseButton> buttonsPressed { get; }
-    /// <summary>Gets pointer buttons released this frame.</summary>
+    /// <summary>
+    /// Gets pointer buttons released this frame.
+    /// </summary>
     public IReadOnlyCollection<MouseButton> buttonsReleased { get; }
-    /// <summary>Gets ordered Unicode text commits.</summary>
+    /// <summary>
+    /// Gets ordered Unicode text commits.
+    /// </summary>
     public IReadOnlyList<string> textInput { get; }
 }

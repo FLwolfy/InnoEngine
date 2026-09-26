@@ -9,14 +9,18 @@ namespace Inno.Editor.Panel.Global;
 [EditorSettingPath("Editor/Rendering")]
 internal sealed class EditorRenderingSettingsPage : EditorSetting
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description => "Control editor presentation independently of game simulation timing.";
 }
 
 [EditorSettingPath("Editor/Rendering/Vertical Sync", order: 10)]
 internal sealed class VerticalSyncSetting : EditorSetting
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a new value initialized to this setting's canonical default state.
+    /// </summary>
     public override EditorSettingObject defaultValue
     {
         get
@@ -26,11 +30,20 @@ internal sealed class VerticalSyncSetting : EditorSetting
             return result;
         }
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Frame Rate";
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description => "Synchronize presentation to the display refresh rate. Disable to allow higher frame rates.";
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(EditorSettingObject setting)
     {
         bool enabled = setting.GetAsBoolean("enabled", false);
@@ -42,7 +55,9 @@ internal sealed class VerticalSyncSetting : EditorSetting
 [EditorSettingPath("Editor/Rendering/Maximum Frame Rate", order: 20)]
 internal sealed class MaximumFrameRateSetting : EditorSetting
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a new value initialized to this setting's canonical default state.
+    /// </summary>
     public override EditorSettingObject defaultValue
     {
         get
@@ -52,11 +67,20 @@ internal sealed class MaximumFrameRateSetting : EditorSetting
             return result;
         }
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Frame Rate";
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description => "Software frame-rate limit. Zero means Unlimited. Fixed-step simulation is unaffected.";
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(EditorSettingObject setting)
     {
         int rate = setting.GetAsInt32("value", 0);
@@ -70,13 +94,23 @@ internal sealed class MaximumFrameRateSetting : EditorSetting
 [EditorModule("editor-frame-pacing", order: 20)]
 internal sealed class EditorFramePacingModule(EditorSettings settings, FramePacingOptions pacing) : EditorModule
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStart(EditorContext context)
     {
         Apply(settings);
         settings.changed += Apply;
     }
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context) => settings.changed -= Apply;
 
     private void Apply(EditorSettings current)

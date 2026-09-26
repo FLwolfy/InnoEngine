@@ -6,14 +6,22 @@ using Inno.Core.Diagnostics;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Owns an immutable language registration snapshot for one authoring generation.</summary>
+/// <summary>
+/// Owns an immutable language registration snapshot for one authoring generation.
+/// </summary>
 public sealed class ShaderSourceFrontendCatalog
 {
     private readonly Dictionary<string, IShaderSourceFrontend> m_frontends = new(StringComparer.Ordinal);
 
-    /// <summary>Captures a validated language provider set without a process-global registry.</summary>
-    /// <param name="frontends">Providers owned and retired by the calling generation.</param>
-    /// <exception cref="ArgumentException">Language IDs are missing or duplicated.</exception>
+    /// <summary>
+    /// Captures a validated language provider set without a process-global registry.
+    /// </summary>
+    /// <param name="frontends">
+    /// Providers owned and retired by the calling generation.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Language IDs are missing or duplicated.
+    /// </exception>
     public ShaderSourceFrontendCatalog(IEnumerable<IShaderSourceFrontend> frontends)
     {
         ArgumentNullException.ThrowIfNull(frontends);
@@ -23,16 +31,28 @@ public sealed class ShaderSourceFrontendCatalog
                 throw new ArgumentException("Source frontends require unique, assigned language IDs.", nameof(frontends));
         languageIds = new ReadOnlyCollection<string>(new List<string>(m_frontends.Keys));
     }
-    /// <summary>Gets registered language identities for source import settings.</summary>
+    /// <summary>
+    /// Gets registered language identities for source import settings.
+    /// </summary>
     public IReadOnlyList<string> languageIds { get; }
 
     internal IEnumerable<IShaderSourceFrontend> providers => m_frontends.Values;
 
-    /// <summary>Analyzes source using an explicitly selected language.</summary>
-    /// <param name="languageId">Registered language identity, never inferred from the active graphics API.</param>
-    /// <param name="request">Immutable source analysis request.</param>
-    /// <returns>The selected frontend's analysis result.</returns>
-    /// <exception cref="NotSupportedException">The requested language provider is unavailable.</exception>
+    /// <summary>
+    /// Analyzes source using an explicitly selected language.
+    /// </summary>
+    /// <param name="languageId">
+    /// Registered language identity, never inferred from the active graphics API.
+    /// </param>
+    /// <param name="request">
+    /// Immutable source analysis request.
+    /// </param>
+    /// <returns>
+    /// The selected frontend's analysis result.
+    /// </returns>
+    /// <exception cref="NotSupportedException">
+    /// The requested language provider is unavailable.
+    /// </exception>
     public ShaderSourceAnalysis Analyze(string languageId, ShaderSourceRequest request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(languageId);
@@ -42,10 +62,18 @@ public sealed class ShaderSourceFrontendCatalog
             : throw new NotSupportedException($"Shader source language '{languageId}' is unavailable.");
     }
 
-    /// <summary>Analyzes all selected implementations and variants against one immutable provider generation.</summary>
-    /// <param name="implementations">Explicit implementation/configuration candidates; no native-code translation is attempted.</param>
-    /// <returns>Frozen source inputs and a common interface, or recoverable missing/interface diagnostics.</returns>
-    /// <exception cref="ArgumentException">The candidate list is empty or contains null or duplicate implementation IDs.</exception>
+    /// <summary>
+    /// Analyzes all selected implementations and variants against one immutable provider generation.
+    /// </summary>
+    /// <param name="implementations">
+    /// Explicit implementation/configuration candidates; no native-code translation is attempted.
+    /// </param>
+    /// <returns>
+    /// Frozen source inputs and a common interface, or recoverable missing/interface diagnostics.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The candidate list is empty or contains null or duplicate implementation IDs.
+    /// </exception>
     public ShaderSourceModuleAnalysis AnalyzeModule(IEnumerable<ShaderSourceImplementationRequest> implementations)
     {
         ArgumentNullException.ThrowIfNull(implementations);

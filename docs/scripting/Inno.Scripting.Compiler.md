@@ -24,7 +24,7 @@ Shader 创作扩展通过 [`InnoEditor.Rendering.Shaders`](../render/Inno.Render
 不在 Compiler 中增加 Shader 类型或程序集白名单。新增集成用例实际编译节点扩展，并读取生成 IDE reference 的公开 metadata：
 Editor 可见 `IShaderNodeCompiler`，Runtime 不可见；Runtime 脚本直接引用该命名空间必须编译失败。
 
-Project `Assets` 的 `~` 目录是普通 authoring content，其中的 `.cs` 与 `.iasmdef` 正常进入 authoring generation 和 IDE project；runtime deployment 始终剔除该子树。只读 `.iplugin` Mount 中的 `~` 目录才是 `.isample`，其脚本在显式 `Import Sample` 到 Project 前不会进入 Plugin assembly。
+Project `Assets` 的 `~` 目录是普通 authoring content，其中的 `.cs` 与 `.iasmdef` 进入 authoring generation 和 IDE project；runtime deployment 始终剔除该子树。只读 `.iplugin` Mount 中的 `~` 目录是 `.isample`，其脚本编译到独立的作者端临时程序集，供安装态样例场景的 Editor Play 使用，不进入插件运行程序集和 Player。`Import Sample` 后的可写副本进入 Project 普通运行时脚本编译；`CSharpSampleSourceRewriter` 在导入事务里用 Roslyn 重写显式 `StableTypeId`，并登记新旧类型身份供场景引用重映射。
 
 Compiler 为每个产物写入 `Inno.AssetSource` assembly metadata。Project assembly 写入 `project`，Plugin assembly 写入 manifest Plugin ID；`Assets.LocalPath` 以此解析同源资源，使业务源码在 Project 开发态和 `.iplugin` 安装态保持完全一致。
 

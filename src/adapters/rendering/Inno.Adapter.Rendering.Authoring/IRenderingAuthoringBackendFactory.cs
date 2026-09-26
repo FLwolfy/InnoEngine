@@ -8,7 +8,9 @@ namespace Inno.Adapter.Rendering;
 /// </summary>
 public interface IRenderingAuthoringBackendFactory
 {
-    /// <summary>Gets the runtime backend identities supported by this authoring composition.</summary>
+    /// <summary>
+    /// Gets the runtime backend identities supported by this authoring composition.
+    /// </summary>
     IReadOnlyList<RenderingBackendId> supportedBackends { get; }
 
     /// <summary>

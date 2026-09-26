@@ -27,7 +27,9 @@ public sealed class AssetArtifactWriter
     /// <param name="cancellationToken">
     /// Cancellation for the write operation.
     /// </param>
-    /// <param name="deploymentScope">Whether runtime packages retain this output.</param>
+    /// <param name="deploymentScope">
+    /// Whether runtime packages retain this output.
+    /// </param>
     /// <returns>
     /// A completed operation after the output has been staged.
     /// </returns>

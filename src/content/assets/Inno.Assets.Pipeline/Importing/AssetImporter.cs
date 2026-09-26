@@ -17,7 +17,9 @@ public sealed class AssetImporterAttribute : Attribute
     /// <summary>
     /// Creates importer discovery metadata.
     /// </summary>
-    /// <param name="id">Globally stable importer protocol identifier.</param>
+    /// <param name="id">
+    /// Globally stable importer protocol identifier.
+    /// </param>
     public AssetImporterAttribute(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -166,12 +168,14 @@ internal readonly struct AssetImportProduct(
     AssetObject asset,
     IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs,
     IReadOnlyList<string> diagnostics,
-    IReadOnlySet<string> authoringOutputs)
+    IReadOnlySet<string> authoringOutputs,
+    AssetDeploymentScope? deploymentScope)
 {
     internal AssetObject asset { get; } = asset ?? throw new ArgumentNullException(nameof(asset));
     internal IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs { get; } = outputs;
     internal IReadOnlyList<string> diagnostics { get; } = diagnostics;
     internal IReadOnlySet<string> authoringOutputs { get; } = authoringOutputs;
+    internal AssetDeploymentScope? deploymentScope { get; } = deploymentScope;
 
     internal ReadOnlyMemory<byte> runtimePayload
         => outputs.TryGetValue("runtime", out ReadOnlyMemory<byte> bytes)

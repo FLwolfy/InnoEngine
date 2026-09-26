@@ -57,7 +57,9 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         m_programs.Drain();
     }
 
-    /// <summary>Retires every program publication without releasing dependencies before pending native retirement completes.</summary>
+    /// <summary>
+    /// Retires every program publication without releasing dependencies before pending native retirement completes.
+    /// </summary>
     public void Dispose()
     {
         m_stopping = true;

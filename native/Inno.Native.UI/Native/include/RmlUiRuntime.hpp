@@ -175,6 +175,7 @@ public:
         std::span<Byte> pixels);
 
     Result ProcessMouseMove(std::uint64_t context, std::int32_t x, std::int32_t y, std::int32_t modifiers);
+    Result HasElementAtPoint(std::uint64_t context, std::int32_t x, std::int32_t y, std::uint8_t& hit);
     Result ProcessMouseButton(
         std::uint64_t context,
         std::int32_t button,

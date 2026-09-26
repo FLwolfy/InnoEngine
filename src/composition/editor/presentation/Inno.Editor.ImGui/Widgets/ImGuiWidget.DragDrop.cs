@@ -208,15 +208,33 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Accepts an unmanaged payload on an explicit screen-space rectangle.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="minimum">Minimum screen coordinate of the complete target.</param>
-    /// <param name="maximum">Maximum screen coordinate of the complete target.</param>
-    /// <param name="targetId">ImGui identifier unique within the current window.</param>
-    /// <param name="payload">Previewed or delivered payload value.</param>
-    /// <param name="isPreviewing">Whether a compatible payload is hovering over the target.</param>
-    /// <param name="drawDefaultHighlight">Whether ImGui draws its default target rectangle.</param>
-    /// <returns><see langword="true"/> only when a compatible payload is delivered.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="minimum">
+    /// Minimum screen coordinate of the complete target.
+    /// </param>
+    /// <param name="maximum">
+    /// Maximum screen coordinate of the complete target.
+    /// </param>
+    /// <param name="targetId">
+    /// ImGui identifier unique within the current window.
+    /// </param>
+    /// <param name="payload">
+    /// Previewed or delivered payload value.
+    /// </param>
+    /// <param name="isPreviewing">
+    /// Whether a compatible payload is hovering over the target.
+    /// </param>
+    /// <param name="drawDefaultHighlight">
+    /// Whether ImGui draws its default target rectangle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> only when a compatible payload is delivered.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="payloadType"/> is empty or whitespace.
     /// </exception>

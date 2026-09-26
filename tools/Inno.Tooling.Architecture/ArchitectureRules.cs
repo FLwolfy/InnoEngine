@@ -227,8 +227,7 @@ internal static partial class ArchitectureRules
                 if (node.relative == "native/Inno.Native.ImGui/Bindings/Extension/Inno.Native.ImGui.BindingExtension.csproj" &&
                     (include is "$(BindGenRoot)/src/BGCS/BGCS.csproj" or "$(BindGenRoot)/src/BGCS.Core/BGCS.Core.csproj"))
                     continue;
-                if (node.relative.StartsWith("native/Inno.Native.", StringComparison.Ordinal) &&
-                    include == "$(BGCSRuntimeProject)" &&
+                if (include == "$(BGCSRuntimeProject)" &&
                     (string?)reference.Attribute("Condition") == "'$(BGCSRuntimeProject)' != ''")
                     continue;
                 string normalizedInclude = include

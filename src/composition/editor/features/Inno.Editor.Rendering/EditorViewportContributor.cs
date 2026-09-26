@@ -114,7 +114,10 @@ public sealed class EditorViewportContext
         int pixelHeight,
         EditorViewportNavigationState navigation,
         ContentReadScope content,
-        EditorViewportPresentation presentation)
+        EditorViewportPresentation presentation,
+        IViewContentCollector viewContent,
+        ulong frameIndex,
+        RenderOutputInput input)
     {
         this.editor = editor;
         this.interactions = interactions;
@@ -125,6 +128,17 @@ public sealed class EditorViewportContext
         this.navigation = navigation;
         this.content = content;
         this.presentation = presentation;
+        this.viewContent = viewContent;
+        this.frameIndex = frameIndex;
+        this.input = input;
+    }
+
+    internal EditorViewportContext ForLayer(RenderOutputLayer layer)
+    {
+        ArgumentNullException.ThrowIfNull(layer);
+        return new EditorViewportContext(editor, interactions, kind, viewportId,
+            pixelWidth, pixelHeight, navigation, content, presentation,
+            new SelectedViewContentCollector(viewContent, layer.sourceIds), frameIndex, input);
     }
 
     /// <summary>
@@ -171,6 +185,20 @@ public sealed class EditorViewportContext
     /// Gets host-selected presentation preferences for this viewport.
     /// </summary>
     public EditorViewportPresentation presentation { get; }
+
+    /// <summary>
+    /// Gets the active generation's model-independent world-content collector.
+    /// </summary>
+    public IViewContentCollector viewContent { get; }
+
+    /// <summary>
+    /// Gets the frame index shared by all Editor views in this output frame.
+    /// </summary>
+    public ulong frameIndex { get; }
+    /// <summary>
+    /// Gets input located in this viewport's physical pixels.
+    /// </summary>
+    public RenderOutputInput input { get; }
 }
 
 /// <summary>
@@ -184,15 +212,26 @@ public readonly record struct EditorViewportPresentation
     /// <param name="backgroundColor">
     /// Linear clear color preferred by the host panel.
     /// </param>
-    public EditorViewportPresentation(Color backgroundColor)
+    /// <param name="pixelDensity">
+    /// Physical render pixels per logical presentation unit.
+    /// </param>
+    public EditorViewportPresentation(Color backgroundColor, float pixelDensity = 1f)
     {
+        if (!float.IsFinite(pixelDensity) || pixelDensity <= 0f)
+            throw new ArgumentOutOfRangeException(nameof(pixelDensity));
         this.backgroundColor = backgroundColor;
+        this.pixelDensity = pixelDensity;
     }
 
     /// <summary>
     /// Gets the linear clear color preferred by the host panel.
     /// </summary>
     public Color backgroundColor { get; }
+
+    /// <summary>
+    /// Gets physical render pixels per logical presentation unit.
+    /// </summary>
+    public float pixelDensity { get; }
 }
 
 /// <summary>

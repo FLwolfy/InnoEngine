@@ -10,43 +10,69 @@ namespace Inno.Editor.ImGui;
 /// </summary>
 public static class EditorPalette
 {
-    /// <summary>Gets zero opacity for invisible surfaces.</summary>
+    /// <summary>
+    /// Gets zero opacity for invisible surfaces.
+    /// </summary>
     public const float opacityNone = 0f;
 
-    /// <summary>Gets trace opacity for barely perceptible alternating surfaces.</summary>
+    /// <summary>
+    /// Gets trace opacity for barely perceptible alternating surfaces.
+    /// </summary>
     public const float opacityTrace = 0.005f;
 
-    /// <summary>Gets faint opacity for quiet guides and separators.</summary>
+    /// <summary>
+    /// Gets faint opacity for quiet guides and separators.
+    /// </summary>
     public const float opacityFaint = 0.04f;
 
-    /// <summary>Gets subtle opacity for selection washes and low-emphasis overlays.</summary>
+    /// <summary>
+    /// Gets subtle opacity for selection washes and low-emphasis overlays.
+    /// </summary>
     public const float opacitySubtle = 0.12f;
 
-    /// <summary>Gets soft opacity for tinted container surfaces.</summary>
+    /// <summary>
+    /// Gets soft opacity for tinted container surfaces.
+    /// </summary>
     public const float opacitySoft = 0.20f;
 
-    /// <summary>Gets muted opacity for shadows and subdued outlines.</summary>
+    /// <summary>
+    /// Gets muted opacity for shadows and subdued outlines.
+    /// </summary>
     public const float opacityMuted = 0.28f;
 
-    /// <summary>Gets medium opacity for secondary content and overlays.</summary>
+    /// <summary>
+    /// Gets medium opacity for secondary content and overlays.
+    /// </summary>
     public const float opacityMedium = 0.45f;
 
-    /// <summary>Gets strong opacity for accents that remain translucent.</summary>
+    /// <summary>
+    /// Gets strong opacity for accents that remain translucent.
+    /// </summary>
     public const float opacityStrong = 0.55f;
 
-    /// <summary>Gets prominent opacity for navigation emphasis.</summary>
+    /// <summary>
+    /// Gets prominent opacity for navigation emphasis.
+    /// </summary>
     public const float opacityProminent = 0.70f;
 
-    /// <summary>Gets emphasized opacity for borders and interactive grips.</summary>
+    /// <summary>
+    /// Gets emphasized opacity for borders and interactive grips.
+    /// </summary>
     public const float opacityEmphasized = 0.82f;
 
-    /// <summary>Gets near-opaque opacity for active overlays.</summary>
+    /// <summary>
+    /// Gets near-opaque opacity for active overlays.
+    /// </summary>
     public const float opacityNearOpaque = 0.92f;
 
-    /// <summary>Gets popup opacity, retaining only enough transparency for depth.</summary>
+    /// <summary>
+    /// Gets popup opacity, retaining only enough transparency for depth.
+    /// </summary>
     public const float opacityPopup = 0.985f;
 
-    /// <summary>Gets full opacity.</summary>
+    /// <summary>
+    /// Gets full opacity.
+    /// </summary>
     public const float opacityOpaque = 1f;
 
     /// <summary>
@@ -74,13 +100,19 @@ public static class EditorPalette
     /// </summary>
     public static Vector4 warning { get; } = new(0.9f, 0.65f, 0.25f, opacityOpaque);
 
-    /// <summary>Gets the neutral Shader node heading surface.</summary>
+    /// <summary>
+    /// Gets the neutral Shader node heading surface.
+    /// </summary>
     public static Vector4 shaderNodeHeader { get; } = new(0.16f, 0.17f, 0.20f, opacityOpaque);
 
-    /// <summary>Gets the orange heading surface shared by Shader input nodes.</summary>
+    /// <summary>
+    /// Gets the orange heading surface shared by Shader input nodes.
+    /// </summary>
     public static Vector4 shaderInputNodeHeader { get; } = new(0.43f, 0.245f, 0.085f, opacityOpaque);
 
-    /// <summary>Gets the purple heading surface shared by Shader output nodes.</summary>
+    /// <summary>
+    /// Gets the purple heading surface shared by Shader output nodes.
+    /// </summary>
     public static Vector4 shaderOutputNodeHeader { get; } = new(0.25f, 0.19f, 0.34f, opacityOpaque);
 
     /// <summary>
@@ -642,8 +674,15 @@ public static class EditorPalette
     /// <summary>
     /// Returns a theme color with a caller-selected opacity, normally one of the shared opacity levels.
     /// </summary>
-    /// <param name="color">Base RGB color.</param>
-    /// <param name="opacity">Replacement alpha in the inclusive zero-to-one range.</param>
+    /// <param name="color">
+    /// Base RGB color.
+    /// </param>
+    /// <param name="opacity">
+    /// Replacement alpha in the inclusive zero-to-one range.
+    /// </param>
+    /// <returns>
+    /// The validated vector4 that represents the completed operation.
+    /// </returns>
     public static Vector4 WithOpacity(Vector4 color, float opacity)
         => new(color.X, color.Y, color.Z, Math.Clamp(opacity, opacityNone, opacityOpaque));
 }

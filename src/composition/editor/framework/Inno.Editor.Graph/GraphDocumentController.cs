@@ -90,7 +90,9 @@ public sealed class GraphDocumentController
     /// <param name="historyName">
     /// Concise artist-facing history entry name.
     /// </param>
-    /// <param name="gestureId">Unique active gesture identity for continuous samples, or null for an independent edit.</param>
+    /// <param name="gestureId">
+    /// Unique active gesture identity for continuous samples, or null for an independent edit.
+    /// </param>
     public void ReplaceDocument(GraphDocument replacement, string historyName, string? gestureId = null)
     {
         ArgumentNullException.ThrowIfNull(replacement);
@@ -267,7 +269,9 @@ public sealed class GraphDocumentController
     /// <param name="value">
     /// New neutral value.
     /// </param>
-    /// <param name="gestureId">Unique current text/numeric gesture identity, or null for an independent edit.</param>
+    /// <param name="gestureId">
+    /// Unique current text/numeric gesture identity, or null for an independent edit.
+    /// </param>
     public void SetNodeValue(GraphNodeId nodeId, string propertyId, GraphSerializedValue value, string? gestureId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -344,7 +348,9 @@ public sealed class GraphDocumentController
     /// <returns>
     /// New node identities in clipboard document order.
     /// </returns>
-    /// <param name="remapNode">Optional synchronous domain remapping of neutral node values after identity allocation. The callback is never stored in History.</param>
+    /// <param name="remapNode">
+    /// Optional synchronous domain remapping of neutral node values after identity allocation. The callback is never stored in History.
+    /// </param>
     public IReadOnlyList<GraphNodeId> Paste(GraphClipboardData clipboard, GraphPosition offset,
         Action<GraphNodeRecord, IReadOnlyDictionary<GraphNodeId, GraphNodeId>>? remapNode = null)
     {

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 using Inno.Core.Input;
+using Inno.Core.Mathematics;
 using Inno.Native.UI;
 using Inno.Text;
 using Inno.UI;
@@ -26,13 +27,16 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private InnoUiRuntime m_runtime;
     private readonly Dictionary<string, string> m_fontAliases = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<string> m_fallbackAliases = [];
     private bool m_disposed;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the implementation id text used by the current instance.
+    /// </summary>
     public string implementationId => RmlUiIdentifiers.backend.value;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the immutable feature and limit set reported by the active graphics backend.
+    /// </summary>
     public UiBackendCapabilities capabilities => S_CAPABILITIES;
 
     /// <summary>
@@ -45,7 +49,15 @@ public sealed unsafe class RmlUiBackend : IUiBackend
             throw CreateNativeException("create UI runtime", InnoUiResult.UnknownError);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a context using this implementation's validated inputs.
+    /// </summary>
+    /// <param name="options">
+    /// The validated configuration that controls this operation.
+    /// </param>
+    /// <returns>
+    /// The validated ui context handle that represents the completed operation.
+    /// </returns>
     public UiContextHandle CreateContext(UiContextOptions options)
     {
         EnsureActive();
@@ -55,14 +67,33 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return new UiContextHandle(value);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Destroys the context after its in-flight references retire.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void DestroyContext(UiContextHandle context)
     {
         EnsureActive();
         ThrowIfFailed(UiNative.DestroyContext(m_runtime, Require(context)), "destroy UI context");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the viewport state and applies the resulting invariants.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="width">
+    /// The width in logical units or pixels required by this operation.
+    /// </param>
+    /// <param name="height">
+    /// The height in logical units or pixels required by this operation.
+    /// </param>
+    /// <param name="density">
+    /// The density consumed by set viewport; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void SetViewport(UiContextHandle context, int width, int height, float density)
     {
         EnsureActive();
@@ -73,7 +104,18 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         ThrowIfFailed(UiNative.SetViewport(m_runtime, Require(context), width, height, density), "set UI viewport");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Loads a document into the specified independent UI context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="source">
+    /// The source value or location read by this operation.
+    /// </param>
+    /// <returns>
+    /// The validated ui document handle that represents the completed operation.
+    /// </returns>
     public UiDocumentHandle LoadDocument(UiContextHandle context, UiDocumentSource source)
     {
         EnsureActive();
@@ -85,28 +127,69 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return new UiDocumentHandle(document);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Makes the selected document visible in its owning UI context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by show document; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void ShowDocument(UiContextHandle context, UiDocumentHandle document)
     {
         EnsureActive();
         ThrowIfFailed(UiNative.ShowDocument(m_runtime, Require(context), Require(document)), "show UI document");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Hides the selected document while retaining its state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by hide document; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void HideDocument(UiContextHandle context, UiDocumentHandle document)
     {
         EnsureActive();
         ThrowIfFailed(UiNative.HideDocument(m_runtime, Require(context), Require(document)), "hide UI document");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Closes the selected document and releases its retained state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by close document; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void CloseDocument(UiContextHandle context, UiDocumentHandle document)
     {
         EnsureActive();
         ThrowIfFailed(UiNative.CloseDocument(m_runtime, Require(context), Require(document)), "close UI document");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the text state and applies the resulting invariants.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by set text; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="elementId">
+    /// The element id text validated by the set text operation.
+    /// </param>
+    /// <param name="text">
+    /// The text text validated by the set text operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool SetText(UiContextHandle context, UiDocumentHandle document, string elementId, string text)
     {
         EnsureActive();
@@ -118,7 +201,24 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return changed != 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the content state and applies the resulting invariants.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by set content; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="elementId">
+    /// The element id text validated by the set content operation.
+    /// </param>
+    /// <param name="content">
+    /// The content consumed by set content; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool SetContent(
         UiContextHandle context,
         UiDocumentHandle document,
@@ -139,7 +239,27 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return changed != 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the attribute state and applies the resulting invariants.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by set attribute; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="elementId">
+    /// The element id text validated by the set attribute operation.
+    /// </param>
+    /// <param name="name">
+    /// The human-readable name used for presentation and diagnostics.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool SetAttribute(
         UiContextHandle context,
         UiDocumentHandle document,
@@ -163,7 +283,27 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return changed != 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the class state and applies the resulting invariants.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="document">
+    /// The document consumed by set class; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="elementId">
+    /// The element id text validated by the set class operation.
+    /// </param>
+    /// <param name="className">
+    /// The class name text validated by the set class operation.
+    /// </param>
+    /// <param name="active">
+    /// Whether active behavior is enabled while set class executes.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool SetClass(
         UiContextHandle context,
         UiDocumentHandle document,
@@ -186,14 +326,22 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         return changed != 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Registers a font face for document text rendering.
+    /// </summary>
+    /// <param name="registration">
+    /// The registration consumed by register font; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void RegisterFont(UiFontRegistration registration)
     {
         EnsureActive();
         if (registration.faceIndex != 0)
             throw new UiCapabilityUnavailableException(UiBackendCapability.FontCollectionFaceSelection);
-        string contentHash = Convert.ToHexString(SHA256.HashData(registration.data.Span)).ToLowerInvariant();
-        string physicalFamily = $"__inno_{contentHash[..24]}_{(int)registration.style}_{registration.weight}";
+        // All weights and styles of one declared family must share one native family.
+        // Document imports give each family a private name before it reaches this backend.
+        string familyHash = Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(registration.family.ToLowerInvariant()))).ToLowerInvariant();
+        string physicalFamily = $"__inno_{familyHash[..24]}";
         ReadOnlySpan<byte> data = registration.data.Span;
         using var family = new Utf8String(physicalFamily);
         fixed (byte* bytes = data)
@@ -208,11 +356,20 @@ public sealed unsafe class RmlUiBackend : IUiBackend
                 0), "register UI font");
         }
         m_fontAliases[registration.family] = physicalFamily;
-        if (registration.fallback && !m_fallbackAliases.Exists(value => string.Equals(value, physicalFamily, StringComparison.Ordinal)))
-            m_fallbackAliases.Add(physicalFamily);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Registers a named RGBA texture source for UI document drawing.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="source">
+    /// The source value or location read by this operation.
+    /// </param>
+    /// <param name="texture">
+    /// The texture consumed by register texture; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void RegisterTexture(UiContextHandle context, string source, UiTextureData texture)
     {
         EnsureActive();
@@ -233,7 +390,36 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Tests whether an interactive document element occupies the supplied point.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="position">
+    /// The position consumed by has element at point; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool HasElementAtPoint(UiContextHandle context, Vector2 position)
+    {
+        EnsureActive();
+        byte hit = 0;
+        ThrowIfFailed(UiNative.HasElementAtPoint(m_runtime, Require(context),
+            (int)position.x, (int)position.y, ref hit), "query UI element hit");
+        return hit != 0;
+    }
+
+    /// <summary>
+    /// Recomputes owned state from the current validated inputs.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <param name="input">
+    /// The input consumed by update; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void Update(UiContextHandle context, UiInputSnapshot input)
     {
         EnsureActive();
@@ -263,7 +449,15 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         ThrowIfFailed(UiNative.Update(m_runtime, handle), "update UI context");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Records value rendering for the current frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// The validated ui render frame that represents the completed operation.
+    /// </returns>
     public UiRenderFrame Render(UiContextHandle context)
     {
         EnsureActive();
@@ -329,7 +523,15 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Returns and clears events emitted by this UI context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public IReadOnlyList<UiEvent> DrainEvents(UiContextHandle context)
     {
         EnsureActive();
@@ -431,13 +633,12 @@ public sealed unsafe class RmlUiBackend : IUiBackend
         => S_FONT_FAMILY.Replace(source, match =>
         {
             string[] requested = match.Groups[2].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            var resolved = new List<string>(requested.Length + m_fallbackAliases.Count);
+            var resolved = new List<string>(requested.Length);
             foreach (string item in requested)
             {
                 string logical = item.Trim('\'', '"');
                 resolved.Add(m_fontAliases.TryGetValue(logical, out string? alias) ? alias : item);
             }
-            resolved.AddRange(m_fallbackAliases);
             return match.Groups[1].Value + string.Join(", ", resolved);
         });
 
@@ -475,12 +676,24 @@ public sealed unsafe class RmlUiBackend : IUiBackend
     {
         private readonly nint m_memory;
 
-        public Utf8String(string value)
+        /// <summary>
+        /// Creates a validated utf8string instance.
+        /// </summary>
+        /// <param name="value">
+        /// The concrete value read or transformed by this operation.
+        /// </param>
+public Utf8String(string value)
             => m_memory = Marshal.StringToCoTaskMemUTF8(value);
 
-        public byte* pointer => (byte*)m_memory;
+        /// <summary>
+        /// Gets the native pointer owned by this backend handle.
+        /// </summary>
+public byte* pointer => (byte*)m_memory;
 
-        public void Dispose() => Marshal.FreeCoTaskMem(m_memory);
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+public void Dispose() => Marshal.FreeCoTaskMem(m_memory);
     }
 
     private void EnsureActive() => ObjectDisposedException.ThrowIf(m_disposed, this);

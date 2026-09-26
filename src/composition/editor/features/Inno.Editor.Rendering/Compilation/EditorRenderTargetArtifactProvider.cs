@@ -54,7 +54,9 @@ public sealed partial class EditorRenderTargetArtifactProvider : IRenderTargetAr
     /// <exception cref="ArgumentNullException">
     /// Thrown when any required service is null.
     /// </exception>
-    /// <param name="types">The shared authoring type generation owner for graph and source extensions.</param>
+    /// <param name="types">
+    /// The shared authoring type generation owner for graph and source extensions.
+    /// </param>
     public EditorRenderTargetArtifactProvider(
         AssetPipeline assets,
         SerializationRegistry serialization,
@@ -137,7 +139,15 @@ public sealed partial class EditorRenderTargetArtifactProvider : IRenderTargetAr
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reads and validates the shader definition value from its authoritative source.
+    /// </summary>
+    /// <param name="artifact">
+    /// The resolved immutable artifact payload returned to the caller.
+    /// </param>
+    /// <returns>
+    /// The validated shader definition that represents the completed operation.
+    /// </returns>
     public ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact)
     {
         ArgumentNullException.ThrowIfNull(artifact);
@@ -146,11 +156,21 @@ public sealed partial class EditorRenderTargetArtifactProvider : IRenderTargetAr
             AssetSerializationContext.Create(m_assets));
     }
 
-    /// <summary>Schedules compilation if required and reports saving-independent state for the exact shader, variant and device target.</summary>
-    /// <param name="shader">Current imported shader.</param>
-    /// <param name="variant">Selected keyword variant.</param>
-    /// <param name="capabilities">Current device capabilities.</param>
-    /// <returns>A detached status and diagnostic snapshot; last-good is explicit and never implies current-source success.</returns>
+    /// <summary>
+    /// Schedules compilation if required and reports saving-independent state for the exact shader, variant and device target.
+    /// </summary>
+    /// <param name="shader">
+    /// Current imported shader.
+    /// </param>
+    /// <param name="variant">
+    /// Selected keyword variant.
+    /// </param>
+    /// <param name="capabilities">
+    /// Current device capabilities.
+    /// </param>
+    /// <returns>
+    /// A detached status and diagnostic snapshot; last-good is explicit and never implies current-source success.
+    /// </returns>
     public EditorShaderCompilationSnapshot RequestShaderCompilation(ShaderAsset shader, RenderShaderVariant variant, GraphicsCapabilities capabilities)
     {
         lock (m_sync)

@@ -7,13 +7,25 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Build.Toolchains.Bgfx.Tools;
 
-/// <summary>Parses BGFX SC function modules without placing BGFX grammar in the common shader model.</summary>
+/// <summary>
+/// Parses BGFX SC function modules without placing BGFX grammar in the common shader model.
+/// </summary>
 public sealed class BgfxShaderSourceFrontend : IShaderSourceFrontend
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the language id text used by the current instance.
+    /// </summary>
     public string languageId => "inno.shader-language.bgfx-sc";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Analyzes source text and returns validated output with diagnostics.
+    /// </summary>
+    /// <param name="request">
+    /// The validated immutable request that defines this operation.
+    /// </param>
+    /// <returns>
+    /// The validated shader source analysis that represents the completed operation.
+    /// </returns>
     public ShaderSourceAnalysis Analyze(ShaderSourceRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

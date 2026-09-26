@@ -6,38 +6,72 @@ using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>References shared stage output identities from a material-selectable pass.</summary>
+/// <summary>
+/// References shared stage output identities from a material-selectable pass.
+/// </summary>
 public struct ShaderGraphPassProgram
 {
-    /// <summary>Gets or sets the exact pass identity in the runtime shader definition.</summary>
+    /// <summary>
+    /// Gets or sets the exact pass identity in the runtime shader definition.
+    /// </summary>
     public string pass { get; set; }
-    /// <summary>Gets or sets stable stage output node identities; computation remains owned by those nodes.</summary>
+    /// <summary>
+    /// Gets or sets stable stage output node identities; computation remains owned by those nodes.
+    /// </summary>
     public string[] stages { get; set; }
 }
 
-/// <summary>Edits pass-to-program references without copying computation or changing runtime render states.</summary>
+/// <summary>
+/// Edits pass-to-program references without copying computation or changing runtime render states.
+/// </summary>
 public static class ShaderGraphPrograms
 {
-    /// <summary>Identifies native metadata holding pass references to shared stage programs.</summary>
+    /// <summary>
+    /// Identifies native metadata holding pass references to shared stage programs.
+    /// </summary>
     public const string bindingsKey = "inno.shader.programs";
 
-    /// <summary>Reads detached pass-to-stage references, including unresolved authored identities.</summary>
-    /// <param name="graph">Shader authoring document.</param>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>Detached native references; corrupt or missing program metadata is an error.</returns>
+    /// <summary>
+    /// Reads detached pass-to-stage references, including unresolved authored identities.
+    /// </summary>
+    /// <param name="graph">
+    /// Shader authoring document.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// Detached native references; corrupt or missing program metadata is an error.
+    /// </returns>
     public static ShaderGraphPassProgram[] Read(GraphDocument graph, SerializationRegistry serialization, SerializationContext context)
         => graph.metadata.TryGetValue(bindingsKey, out GraphSerializedValue? data)
             ? ShaderGraphDocument.Decode<ShaderGraphPassProgram[]>(data, serialization, context)
             : throw new InvalidOperationException("The shader document has no pass-to-program references.");
 
-    /// <summary>Assigns existing shared stages to one pass in an atomic detached candidate.</summary>
-    /// <param name="graph">Source document, never modified.</param>
-    /// <param name="pass">Existing pass identity.</param>
-    /// <param name="stages">Existing stage output node identities; an empty set preserves an incomplete pass.</param>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>A candidate suitable for one shared History transaction.</returns>
+    /// <summary>
+    /// Assigns existing shared stages to one pass in an atomic detached candidate.
+    /// </summary>
+    /// <param name="graph">
+    /// Source document, never modified.
+    /// </param>
+    /// <param name="pass">
+    /// Existing pass identity.
+    /// </param>
+    /// <param name="stages">
+    /// Existing stage output node identities; an empty set preserves an incomplete pass.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// A candidate suitable for one shared History transaction.
+    /// </returns>
     public static GraphDocument Bind(GraphDocument graph, string pass, IEnumerable<GraphNodeId> stages,
         SerializationRegistry serialization, SerializationContext context)
     {
@@ -59,12 +93,24 @@ public static class ShaderGraphPrograms
         return candidate;
     }
 
-    /// <summary>Removes a pass and only computations whose final referencing pass was removed.</summary>
-    /// <param name="graph">Source document, never modified.</param>
-    /// <param name="pass">Existing pass identity.</param>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>A candidate preserving programs shared by other passes and their parameter declarations.</returns>
+    /// <summary>
+    /// Removes a pass and only computations whose final referencing pass was removed.
+    /// </summary>
+    /// <param name="graph">
+    /// Source document, never modified.
+    /// </param>
+    /// <param name="pass">
+    /// Existing pass identity.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// A candidate preserving programs shared by other passes and their parameter declarations.
+    /// </returns>
     public static GraphDocument RemovePass(GraphDocument graph, string pass, SerializationRegistry serialization, SerializationContext context)
     {
         ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(graph, serialization, context);

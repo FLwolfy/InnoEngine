@@ -15,13 +15,58 @@ namespace Inno.Editor.Panel.ShaderEditor;
 [InspectionDrawer(typeof(AssetFileEntry), priority: 100, conditional: true)]
 internal sealed class ShaderSourceDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetFileEntry>
 {
-    public override string icon => "S";
-    protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
-    protected override bool CanInspect(AssetFileEntry target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => "S";
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
+    /// <summary>
+    /// Checks whether this drawer supports the selected Inspector target.
+    /// </summary>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+protected override bool CanInspect(AssetFileEntry target)
         => !target.isDirectory && target.extension.Equals(".ishader", StringComparison.OrdinalIgnoreCase);
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
         => (target.nameWithoutExtension, null);
-    protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, AssetFileEntry target)
     {
         if (context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents))
         {
@@ -36,19 +81,55 @@ internal sealed class ShaderSourceDrawer(IInspectionIconProvider<AssetFileEntry>
 [InspectionDrawer(typeof(ShaderInspectionSelection))]
 internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<ShaderInspectionSelection>
 {
-    public override string icon => "S";
-    protected override string GetIcon(InspectionDrawContext context, ShaderInspectionSelection target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => "S";
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, ShaderInspectionSelection target)
         => context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) && info is not null
             && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderInspectionSelection target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderInspectionSelection target)
     {
         if (context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) && info is not null)
             return (Path.GetFileName(info.assetPath.localPath), null);
         return ("Shader", null);
     }
-    protected override void DrawHeader(InspectionDrawContext context, ShaderInspectionSelection target)
+    /// <summary>
+    /// Renders the header presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void DrawHeader(InspectionDrawContext context, ShaderInspectionSelection target)
     {
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null
             || !documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) || info is null
@@ -67,7 +148,16 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
         else
             Widget.ColoredText(EditorPalette.assetBreadcrumbText, $"Nodes: {target.nodes.Count} selected");
     }
-    protected override void Draw(InspectionDrawContext context, ShaderInspectionSelection target)
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, ShaderInspectionSelection target)
     {
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null) return;
         if (!documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) || info is null
@@ -83,12 +173,48 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
 [InspectionDrawer(typeof(ShaderAsset))]
 internal sealed class ShaderAssetDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<ShaderAsset>
 {
-    public override string icon => "S";
-    protected override string GetIcon(InspectionDrawContext context, ShaderAsset target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => "S";
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, ShaderAsset target)
         => context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
             && documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderAsset target) => (target.name, null);
-    protected override void Draw(InspectionDrawContext context, ShaderAsset target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderAsset target) => (target.name, null);
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, ShaderAsset target)
     {
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null) return;
         if (!documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry)) return;

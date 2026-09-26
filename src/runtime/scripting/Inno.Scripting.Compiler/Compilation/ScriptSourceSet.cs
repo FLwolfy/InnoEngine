@@ -35,13 +35,14 @@ internal sealed record ScriptSourceSet(
         AssetSourceMountTransaction? candidateAssets = plugins.compilationAssets;
         AssetFileEntry[] entries = (candidateAssets?.GetFileSystemEntries(includeDirectories: false)
                 ?? assets.GetFileSystemEntries(includeDirectories: false))
-            .Where(static entry => !entry.isSampleContent)
+            .Where(entry => includeEditor || !entry.isSampleContent)
             .Where(entry => includeEditor || !AssetSample.IsRuntimeExcluded(entry.assetPath, isDirectory: false))
             .OrderBy(static entry => entry.assetPath.source.value, StringComparer.Ordinal)
             .ThenBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal)
             .ToArray();
         ScriptAssemblyDefinition[] explicitDefinitions = entries
-            .Where(static entry => string.Equals(entry.extension, ".iasmdef", StringComparison.OrdinalIgnoreCase))
+            .Where(static entry => !entry.isSampleContent &&
+                string.Equals(entry.extension, ".iasmdef", StringComparison.OrdinalIgnoreCase))
             .Select(entry => ParseDefinition(entry, candidateAssets, assets))
             .OrderBy(static definition => definition.source.value, StringComparer.Ordinal)
             .ThenBy(static definition => definition.directory, StringComparer.Ordinal)
@@ -68,7 +69,9 @@ internal sealed record ScriptSourceSet(
         {
             string runtimeName = CreatePluginAssemblyName(plugin.manifest.pluginId);
             string editorName = runtimeName + ".Editor";
-            pluginDefaultNames.Add(plugin.manifest.pluginId, new PluginDefaultNames(runtimeName, editorName));
+            string samplesName = runtimeName + ".Samples";
+            pluginDefaultNames.Add(plugin.manifest.pluginId,
+                new PluginDefaultNames(runtimeName, editorName, samplesName));
             AddBuilder(builders, CreateDefaultDefinition(
                 runtimeName,
                 plugin.sourceMount.id,
@@ -83,6 +86,14 @@ internal sealed record ScriptSourceSet(
                 AssemblyDomain.InnoPlugin,
                 plugin.manifest.pluginId,
                 "plugin-default-editor"));
+            if (includeEditor)
+                AddBuilder(builders, CreateDefaultDefinition(
+                    samplesName,
+                    plugin.sourceMount.id,
+                    ScriptAssemblyScope.Editor,
+                    AssemblyDomain.InnoPlugin,
+                    plugin.manifest.pluginId,
+                    "plugin-authoring-samples"));
         }
 
         AddBuilder(builders, CreateDefaultDefinition(
@@ -104,6 +115,18 @@ internal sealed record ScriptSourceSet(
         foreach (AssetFileEntry entry in entries.Where(static entry =>
                      string.Equals(entry.extension, ".cs", StringComparison.OrdinalIgnoreCase)))
         {
+            if (entry.isSampleContent)
+            {
+                if (entry.assetPath.source == AssetSourceId.project)
+                    continue;
+                if (!plugins.TryGetCompilationPlugin(entry.assetPath.source, out PluginCandidate? samplePlugin)
+                    || samplePlugin is null
+                    || !pluginDefaultNames.TryGetValue(samplePlugin.manifest.pluginId,
+                        out PluginDefaultNames sampleNames))
+                    throw new InvalidDataException($"Sample script '{entry.assetPath}' has no active Plugin.");
+                builders[sampleNames.samples].sources.Add(CreateSourceInput(entry, candidateAssets, assets));
+                continue;
+            }
             ScriptAssemblyDefinition? definition = FindNearestDefinition(entry.assetPath, explicitDefinitions);
             ScriptAssemblyScope scope = definition?.scope
                 ?? (entry.assetPath.localPath.EndsWith(".editor.cs", StringComparison.OrdinalIgnoreCase)
@@ -247,6 +270,7 @@ internal sealed record ScriptSourceSet(
                 .ToArray();
             string[] discovered = entries
                 .Where(entry => entry.assetPath.source == plugin.sourceMount.id
+                    && !entry.isSampleContent
                     && string.Equals(entry.extension, ".iasmdef", StringComparison.OrdinalIgnoreCase))
                 .Select(static entry => entry.assetPath.localPath)
                 .OrderBy(static path => path, StringComparer.Ordinal)
@@ -272,7 +296,13 @@ internal sealed record ScriptSourceSet(
             PluginDefaultNames names = defaultNames[plugin.manifest.pluginId];
             AssemblyBuilder runtime = builders[names.runtime];
             AssemblyBuilder pluginEditor = builders[names.editor];
+            AssemblyBuilder? samples = builders.GetValueOrDefault(names.samples);
             pluginEditor.references.Add(names.runtime);
+            if (samples is not null)
+            {
+                samples.references.Add(names.runtime);
+                samples.references.Add(names.editor);
+            }
             foreach (string dependencyId in plugin.manifest.dependencies)
             {
                 foreach (ScriptAssemblyDefinition dependency in explicitDefinitions.Where(definition =>
@@ -281,12 +311,15 @@ internal sealed record ScriptSourceSet(
                     if (dependency.scope == ScriptAssemblyScope.Runtime)
                         runtime.references.Add(dependency.name);
                     pluginEditor.references.Add(dependency.name);
+                    samples?.references.Add(dependency.name);
                 }
                 if (defaultNames.TryGetValue(dependencyId, out PluginDefaultNames dependencyDefaults))
                 {
                     runtime.references.Add(dependencyDefaults.runtime);
                     pluginEditor.references.Add(dependencyDefaults.runtime);
                     pluginEditor.references.Add(dependencyDefaults.editor);
+                    samples?.references.Add(dependencyDefaults.runtime);
+                    samples?.references.Add(dependencyDefaults.editor);
                 }
             }
             game.references.Add(names.runtime);
@@ -463,7 +496,7 @@ internal sealed record ScriptSourceSet(
         internal List<string> references { get; } = [];
     }
 
-    private readonly record struct PluginDefaultNames(string runtime, string editor);
+    private readonly record struct PluginDefaultNames(string runtime, string editor, string samples);
 }
 
 internal sealed record ScriptAssemblyDefinition(

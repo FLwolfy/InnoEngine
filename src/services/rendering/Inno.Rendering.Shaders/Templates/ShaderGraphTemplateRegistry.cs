@@ -8,23 +8,37 @@ using Inno.Extensibility.Types;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Describes a creation menu item without retaining a plugin instance.</summary>
-/// <param name="id">Stable template identity.</param>
-/// <param name="displayName">User-facing label.</param>
+/// <summary>
+/// Describes a creation menu item without retaining a plugin instance.
+/// </summary>
+/// <param name="id">
+/// Stable template identity.
+/// </param>
+/// <param name="displayName">
+/// User-facing label.
+/// </param>
 public sealed record ShaderGraphTemplateInfo(string id, string displayName);
 
-/// <summary>Owns generation-safe template discovery and invocation for editor asset creation.</summary>
+/// <summary>
+/// Owns generation-safe template discovery and invocation for editor asset creation.
+/// </summary>
 public sealed class ShaderGraphTemplateRegistry : IDisposable
 {
     private readonly TypeCatalog m_types;
     private readonly Registry m_registry;
 
-    /// <summary>Registers a template owner with the shared type-generation catalog.</summary>
-    /// <param name="types">Catalog which must outlive this owner.</param>
+    /// <summary>
+    /// Registers a template owner with the shared type-generation catalog.
+    /// </summary>
+    /// <param name="types">
+    /// Catalog which must outlive this owner.
+    /// </param>
     public ShaderGraphTemplateRegistry(TypeCatalog types)
     { m_types = types ?? throw new ArgumentNullException(nameof(types)); m_registry = new(types); }
 
-    /// <summary>Gets detached menu descriptions for the current generation.</summary>
+    /// <summary>
+    /// Gets detached menu descriptions for the current generation.
+    /// </summary>
     public IReadOnlyList<ShaderGraphTemplateInfo> templates
     {
         get
@@ -35,12 +49,24 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
         }
     }
 
-    /// <summary>Invokes the selected template under one generation lease.</summary>
-    /// <param name="id">Stable template identity from the creation menu.</param>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <returns>A detached graph; no provider instance crosses the invocation boundary.</returns>
-    /// <exception cref="InvalidOperationException">The selected template is unavailable.</exception>
+    /// <summary>
+    /// Invokes the selected template under one generation lease.
+    /// </summary>
+    /// <param name="id">
+    /// Stable template identity from the creation menu.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <returns>
+    /// A detached graph; no provider instance crosses the invocation boundary.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The selected template is unavailable.
+    /// </exception>
     public GraphDocument Create(string id, SerializationRegistry serialization, SerializationContext context)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -50,7 +76,9 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
         return entry.template.Create(serialization, context).Clone();
     }
 
-    /// <summary>Retires providers through the shared generation lifecycle.</summary>
+    /// <summary>
+    /// Retires providers through the shared generation lifecycle.
+    /// </summary>
     public void Dispose() => m_registry.Dispose();
 
     private sealed record Entry(ShaderGraphTemplateInfo info, ShaderGraphTemplate template);
@@ -58,7 +86,16 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
     private sealed class Registry(TypeCatalog types) : TypeRegistry<IReadOnlyDictionary<string, Entry>>(types)
     {
         internal IReadOnlyDictionary<string, Entry> snapshot => current;
-        protected override IReadOnlyDictionary<string, Entry> Build(TypeCacheSnapshot types)
+        /// <summary>
+        /// Builds a validated result from the current immutable input snapshot.
+        /// </summary>
+        /// <param name="types">
+        /// The active type catalog generation used for extension resolution.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
+protected override IReadOnlyDictionary<string, Entry> Build(TypeCacheSnapshot types)
         {
             (Type type, ShaderGraphTemplateAttribute metadata)[] registrations = types
                 .GetTypesWithAttribute<ShaderGraphTemplateAttribute>()
@@ -89,7 +126,13 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
             }
             return templates;
         }
-        protected override void DisposeSnapshot(IReadOnlyDictionary<string, Entry> snapshot)
+        /// <summary>
+        /// Releases the generation lease retained by an immutable registry snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
+protected override void DisposeSnapshot(IReadOnlyDictionary<string, Entry> snapshot)
             => DisposeExtensions(snapshot.Values.Select(static value => value.template));
     }
 }

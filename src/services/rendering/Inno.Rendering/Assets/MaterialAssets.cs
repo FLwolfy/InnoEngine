@@ -550,14 +550,30 @@ public static class MaterialPassResolver
         return definition is null ? null : Resolve(definition, material.techniqueId, contractId, passRoleId, capabilities);
     }
 
-    /// <summary>Resolves a role against an exact published shader contract rather than a possibly newer authoring asset.</summary>
-    /// <param name="definition">The immutable publication's detached material contract.</param>
-    /// <param name="techniqueId">Explicit material technique, or an invalid ID to select the first compatible technique.</param>
-    /// <param name="contractId">Open rendering contract required by the caller.</param>
-    /// <param name="passRoleId">Open pass role required by the caller.</param>
-    /// <param name="capabilities">Current target capability snapshot.</param>
-    /// <returns>The matching technique and pass, or null when this publication has no compatible mapping.</returns>
-    /// <exception cref="ArgumentException">A required contract or role identity is invalid.</exception>
+    /// <summary>
+    /// Resolves a role against an exact published shader contract rather than a possibly newer authoring asset.
+    /// </summary>
+    /// <param name="definition">
+    /// The immutable publication's detached material contract.
+    /// </param>
+    /// <param name="techniqueId">
+    /// Explicit material technique, or an invalid ID to select the first compatible technique.
+    /// </param>
+    /// <param name="contractId">
+    /// Open rendering contract required by the caller.
+    /// </param>
+    /// <param name="passRoleId">
+    /// Open pass role required by the caller.
+    /// </param>
+    /// <param name="capabilities">
+    /// Current target capability snapshot.
+    /// </param>
+    /// <returns>
+    /// The matching technique and pass, or null when this publication has no compatible mapping.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// A required contract or role identity is invalid.
+    /// </exception>
     public static MaterialPassResolution? Resolve(ShaderDefinition definition, ShaderTechniqueId techniqueId,
         ShaderContractId contractId, ShaderPassRoleId passRoleId, GraphicsCapabilities capabilities)
     {

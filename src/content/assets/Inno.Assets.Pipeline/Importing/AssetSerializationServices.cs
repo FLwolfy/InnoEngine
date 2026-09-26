@@ -55,10 +55,18 @@ public sealed class AssetSerializationServices
     public Guid GetStableTypeId<TValue>()
         => m_types.GetTypeRef(typeof(TValue)).stableId;
 
-    /// <summary>Captures typed properties and their references as one neutral, owner-independent value.</summary>
-    /// <typeparam name="TValue">Current serializable settings contract.</typeparam>
-    /// <param name="value">Current generation settings object, never retained.</param>
-    /// <returns>Frozen native properties with exact stable type identity and collected direct dependencies.</returns>
+    /// <summary>
+    /// Captures typed properties and their references as one neutral, owner-independent value.
+    /// </summary>
+    /// <typeparam name="TValue">
+    /// Current serializable settings contract.
+    /// </typeparam>
+    /// <param name="value">
+    /// Current generation settings object, never retained.
+    /// </param>
+    /// <returns>
+    /// Frozen native properties with exact stable type identity and collected direct dependencies.
+    /// </returns>
     public AssetPropertySnapshot CaptureProperties<TValue>(TValue value) where TValue : class, ISerializable
     {
         ArgumentNullException.ThrowIfNull(value);

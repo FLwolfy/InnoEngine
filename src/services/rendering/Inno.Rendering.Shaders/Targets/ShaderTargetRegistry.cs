@@ -9,18 +9,26 @@ using Inno.Extensibility.Types;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Resolves domain targets under the same generation lease as their graph expansion.</summary>
+/// <summary>
+/// Resolves domain targets under the same generation lease as their graph expansion.
+/// </summary>
 public sealed class ShaderTargetRegistry : IDisposable
 {
     private readonly TypeCatalog m_types;
     private readonly Registry m_registry;
 
-    /// <summary>Creates a target owner participating in shared candidate publication and retirement.</summary>
-    /// <param name="types">The authoring catalog, which must outlive this registry.</param>
+    /// <summary>
+    /// Creates a target owner participating in shared candidate publication and retirement.
+    /// </summary>
+    /// <param name="types">
+    /// The authoring catalog, which must outlive this registry.
+    /// </param>
     public ShaderTargetRegistry(TypeCatalog types)
     { m_types = types ?? throw new ArgumentNullException(nameof(types)); m_registry = new(types); }
 
-    /// <summary>Gets detached stable target identities available in the current generation.</summary>
+    /// <summary>
+    /// Gets detached stable target identities available in the current generation.
+    /// </summary>
     public IReadOnlyList<string> ids
     {
         get
@@ -30,14 +38,30 @@ public sealed class ShaderTargetRegistry : IDisposable
         }
     }
 
-    /// <summary>Expands an assigned target, or copies an explicitly authored low-level graph with no domain target.</summary>
-    /// <param name="document">Authored source, never modified by this operation.</param>
-    /// <param name="serialization">Current owner converters.</param>
-    /// <param name="context">Complete owner reference context.</param>
-    /// <param name="cancellationToken">Cancellation before and during extension invocation.</param>
-    /// <returns>Detached explicit stage graph consumed by the existing compiler.</returns>
-    /// <exception cref="ShaderTargetUnavailableException">The assigned target is absent from this generation.</exception>
-    /// <exception cref="InvalidOperationException">The target returns an invalid result.</exception>
+    /// <summary>
+    /// Expands an assigned target, or copies an explicitly authored low-level graph with no domain target.
+    /// </summary>
+    /// <param name="document">
+    /// Authored source, never modified by this operation.
+    /// </param>
+    /// <param name="serialization">
+    /// Current owner converters.
+    /// </param>
+    /// <param name="context">
+    /// Complete owner reference context.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation before and during extension invocation.
+    /// </param>
+    /// <returns>
+    /// Detached explicit stage graph consumed by the existing compiler.
+    /// </returns>
+    /// <exception cref="ShaderTargetUnavailableException">
+    /// The assigned target is absent from this generation.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The target returns an invalid result.
+    /// </exception>
     public GraphDocument Expand(GraphDocument document, SerializationRegistry serialization, SerializationContext context,
         CancellationToken cancellationToken = default)
     {
@@ -56,14 +80,25 @@ public sealed class ShaderTargetRegistry : IDisposable
         return expanded.Clone();
     }
 
-    /// <summary>Retires the target snapshot through the shared registry lifecycle.</summary>
+    /// <summary>
+    /// Retires the target snapshot through the shared registry lifecycle.
+    /// </summary>
     public void Dispose() => m_registry.Dispose();
 
     private sealed class Registry(TypeCatalog types) : TypeRegistry<IReadOnlyDictionary<string, ShaderTarget>>(types)
     {
         internal IReadOnlyDictionary<string, ShaderTarget> snapshot => current;
 
-        protected override IReadOnlyDictionary<string, ShaderTarget> Build(TypeCacheSnapshot types)
+        /// <summary>
+        /// Builds a validated result from the current immutable input snapshot.
+        /// </summary>
+        /// <param name="types">
+        /// The active type catalog generation used for extension resolution.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
+protected override IReadOnlyDictionary<string, ShaderTarget> Build(TypeCacheSnapshot types)
         {
             (Type type, string id)[] registrations = types.GetTypesWithAttribute<ShaderTargetAttribute>()
                 .Select(value => value.Resolve(types))
@@ -93,7 +128,13 @@ public sealed class ShaderTargetRegistry : IDisposable
             return targets;
         }
 
-        protected override void DisposeSnapshot(IReadOnlyDictionary<string, ShaderTarget> snapshot)
+        /// <summary>
+        /// Releases the generation lease retained by an immutable registry snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
+protected override void DisposeSnapshot(IReadOnlyDictionary<string, ShaderTarget> snapshot)
             => DisposeExtensions(snapshot.Values);
     }
 }

@@ -11,7 +11,9 @@ using Inno.Rendering;
 
 namespace Inno.Editor.Rendering;
 
-/// <summary>Edits Pipeline sources and typed extension settings without changing canonical rendering assets before Save.</summary>
+/// <summary>
+/// Edits Pipeline sources and typed extension settings without changing canonical rendering assets before Save.
+/// </summary>
 [EditorModule("rendering.pipeline-documents", order: 170)]
 public sealed class PipelineDocuments : EditorModule
 {
@@ -27,32 +29,66 @@ public sealed class PipelineDocuments : EditorModule
         drafts = new(assets, serialization, interactions, "inno.pipeline", C_HISTORY, ".irenderpipeline", "Pipeline");
     }
 
-    /// <summary>Opens a native Pipeline source in the shared document service, including failed imports.</summary>
-    /// <param name="path">Mounted source path.</param>
-    /// <returns>The persistent source identity used by draft operations.</returns>
+    /// <summary>
+    /// Opens a native Pipeline source in the shared document service, including failed imports.
+    /// </summary>
+    /// <param name="path">
+    /// Mounted source path.
+    /// </param>
+    /// <returns>
+    /// The persistent source identity used by draft operations.
+    /// </returns>
     public Guid Open(AssetPath path) => drafts.Open(path);
 
-    /// <summary>Reads a detached current-generation Pipeline value; its referenced canonical assets must not be mutated.</summary>
-    /// <param name="assetId">Open Pipeline identity.</param>
-    /// <returns>The unsaved native Pipeline value.</returns>
+    /// <summary>
+    /// Reads a detached current-generation Pipeline value; its referenced canonical assets must not be mutated.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open Pipeline identity.
+    /// </param>
+    /// <returns>
+    /// The unsaved native Pipeline value.
+    /// </returns>
     public RenderPipelineAsset Read(Guid assetId) => drafts.Read(assetId);
 
-    /// <summary>Changes a draft through shared History without publishing it to Scene/Game.</summary>
-    /// <param name="assetId">Open Pipeline identity.</param>
-    /// <param name="candidate">Detached edited value.</param>
-    /// <param name="finishGesture">Whether this sample completes the gesture.</param>
+    /// <summary>
+    /// Changes a draft through shared History without publishing it to Scene/Game.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open Pipeline identity.
+    /// </param>
+    /// <param name="candidate">
+    /// Detached edited value.
+    /// </param>
+    /// <param name="finishGesture">
+    /// Whether this sample completes the gesture.
+    /// </param>
     public void Replace(Guid assetId, RenderPipelineAsset candidate, bool finishGesture = true)
         => drafts.Replace(assetId, candidate, finishGesture);
 
-    /// <summary>Completes one gesture without saving the source.</summary>
-    /// <param name="assetId">Open Pipeline identity.</param>
+    /// <summary>
+    /// Completes one gesture without saving the source.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open Pipeline identity.
+    /// </param>
     public void Commit(Guid assetId) => drafts.Commit(assetId);
 
-    /// <summary>Captures typed Pipeline settings with this source owner's complete reference and dependency context.</summary>
-    /// <typeparam name="TSettings">Current plugin settings contract.</typeparam>
-    /// <param name="assetId">Open Pipeline identity.</param>
-    /// <param name="settings">Detached edited settings.</param>
-    /// <param name="finishGesture">Whether this sample completes the gesture.</param>
+    /// <summary>
+    /// Captures typed Pipeline settings with this source owner's complete reference and dependency context.
+    /// </summary>
+    /// <typeparam name="TSettings">
+    /// Current plugin settings contract.
+    /// </typeparam>
+    /// <param name="assetId">
+    /// Open Pipeline identity.
+    /// </param>
+    /// <param name="settings">
+    /// Detached edited settings.
+    /// </param>
+    /// <param name="finishGesture">
+    /// Whether this sample completes the gesture.
+    /// </param>
     public void ReplaceSettings<TSettings>(Guid assetId, TSettings settings, bool finishGesture = true)
         where TSettings : class, ISerializable
     {
@@ -74,23 +110,68 @@ public sealed class PipelineDocuments : EditorModule
     internal static bool Recoverable(Exception error) => error is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or FormatException
         && Inno.Core.Execution.RetirementPendingException.Find(error) is null;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStart(EditorContext context) => drafts.Start();
-    /// <inheritdoc />
+    /// <summary>
+    /// Advances this feature using the current runtime state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnUpdate(EditorContext context) => drafts.Update();
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context) => drafts.Dispose();
 }
 
 [EditorHistoryHandler(PipelineDocuments.C_HISTORY)]
 internal sealed class PipelineDraftHistory(PipelineDocuments documents) : EditorHistoryHandler
 {
-    protected override EditorHistoryAvailability Query(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
+protected override EditorHistoryAvailability Query(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
     {
         try { documents.drafts.ValidateHistory(change, direction); return EditorHistoryAvailability.Available(); }
         catch (Exception error) when (PipelineDocuments.Recoverable(error)) { return EditorHistoryAvailability.Unavailable(error.Message); }
     }
-    protected override EditorHistoryResult Apply(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
+protected override EditorHistoryResult Apply(EditorHistoryContext context, EditorHistoryChange change, EditorHistoryDirection direction)
     {
         try { documents.drafts.ApplyHistory(change, direction); return EditorHistoryResult.Success(); }
         catch (Exception error) when (PipelineDocuments.Recoverable(error)) { return EditorHistoryResult.Failure(error.Message); }

@@ -6,14 +6,26 @@ using Inno.Rendering;
 
 namespace Inno.Adapter.Presentation.ImGui;
 
-/// <summary>Loads the graph-built, source-free ImGui program distributed with this presentation adapter.</summary>
+/// <summary>
+/// Loads the graph-built, source-free ImGui program distributed with this presentation adapter.
+/// </summary>
 public static class BgfxImGuiShaderArtifacts
 {
-    /// <summary>Reads the precompiled program for the current host and requested graphics API without invoking a compiler.</summary>
-    /// <param name="api">The active device API.</param>
-    /// <returns>The validated texture binding, stages and render state required by ImGui.</returns>
-    /// <exception cref="PlatformNotSupportedException">The host architecture has no supported distribution profile.</exception>
-    /// <exception cref="InvalidDataException">The installed adapter lacks a required artifact or its binding contract is invalid.</exception>
+    /// <summary>
+    /// Reads the precompiled program for the current host and requested graphics API without invoking a compiler.
+    /// </summary>
+    /// <param name="api">
+    /// The active device API.
+    /// </param>
+    /// <returns>
+    /// The validated texture binding, stages and render state required by ImGui.
+    /// </returns>
+    /// <exception cref="PlatformNotSupportedException">
+    /// The host architecture has no supported distribution profile.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// The installed adapter lacks a required artifact or its binding contract is invalid.
+    /// </exception>
     public static GraphicsPipelineDescriptor Load(GraphicsApi api)
     {
         string platform = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "MacOSArm64"

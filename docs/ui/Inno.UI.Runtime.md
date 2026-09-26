@@ -2,9 +2,9 @@
 
 [UI 索引](README.md) · [Runtime](../runtime/README.md)
 
-`UiRuntimeFactory` 以 `inno.runtime.ui` 注册 Session Subsystem（order `-700`），依赖 Input 与 Text。`UiRuntime` 在帧开始捕获 Session 的 `InputSnapshot` 并绑定脚本 scope；加载 RML/font artifact，管理后端与 Context。Session 释放时 Context 和字体 lease 随 owner 一起退休，不跨 Edit/Play Session 共享可变状态。
+`UiRuntimeFactory` 以 `inno.runtime.ui` 注册 Session Subsystem（order `-700`），依赖 Input 与 Text。`UiRuntime` 管理导入文档的字体 artifact、后端与 Context，并允许每个 Context 接收独立 `UiInputSnapshot`。Canvas 先由实际 RenderView 路由输入，再显式更新对应 Context；不会向所有世界画布广播窗口鼠标。文档关闭或 Context 销毁时，最后一个使用者释放对应字体 lease；Session 释放时清理剩余资源。
 
-公开构造入口 `UiRuntime(IUiBackend, IAssetArtifactLookup)` 转交后端所有权。Runtime 只根据 backend 的 implementation ID、document language 与 capability 做中立校验，不出现具体实现名。字体 faceIndex 先按导入 metadata 验证，再按 capability 决定是否可用；不支持时抛出 `UiCapabilityUnavailableException`。UI 只依赖 Input 帧序，不再伪依赖独立 Text runtime。
+公开构造入口 `UiRuntime(IUiBackend, IAssetArtifactLookup)` 转交后端所有权。Runtime 只根据 backend 的 implementation ID、document language 与 capability 做中立校验，不出现具体实现名。它在加载导入文档前注册该文档声明的字体，以文档内容版本隔离字体族；同一字体 artifact 被多个 Context 使用时只保留一份 lease。UI 只依赖 Input 帧序，不再伪依赖独立 Text runtime。
 
 ## 生命周期与扩展点
 

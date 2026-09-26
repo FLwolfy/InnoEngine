@@ -13,8 +13,23 @@ namespace Inno.Editor.Shaders;
 [InspectionDrawer(typeof(AssetInspectionSelection))]
 internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetInspectionSelection>
 {
-    public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
-    protected override string GetIcon(InspectionDrawContext context, AssetInspectionSelection target)
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
+public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    /// <summary>
+    /// Retrieves the current icon from authoritative state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated text representation owned by the caller.
+    /// </returns>
+protected override string GetIcon(InspectionDrawContext context, AssetInspectionSelection target)
     {
         Guid id = target.assetIds.FirstOrDefault();
         return id != Guid.Empty
@@ -22,10 +37,31 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
             && documents.assets.TryGetInfo(id, out AssetInfo? info) && info is not null
             && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     }
-    protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetInspectionSelection target)
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
+protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetInspectionSelection target)
         => (target.assetIds.Count + " Assets", null);
 
-    protected override void DrawHeader(InspectionDrawContext context, AssetInspectionSelection target)
+    /// <summary>
+    /// Renders the header presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void DrawHeader(InspectionDrawContext context, AssetInspectionSelection target)
     {
         if (!TryOpenDrafts(context, target, out MaterialDocuments? documents, out var drafts)) return;
         bool readOnly = drafts.Any(value => value.readOnly);
@@ -49,7 +85,16 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
         finally { ImGuiApi.EndDisabled(); }
     }
 
-    protected override void Draw(InspectionDrawContext context, AssetInspectionSelection target)
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+protected override void Draw(InspectionDrawContext context, AssetInspectionSelection target)
     {
         if (!TryOpenDrafts(context, target, out MaterialDocuments? documents, out var drafts))
         { Widget.Hint("Select Materials with compatible Shader interfaces to edit their common parameters."); return; }
@@ -230,7 +275,25 @@ internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileE
 
     private sealed class SelectionEdits(MaterialDocuments documents, IReadOnlyDictionary<Guid, MaterialAsset> materials) : IInspectionPropertyEditService
     {
-        public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
+        /// <summary>
+        /// Applies one serialized property edit and records its reversible history payload.
+        /// </summary>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <param name="propertyName">
+        /// The property name text validated by the change property operation.
+        /// </param>
+        /// <param name="mutation">
+        /// The callback invoked by change property within the operation's owned lifetime.
+        /// </param>
+        /// <param name="historyName">
+        /// The history name text validated by the change property operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
         { mutation(); documents.ReplaceMany(materials, !ImGuiApi.IsAnyItemActive()); return true; }
     }
 }

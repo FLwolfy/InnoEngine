@@ -6,13 +6,19 @@ using Inno.UI;
 
 namespace Inno.Adapter.UI;
 
-/// <summary>Resolves UI providers from one immutable composition-owned registration snapshot.</summary>
+/// <summary>
+/// Resolves UI providers from one immutable composition-owned registration snapshot.
+/// </summary>
 public sealed class UiBackendCatalog : IUiBackendFactory
 {
     private readonly Dictionary<UiBackendId, UiBackendProvider> m_providers = [];
 
-    /// <summary>Validates and captures a complete provider set.</summary>
-    /// <param name="providers">Providers owned by this composition generation.</param>
+    /// <summary>
+    /// Validates and captures a complete provider set.
+    /// </summary>
+    /// <param name="providers">
+    /// Providers owned by this composition generation.
+    /// </param>
     public UiBackendCatalog(IEnumerable<UiBackendProvider> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
@@ -22,10 +28,20 @@ public sealed class UiBackendCatalog : IUiBackendFactory
         supportedBackends = new ReadOnlyCollection<UiBackendId>([.. m_providers.Keys]);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets backend registrations available in this type generation.
+    /// </summary>
     public IReadOnlyList<UiBackendId> supportedBackends { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a backend using this implementation's validated inputs.
+    /// </summary>
+    /// <param name="backend">
+    /// The backend consumed by create backend; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated iui backend that represents the completed operation.
+    /// </returns>
     public IUiBackend CreateBackend(UiBackendId backend)
     {
         if (!m_providers.TryGetValue(backend, out UiBackendProvider? provider))

@@ -5,15 +5,32 @@ using System.Linq;
 
 namespace Inno.Rendering.Shaders;
 
+/// <summary>
+/// Builds typed shader IR instructions for graph compilation.
+/// </summary>
 public sealed partial class ShaderIrBuilder
 {
-    /// <summary>Builds a real conditional: only the selected region executes, including its memory and source-call effects.</summary>
-    /// <param name="condition">Scalar Boolean visible in this region.</param>
-    /// <param name="whenTrue">Transient callback building the true region and its named outputs.</param>
-    /// <param name="whenFalse">Transient callback building the false region with exactly matching output names/types.</param>
-    /// <returns>Values merged into the enclosing scope; empty output maps represent effect-only branches.</returns>
-    /// <exception cref="ArgumentException">The condition or branch output contracts are incompatible.</exception>
-    /// <exception cref="InvalidOperationException">A callback mutates the enclosing scope or declares a nested stage input.</exception>
+    /// <summary>
+    /// Builds a real conditional: only the selected region executes, including its memory and source-call effects.
+    /// </summary>
+    /// <param name="condition">
+    /// Scalar Boolean visible in this region.
+    /// </param>
+    /// <param name="whenTrue">
+    /// Transient callback building the true region and its named outputs.
+    /// </param>
+    /// <param name="whenFalse">
+    /// Transient callback building the false region with exactly matching output names/types.
+    /// </param>
+    /// <returns>
+    /// Values merged into the enclosing scope; empty output maps represent effect-only branches.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The condition or branch output contracts are incompatible.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A callback mutates the enclosing scope or declares a nested stage input.
+    /// </exception>
     public IReadOnlyDictionary<string, ShaderIrValue> Branch(ShaderIrValue condition,
         Func<ShaderIrBuilder, IReadOnlyDictionary<string, ShaderIrValue>> whenTrue,
         Func<ShaderIrBuilder, IReadOnlyDictionary<string, ShaderIrValue>> whenFalse)
@@ -35,13 +52,27 @@ public sealed partial class ShaderIrBuilder
         catch { m_root.m_nextValue = nextValue; throw; }
     }
 
-    /// <summary>Builds a counted loop; each iteration receives the preceding iteration's complete carried state.</summary>
-    /// <param name="iterations">Unsigned iteration count, evaluated once before entering the loop.</param>
-    /// <param name="initialState">Named values used before the first iteration and returned unchanged for zero iterations.</param>
-    /// <param name="body">Transient callback receiving its builder, uint iteration index and typed carried values.</param>
-    /// <returns>Final carried values in the enclosing scope; an empty state map permits effect-only loops.</returns>
-    /// <exception cref="ArgumentException">The count is not uint or the body's output state changes names or types.</exception>
-    /// <exception cref="InvalidOperationException">The body mutates the enclosing builder.</exception>
+    /// <summary>
+    /// Builds a counted loop; each iteration receives the preceding iteration's complete carried state.
+    /// </summary>
+    /// <param name="iterations">
+    /// Unsigned iteration count, evaluated once before entering the loop.
+    /// </param>
+    /// <param name="initialState">
+    /// Named values used before the first iteration and returned unchanged for zero iterations.
+    /// </param>
+    /// <param name="body">
+    /// Transient callback receiving its builder, uint iteration index and typed carried values.
+    /// </param>
+    /// <returns>
+    /// Final carried values in the enclosing scope; an empty state map permits effect-only loops.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The count is not uint or the body's output state changes names or types.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The body mutates the enclosing builder.
+    /// </exception>
     public IReadOnlyDictionary<string, ShaderIrValue> Loop(ShaderIrValue iterations,
         IReadOnlyDictionary<string, ShaderIrValue> initialState,
         Func<ShaderIrBuilder, ShaderIrValue, IReadOnlyDictionary<string, ShaderIrValue>, IReadOnlyDictionary<string, ShaderIrValue>> body)

@@ -7,7 +7,7 @@
 | [Inno.Build](Inno.Build.md) | Profile、request/result、Plugin/Game pipeline 与内部 staging stages |
 | [Inno.Build.Platform.MacOS](Inno.Build.Platform.MacOS.md) | macOS ARM64 target artifact 与 app bundle |
 | [Inno.Build.Platform.Windows](Inno.Build.Platform.Windows.md) | Windows x64 target artifact 与 portable application directory |
-| [Inno.Build.Cli](Inno.Build.Cli.md) | Headless Composition Root |
+| [Inno.Editor.Build.Cli](../editor/Inno.Editor.Build.Cli.md) | 作者端无界面构建入口 |
 | [Inno.Build.NativeBindings](Inno.Build.NativeBindings.md) | BGCS 生成、原生依赖、程序集与 ABI 验收入口 |
 | [Native binding generation](../native/BindingGeneration.md) | 各 Native 项目自己的单文件 binding 生成与检查入口 |
 | [Inno.Build.SupportPacks](Inno.Build.SupportPacks.md) | 生产 source-independent Player Support Pack |

@@ -17,9 +17,13 @@ public sealed class AssetImportSettingsSnapshot
         this.fingerprint = fingerprint;
     }
 
-    /// <summary>Gets the editable settings copy, or null for an importer without settings.</summary>
+    /// <summary>
+    /// Gets the editable settings copy, or null for an importer without settings.
+    /// </summary>
     public ISerializable? value { get; }
 
-    /// <summary>Gets the source metadata fingerprint required when saving this copy.</summary>
+    /// <summary>
+    /// Gets the source metadata fingerprint required when saving this copy.
+    /// </summary>
     public string fingerprint { get; }
 }

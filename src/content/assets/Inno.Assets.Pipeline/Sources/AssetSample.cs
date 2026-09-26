@@ -67,13 +67,13 @@ public static class AssetSample
     }
 
     /// <summary>
-    /// Gets the writable root-directory name produced when a sample is imported.
+    /// Gets a writable runtime-eligible directory name scoped to the source Plugin.
     /// </summary>
     /// <param name="path">
     /// A sample directory path whose final segment starts with <c>~</c>.
     /// </param>
     /// <returns>
-    /// The unchanged final directory name, including every leading <c>~</c> character.
+    /// A distinct Plugin ID and sample name without the authoring-only <c>~</c> prefix.
     /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="path"/> does not identify a sample directory or has no
@@ -86,7 +86,7 @@ public static class AssetSample
         string name = Path.GetFileName(path.localPath);
         if (string.IsNullOrWhiteSpace(name.TrimStart('~')))
             throw new ArgumentException("A sample directory requires a name after its '~' prefix.", nameof(path));
-        return name;
+        return path.source.value + "-" + name.TrimStart('~');
     }
 
     /// <summary>

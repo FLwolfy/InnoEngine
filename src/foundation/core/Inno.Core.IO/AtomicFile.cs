@@ -17,7 +17,9 @@ public static class AtomicFile
     /// <param name="data">
     /// The complete file payload.
     /// </param>
-    /// <param name="overwrite">Whether an existing destination may be replaced; false atomically rejects name collisions.</param>
+    /// <param name="overwrite">
+    /// Whether an existing destination may be replaced; false atomically rejects name collisions.
+    /// </param>
     public static void WriteAllBytes(string path, ReadOnlySpan<byte> data, bool overwrite = true)
     {
         string destination = NormalizeDestination(path);
@@ -53,7 +55,9 @@ public static class AtomicFile
     /// <param name="destination">
     /// The destination file path beside the candidate.
     /// </param>
-    /// <param name="overwrite">Whether an existing destination may be replaced; false never overwrites an external creator.</param>
+    /// <param name="overwrite">
+    /// Whether an existing destination may be replaced; false never overwrites an external creator.
+    /// </param>
     public static void Install(string source, string destination, bool overwrite = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);

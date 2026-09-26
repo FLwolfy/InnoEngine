@@ -7,7 +7,16 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyInteractionIds.C_OPEN, priority: 200)]
 internal sealed class OpenSceneAssetAction(IEditorSceneWorkspace workspace) : EditorAction<SceneAsset, string>
 {
-    protected override EditorActionState Query(EditorActionContext<SceneAsset, string> context)
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
+protected override EditorActionState Query(EditorActionContext<SceneAsset, string> context)
         => workspace.canPersist
             ? EditorActionState.enabled
             : EditorActionState.disabled;

@@ -8,13 +8,19 @@ namespace Inno.Adapter.UI;
 /// </summary>
 public interface IUiBackendFactory
 {
-    /// <summary>Gets exact backend identities available in this composition generation.</summary>
+    /// <summary>
+    /// Gets exact backend identities available in this composition generation.
+    /// </summary>
     IReadOnlyList<UiBackendId> supportedBackends { get; }
 
     /// <summary>
     /// Creates one caller-owned UI backend.
     /// </summary>
-    /// <param name="backend">The selected backend implementation.</param>
-    /// <returns>A newly allocated UI backend.</returns>
+    /// <param name="backend">
+    /// The selected backend implementation.
+    /// </param>
+    /// <returns>
+    /// A newly allocated UI backend.
+    /// </returns>
     IUiBackend CreateBackend(UiBackendId backend);
 }

@@ -8,15 +8,25 @@ namespace Inno.Text;
 /// </summary>
 public enum TextDirection
 {
-    /// <summary>Lets the shaping engine infer direction from the text.</summary>
+    /// <summary>
+    /// Lets the shaping engine infer direction from the text.
+    /// </summary>
     Automatic,
-    /// <summary>Shapes text from left to right.</summary>
+    /// <summary>
+    /// Shapes text from left to right.
+    /// </summary>
     LeftToRight,
-    /// <summary>Shapes text from right to left.</summary>
+    /// <summary>
+    /// Shapes text from right to left.
+    /// </summary>
     RightToLeft,
-    /// <summary>Shapes text from top to bottom.</summary>
+    /// <summary>
+    /// Shapes text from top to bottom.
+    /// </summary>
     TopToBottom,
-    /// <summary>Shapes text from bottom to top.</summary>
+    /// <summary>
+    /// Shapes text from bottom to top.
+    /// </summary>
     BottomToTop
 }
 
@@ -25,20 +35,31 @@ public enum TextDirection
 /// </summary>
 public enum TextFontStyle
 {
-    /// <summary>Uses an upright face.</summary>
+    /// <summary>
+    /// Uses an upright face.
+    /// </summary>
     Normal,
-    /// <summary>Uses an italic face.</summary>
+    /// <summary>
+    /// Uses an italic face.
+    /// </summary>
     Italic,
-    /// <summary>Uses an oblique face.</summary>
+    /// <summary>
+    /// Uses an oblique face.
+    /// </summary>
     Oblique
 }
 
 /// <summary>
 /// Identifies one font face loaded into a text backend generation.
 /// </summary>
+/// <param name="value">
+/// The concrete value read or transformed by this operation.
+/// </param>
 public readonly record struct TextFontHandle(ulong value)
 {
-    /// <summary>Gets whether this handle identifies a loaded face.</summary>
+    /// <summary>
+    /// Gets whether this handle identifies a loaded face.
+    /// </summary>
     public bool isValid => value != 0;
 }
 
@@ -50,11 +71,21 @@ public readonly record struct TextStyle
     /// <summary>
     /// Creates validated text styling.
     /// </summary>
-    /// <param name="fontSize">The positive font size in logical pixels.</param>
-    /// <param name="faceIndex">The zero-based face index within the font collection.</param>
-    /// <param name="weight">The requested CSS-compatible weight from 1 through 1000.</param>
-    /// <param name="style">The requested face slant.</param>
-    /// <param name="letterSpacing">Additional logical pixels inserted after each glyph.</param>
+    /// <param name="fontSize">
+    /// The positive font size in logical pixels.
+    /// </param>
+    /// <param name="faceIndex">
+    /// The zero-based face index within the font collection.
+    /// </param>
+    /// <param name="weight">
+    /// The requested CSS-compatible weight from 1 through 1000.
+    /// </param>
+    /// <param name="style">
+    /// The requested face slant.
+    /// </param>
+    /// <param name="letterSpacing">
+    /// Additional logical pixels inserted after each glyph.
+    /// </param>
     public TextStyle(
         float fontSize,
         int faceIndex = 0,
@@ -78,17 +109,29 @@ public readonly record struct TextStyle
         this.letterSpacing = letterSpacing;
     }
 
-    /// <summary>Gets a 16-pixel regular default style.</summary>
+    /// <summary>
+    /// Gets a 16-pixel regular default style.
+    /// </summary>
     public static TextStyle defaultValue { get; } = new(16f);
-    /// <summary>Gets the logical font size.</summary>
+    /// <summary>
+    /// Gets the logical font size.
+    /// </summary>
     public float fontSize { get; }
-    /// <summary>Gets the collection face index.</summary>
+    /// <summary>
+    /// Gets the collection face index.
+    /// </summary>
     public int faceIndex { get; }
-    /// <summary>Gets the CSS-compatible font weight.</summary>
+    /// <summary>
+    /// Gets the CSS-compatible font weight.
+    /// </summary>
     public int weight { get; }
-    /// <summary>Gets the requested face slant.</summary>
+    /// <summary>
+    /// Gets the requested face slant.
+    /// </summary>
     public TextFontStyle style { get; }
-    /// <summary>Gets additional spacing appended to each glyph advance.</summary>
+    /// <summary>
+    /// Gets additional spacing appended to each glyph advance.
+    /// </summary>
     public float letterSpacing { get; }
 }
 
@@ -100,9 +143,15 @@ public readonly record struct TextShapingOptions
     /// <summary>
     /// Creates shaping hints.
     /// </summary>
-    /// <param name="direction">The logical text direction.</param>
-    /// <param name="language">An optional BCP 47 language code.</param>
-    /// <param name="script">An optional ISO 15924 script code.</param>
+    /// <param name="direction">
+    /// The logical text direction.
+    /// </param>
+    /// <param name="language">
+    /// An optional BCP 47 language code.
+    /// </param>
+    /// <param name="script">
+    /// An optional ISO 15924 script code.
+    /// </param>
     public TextShapingOptions(
         TextDirection direction = TextDirection.Automatic,
         string? language = null,
@@ -115,19 +164,45 @@ public readonly record struct TextShapingOptions
         this.script = string.IsNullOrWhiteSpace(script) ? null : script.Trim();
     }
 
-    /// <summary>Gets automatic shaping hints.</summary>
+    /// <summary>
+    /// Gets automatic shaping hints.
+    /// </summary>
     public static TextShapingOptions automatic { get; } = new();
-    /// <summary>Gets the requested logical direction.</summary>
+    /// <summary>
+    /// Gets the requested logical direction.
+    /// </summary>
     public TextDirection direction { get; }
-    /// <summary>Gets the optional BCP 47 language code.</summary>
+    /// <summary>
+    /// Gets the optional BCP 47 language code.
+    /// </summary>
     public string? language { get; }
-    /// <summary>Gets the optional ISO 15924 script code.</summary>
+    /// <summary>
+    /// Gets the optional ISO 15924 script code.
+    /// </summary>
     public string? script { get; }
 }
 
 /// <summary>
 /// Describes one positioned glyph emitted by Unicode shaping.
 /// </summary>
+/// <param name="glyphId">
+/// The uint value used to initialize this instance.
+/// </param>
+/// <param name="cluster">
+/// The uint value used to initialize this instance.
+/// </param>
+/// <param name="advanceX">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="advanceY">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="offsetX">
+/// The horizontal scroll delta reported by the platform.
+/// </param>
+/// <param name="offsetY">
+/// The vertical scroll delta reported by the platform.
+/// </param>
 public readonly record struct TextGlyph(
     uint glyphId,
     uint cluster,
@@ -139,6 +214,21 @@ public readonly record struct TextGlyph(
 /// <summary>
 /// Describes scalable metrics for one font face and logical size.
 /// </summary>
+/// <param name="ascender">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="descender">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="lineHeight">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="underlinePosition">
+/// The float value used to initialize this instance.
+/// </param>
+/// <param name="underlineThickness">
+/// The float value used to initialize this instance.
+/// </param>
 public readonly record struct TextMetrics(
     float ascender,
     float descender,
@@ -156,10 +246,18 @@ public sealed class TextLayout
     /// <summary>
     /// Creates an immutable text layout.
     /// </summary>
-    /// <param name="glyphs">The positioned glyph sequence.</param>
-    /// <param name="metrics">The face metrics used by the layout.</param>
-    /// <param name="width">The logical horizontal advance.</param>
-    /// <param name="height">The logical line height.</param>
+    /// <param name="glyphs">
+    /// The positioned glyph sequence.
+    /// </param>
+    /// <param name="metrics">
+    /// The face metrics used by the layout.
+    /// </param>
+    /// <param name="width">
+    /// The logical horizontal advance.
+    /// </param>
+    /// <param name="height">
+    /// The logical line height.
+    /// </param>
     public TextLayout(IEnumerable<TextGlyph> glyphs, TextMetrics metrics, float width, float height)
     {
         ArgumentNullException.ThrowIfNull(glyphs);
@@ -173,13 +271,21 @@ public sealed class TextLayout
         this.height = height;
     }
 
-    /// <summary>Gets the immutable positioned glyph sequence.</summary>
+    /// <summary>
+    /// Gets the immutable positioned glyph sequence.
+    /// </summary>
     public IReadOnlyList<TextGlyph> glyphs => m_glyphs;
-    /// <summary>Gets the font metrics used to build this layout.</summary>
+    /// <summary>
+    /// Gets the font metrics used to build this layout.
+    /// </summary>
     public TextMetrics metrics { get; }
-    /// <summary>Gets the aggregate horizontal advance.</summary>
+    /// <summary>
+    /// Gets the aggregate horizontal advance.
+    /// </summary>
     public float width { get; }
-    /// <summary>Gets the aggregate line height.</summary>
+    /// <summary>
+    /// Gets the aggregate line height.
+    /// </summary>
     public float height { get; }
 }
 
@@ -193,12 +299,24 @@ public sealed class GlyphBitmap
     /// <summary>
     /// Creates a validated immutable glyph bitmap.
     /// </summary>
-    /// <param name="width">The bitmap width in pixels.</param>
-    /// <param name="height">The bitmap height in pixels.</param>
-    /// <param name="bearingX">The horizontal bearing in pixels.</param>
-    /// <param name="bearingY">The vertical bearing in pixels.</param>
-    /// <param name="advanceX">The horizontal glyph advance.</param>
-    /// <param name="pixels">Tightly packed row-major 8-bit coverage.</param>
+    /// <param name="width">
+    /// The bitmap width in pixels.
+    /// </param>
+    /// <param name="height">
+    /// The bitmap height in pixels.
+    /// </param>
+    /// <param name="bearingX">
+    /// The horizontal bearing in pixels.
+    /// </param>
+    /// <param name="bearingY">
+    /// The vertical bearing in pixels.
+    /// </param>
+    /// <param name="advanceX">
+    /// The horizontal glyph advance.
+    /// </param>
+    /// <param name="pixels">
+    /// Tightly packed row-major 8-bit coverage.
+    /// </param>
     public GlyphBitmap(int width, int height, int bearingX, int bearingY, float advanceX, ReadOnlySpan<byte> pixels)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
@@ -215,16 +333,28 @@ public sealed class GlyphBitmap
         m_pixels = pixels.ToArray();
     }
 
-    /// <summary>Gets the bitmap width in pixels.</summary>
+    /// <summary>
+    /// Gets the bitmap width in pixels.
+    /// </summary>
     public int width { get; }
-    /// <summary>Gets the bitmap height in pixels.</summary>
+    /// <summary>
+    /// Gets the bitmap height in pixels.
+    /// </summary>
     public int height { get; }
-    /// <summary>Gets the horizontal bearing in pixels.</summary>
+    /// <summary>
+    /// Gets the horizontal bearing in pixels.
+    /// </summary>
     public int bearingX { get; }
-    /// <summary>Gets the vertical bearing in pixels.</summary>
+    /// <summary>
+    /// Gets the vertical bearing in pixels.
+    /// </summary>
     public int bearingY { get; }
-    /// <summary>Gets the horizontal glyph advance.</summary>
+    /// <summary>
+    /// Gets the horizontal glyph advance.
+    /// </summary>
     public float advanceX { get; }
-    /// <summary>Gets tightly packed row-major 8-bit coverage.</summary>
+    /// <summary>
+    /// Gets tightly packed row-major 8-bit coverage.
+    /// </summary>
     public ReadOnlyMemory<byte> pixels => m_pixels;
 }

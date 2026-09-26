@@ -11,8 +11,12 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Assets;
 
-/// <summary>Owns detached native asset drafts with shared document, History, recovery and explicit-save semantics.</summary>
-/// <typeparam name="TAsset">Native source type edited by the consuming feature.</typeparam>
+/// <summary>
+/// Owns detached native asset drafts with shared document, History, recovery and explicit-save semantics.
+/// </summary>
+/// <typeparam name="TAsset">
+/// Native source type edited by the consuming feature.
+/// </typeparam>
 public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : AssetObject
 {
     private readonly Dictionary<Guid, Draft> m_drafts = [];
@@ -30,14 +34,30 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
     private long m_updateSerial;
     private Guid[] m_activeGroup = [];
 
-    /// <summary>Creates a feature-owned draft store; call Start after document services become available.</summary>
-    /// <param name="assets">Owner of source identities, serialization and import.</param>
-    /// <param name="serialization">Host registry for neutral History and recovery records.</param>
-    /// <param name="interactions">Shared documents and History services.</param>
-    /// <param name="providerId">Stable unique document provider identifier.</param>
-    /// <param name="historyKind">Stable protocol handled by the feature's registered History handler.</param>
-    /// <param name="extension">Native source extension including its leading dot.</param>
-    /// <param name="label">Human-readable singular asset kind.</param>
+    /// <summary>
+    /// Creates a feature-owned draft store; call Start after document services become available.
+    /// </summary>
+    /// <param name="assets">
+    /// Owner of source identities, serialization and import.
+    /// </param>
+    /// <param name="serialization">
+    /// Host registry for neutral History and recovery records.
+    /// </param>
+    /// <param name="interactions">
+    /// Shared documents and History services.
+    /// </param>
+    /// <param name="providerId">
+    /// Stable unique document provider identifier.
+    /// </param>
+    /// <param name="historyKind">
+    /// Stable protocol handled by the feature's registered History handler.
+    /// </param>
+    /// <param name="extension">
+    /// Native source extension including its leading dot.
+    /// </param>
+    /// <param name="label">
+    /// Human-readable singular asset kind.
+    /// </param>
     public AssetDraftDocuments(AssetPipeline assets, SerializationRegistry serialization, EditorInteractions interactions,
         string providerId, string historyKind, string extension, string label)
     {
@@ -56,18 +76,34 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         m_extension = extension; m_label = label;
     }
 
-    /// <summary>Gets host-owned neutral presentation state for an open document.</summary>
-    /// <param name="assetId">Persistent source identity.</param>
-    /// <returns>Read-only presentation state; it contains no live asset or extension objects.</returns>
+    /// <summary>
+    /// Gets host-owned neutral presentation state for an open document.
+    /// </summary>
+    /// <param name="assetId">
+    /// Persistent source identity.
+    /// </param>
+    /// <returns>
+    /// Read-only presentation state; it contains no live asset or extension objects.
+    /// </returns>
     public Draft GetDraft(Guid assetId) => m_drafts[assetId];
 
-    /// <summary>Marks a document as inspected in this frame so a lost gesture can be completed.</summary>
-    /// <param name="assetId">Persistent source identity.</param>
+    /// <summary>
+    /// Marks a document as inspected in this frame so a lost gesture can be completed.
+    /// </summary>
+    /// <param name="assetId">
+    /// Persistent source identity.
+    /// </param>
     public void TouchInspection(Guid assetId) => m_drafts[assetId].lastInspection = m_updateSerial;
 
-    /// <summary>Opens a native asset source in the shared document service without revealing a second Inspector.</summary>
-    /// <param name="path">Source path, including sources with failed imports.</param>
-    /// <returns>The persistent asset identity used for subsequent draft operations.</returns>
+    /// <summary>
+    /// Opens a native asset source in the shared document service without revealing a second Inspector.
+    /// </summary>
+    /// <param name="path">
+    /// Source path, including sources with failed imports.
+    /// </param>
+    /// <returns>
+    /// The persistent asset identity used for subsequent draft operations.
+    /// </returns>
     public Guid Open(AssetPath path)
     {
         if (!path.localPath.EndsWith(m_extension, StringComparison.OrdinalIgnoreCase))
@@ -77,25 +113,49 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         return info.persistentId;
     }
 
-    /// <summary>Reads a detached current-generation value; callers must never mutate its referenced canonical assets.</summary>
-    /// <param name="assetId">Open asset identity.</param>
-    /// <returns>A detached editable asset whose changes have not been published.</returns>
+    /// <summary>
+    /// Reads a detached current-generation value; callers must never mutate its referenced canonical assets.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open asset identity.
+    /// </param>
+    /// <returns>
+    /// A detached editable asset whose changes have not been published.
+    /// </returns>
     public TAsset Read(Guid assetId) => m_sources.Decode<TAsset>(m_drafts[assetId].bytes);
 
-    /// <summary>Updates the open draft through shared History without saving or publishing a runtime asset.</summary>
-    /// <param name="assetId">Open asset identity.</param>
-    /// <param name="candidate">Detached edited asset.</param>
-    /// <param name="finishGesture">True completes one history transaction; false continues the same active gesture.</param>
+    /// <summary>
+    /// Updates the open draft through shared History without saving or publishing a runtime asset.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open asset identity.
+    /// </param>
+    /// <param name="candidate">
+    /// Detached edited asset.
+    /// </param>
+    /// <param name="finishGesture">
+    /// True completes one history transaction; false continues the same active gesture.
+    /// </param>
     public void Replace(Guid assetId, TAsset candidate, bool finishGesture = true)
         => Edit(m_drafts[assetId], candidate, finishGesture);
 
-    /// <summary>Finishes the active edit gesture without saving or applying its draft.</summary>
-    /// <param name="assetId">Open asset identity.</param>
+    /// <summary>
+    /// Finishes the active edit gesture without saving or applying its draft.
+    /// </summary>
+    /// <param name="assetId">
+    /// Open asset identity.
+    /// </param>
     public void Commit(Guid assetId) => Commit(m_drafts[assetId]);
 
-    /// <summary>Edits compatible selected drafts as one gesture without saving any source.</summary>
-    /// <param name="candidates">Detached candidate assets indexed by their open asset identities.</param>
-    /// <param name="finishGesture">Whether this sample completes the shared gesture.</param>
+    /// <summary>
+    /// Edits compatible selected drafts as one gesture without saving any source.
+    /// </summary>
+    /// <param name="candidates">
+    /// Detached candidate assets indexed by their open asset identities.
+    /// </param>
+    /// <param name="finishGesture">
+    /// Whether this sample completes the shared gesture.
+    /// </param>
     public void ReplaceMany(IReadOnlyDictionary<Guid, TAsset> candidates, bool finishGesture = true)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -119,8 +179,12 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         if (finishGesture) CommitMany(candidates.Keys);
     }
 
-    /// <summary>Commits all selected draft samples in a single shared history transaction.</summary>
-    /// <param name="assetIds">Open asset identities belonging to this gesture.</param>
+    /// <summary>
+    /// Commits all selected draft samples in a single shared history transaction.
+    /// </summary>
+    /// <param name="assetIds">
+    /// Open asset identities belonging to this gesture.
+    /// </param>
     public void CommitMany(IEnumerable<Guid> assetIds)
     {
         ArgumentNullException.ThrowIfNull(assetIds);
@@ -161,15 +225,27 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         }
     }
 
-    /// <summary>Validates a feature's neutral History record without changing the draft.</summary>
-    /// <param name="change">Record owned by the shared History service.</param>
-    /// <param name="direction">Requested traversal direction.</param>
+    /// <summary>
+    /// Validates a feature's neutral History record without changing the draft.
+    /// </summary>
+    /// <param name="change">
+    /// Record owned by the shared History service.
+    /// </param>
+    /// <param name="direction">
+    /// Requested traversal direction.
+    /// </param>
     public void ValidateHistory(EditorHistoryChange change, EditorHistoryDirection direction)
     { _ = ResolveHistory(change, direction); }
 
-    /// <summary>Applies a previously validated neutral record; failed recovery leaves the draft unchanged.</summary>
-    /// <param name="change">Record owned by the shared History service.</param>
-    /// <param name="direction">Requested traversal direction.</param>
+    /// <summary>
+    /// Applies a previously validated neutral record; failed recovery leaves the draft unchanged.
+    /// </summary>
+    /// <param name="change">
+    /// Record owned by the shared History service.
+    /// </param>
+    /// <param name="direction">
+    /// Requested traversal direction.
+    /// </param>
     public void ApplyHistory(EditorHistoryChange change, EditorHistoryDirection direction)
     {
         (Draft draft, ChangeData data) = ResolveHistory(change, direction);
@@ -266,14 +342,18 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         if (draft.isDirty) m_interactions.documents.SetDirty(draft.documentId);
     }
 
-    /// <summary>Registers the feature provider with the headless document ownership service.</summary>
+    /// <summary>
+    /// Registers the feature provider with the headless document ownership service.
+    /// </summary>
     public void Start()
     {
         if (m_provider is not null) throw new InvalidOperationException("This draft provider is already started.");
         m_provider = m_interactions.documents.RegisterProvider(new Provider(this));
     }
 
-    /// <summary>Completes abandoned gestures, imports explicit saves and reconciles source changes.</summary>
+    /// <summary>
+    /// Completes abandoned gestures, imports explicit saves and reconciles source changes.
+    /// </summary>
     public void Update()
     {
         m_updateSerial++;
@@ -327,7 +407,9 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         catch (Exception error) when (Recoverable(error)) { draft.error = error.Message; }
     }
 
-    /// <summary>Preserves unsaved recovery and unregisters the current feature provider.</summary>
+    /// <summary>
+    /// Preserves unsaved recovery and unregisters the current feature provider.
+    /// </summary>
     public void Dispose()
     {
         CommitMany(m_activeGroup);
@@ -343,12 +425,54 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
 
     private sealed class Provider(AssetDraftDocuments<TAsset> owner) : EditorDocumentProvider
     {
-        public override string id => owner.m_providerId;
-        public override bool CanOpen(string assetPath) => assetPath.EndsWith(owner.m_extension, StringComparison.OrdinalIgnoreCase);
-        public override void Open(EditorDocumentContext context) => owner.Open(context);
-        public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
-        public override bool Revert(EditorDocumentContext context) => owner.Revert(owner.m_drafts[context.assetId]);
-        public override void Close(EditorDocumentContext context)
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
+public override string id => owner.m_providerId;
+        /// <summary>
+        /// Checks whether this document handler supports the selected asset.
+        /// </summary>
+        /// <param name="assetPath">
+        /// The asset path text validated by the can open operation.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool CanOpen(string assetPath) => assetPath.EndsWith(owner.m_extension, StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// Opens the requested resource and establishes its active lifetime.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+public override void Open(EditorDocumentContext context) => owner.Open(context);
+        /// <summary>
+        /// Persists the supplied value through the configured storage contract.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool Save(EditorDocumentContext context) => owner.Save(owner.m_drafts[context.assetId]);
+        /// <summary>
+        /// Restores the draft from the latest imported asset state.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
+public override bool Revert(EditorDocumentContext context) => owner.Revert(owner.m_drafts[context.assetId]);
+        /// <summary>
+        /// Closes the active resource and releases its operation-scoped state.
+        /// </summary>
+        /// <param name="context">
+        /// The operation scope that provides state, services, and ownership boundaries.
+        /// </param>
+public override void Close(EditorDocumentContext context)
         {
             owner.CommitMany(owner.m_activeGroup);
             owner.DeleteRecovery(context.assetId);
@@ -356,7 +480,9 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         }
     }
 
-    /// <summary>Contains neutral draft status; only the owning store can change it.</summary>
+    /// <summary>
+    /// Contains neutral draft status; only the owning store can change it.
+    /// </summary>
     public sealed class Draft
     {
         internal byte[] bytes;
@@ -366,17 +492,29 @@ public sealed class AssetDraftDocuments<TAsset> : IDisposable where TAsset : Ass
         internal long lastInspection = -1;
         internal Draft(Guid id, Guid documentId, AssetPath path, byte[] bytes, byte[] baseline, string hash, bool readOnly)
         { this.id = id; this.documentId = documentId; this.path = path; this.bytes = bytes; this.baseline = baseline; this.hash = hash; this.readOnly = readOnly; }
-        /// <summary>Gets the persistent source identity.</summary>
+        /// <summary>
+        /// Gets the persistent source identity.
+        /// </summary>
         public Guid id { get; }
-        /// <summary>Gets the shared document identity used for Save/Revert and close confirmation.</summary>
+        /// <summary>
+        /// Gets the shared document identity used for Save/Revert and close confirmation.
+        /// </summary>
         public Guid documentId { get; }
-        /// <summary>Gets the current resolved source path.</summary>
+        /// <summary>
+        /// Gets the current resolved source path.
+        /// </summary>
         public AssetPath path { get; internal set; }
-        /// <summary>Gets whether this source is installed read-only content.</summary>
+        /// <summary>
+        /// Gets whether this source is installed read-only content.
+        /// </summary>
         public bool readOnly { get; internal set; }
-        /// <summary>Gets the latest source, save or import diagnostic.</summary>
+        /// <summary>
+        /// Gets the latest source, save or import diagnostic.
+        /// </summary>
         public string error { get; internal set; } = "";
-        /// <summary>Gets whether detached bytes differ from the saved baseline.</summary>
+        /// <summary>
+        /// Gets whether detached bytes differ from the saved baseline.
+        /// </summary>
         public bool isDirty => !bytes.AsSpan().SequenceEqual(baseline);
     }
 

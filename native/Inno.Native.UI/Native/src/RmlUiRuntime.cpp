@@ -246,6 +246,7 @@ Result Runtime::DestroyContext(std::uint64_t context)
     Rml::ReleaseTextures(state.renderer.get());
     Rml::ReleaseCompiledGeometry(state.renderer.get());
     state.renderer->Retire();
+    Inno::UI::RmlUiAdapter::RetainRenderInterface(std::move(state.renderer));
     implementation->contexts.erase(iterator);
     return Result::Success;
 }
@@ -448,6 +449,25 @@ Result Runtime::ProcessMouseMove(
     if (!state)
         return Result::InvalidHandle;
     state->context->ProcessMouseMove(x, y, MapModifiers(modifiers));
+    return Result::Success;
+}
+
+Result Runtime::HasElementAtPoint(
+    std::uint64_t context,
+    int x,
+    int y,
+    std::uint8_t& hit)
+{
+    RmlUiRuntimeState::ContextState* state = GetRuntimeState(m_state)
+        ? GetRuntimeState(m_state)->Find(context)
+        : nullptr;
+    if (!state)
+        return Result::InvalidHandle;
+    Rml::Element* element = state->context->GetElementAtPoint({float(x), float(y)});
+    hit = element && element->GetTagName() != "#root" &&
+        element->GetTagName() != "body" &&
+        element->GetTagName() != "rml" &&
+        dynamic_cast<Rml::ElementDocument*>(element) == nullptr ? 1 : 0;
     return Result::Success;
 }
 

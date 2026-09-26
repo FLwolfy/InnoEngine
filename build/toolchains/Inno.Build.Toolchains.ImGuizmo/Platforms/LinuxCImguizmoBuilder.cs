@@ -10,18 +10,45 @@ internal sealed class LinuxCImguizmoBuilder : CImguizmoBuilder
 {
     private const string THIRD_PARTY_WARNING_POLICY = "-Werror -Wno-deprecated-declarations";
 
-    public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
+    /// <summary>
+    /// Gets the native platform identifier produced by this builder.
+    /// </summary>
+public override string outputPlatform => RuntimeInformation.ProcessArchitecture switch
     {
         Architecture.X64 => "linux-x64",
         Architecture.Arm64 => "linux-arm64",
         _ => throw new PlatformNotSupportedException("cimguizmo supports Linux x64 and ARM64 hosts.")
     };
 
-    public override bool IsSupported() =>
+    /// <summary>
+    /// Determines whether the current host can execute this implementation.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the documented condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+public override bool IsSupported() =>
         OperatingSystem.IsLinux() &&
         RuntimeInformation.ProcessArchitecture is Architecture.X64 or Architecture.Arm64;
 
-    public override void Build(
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="cimguizmoDir">
+    /// The cimguizmo dir text validated by the build operation.
+    /// </param>
+    /// <param name="cimguiDir">
+    /// The cimgui dir text validated by the build operation.
+    /// </param>
+    /// <param name="cimguiBuildDir">
+    /// The cimgui build dir text validated by the build operation.
+    /// </param>
+    /// <param name="cimguiOutputDir">
+    /// The cimgui output dir text validated by the build operation.
+    /// </param>
+    /// <param name="config">
+    /// The validated configuration that controls this operation.
+    /// </param>
+public override void Build(
         string cimguizmoDir,
         string cimguiDir,
         string cimguiBuildDir,

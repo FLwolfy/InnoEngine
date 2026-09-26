@@ -197,7 +197,9 @@ public sealed class CompiledShaderArtifact
     /// <param name="passes">
     /// Compiled pass binaries.
     /// </param>
-    /// <param name="definitionData">Native-serialized runtime definition captured before asynchronous compilation.</param>
+    /// <param name="definitionData">
+    /// Native-serialized runtime definition captured before asynchronous compilation.
+    /// </param>
     public CompiledShaderArtifact(
         string shaderName,
         string targetKey,
@@ -342,16 +344,28 @@ public sealed class ShaderCompilationResult
 /// </summary>
 public interface IShaderCompilerToolchain
 {
-    /// <summary>Gets the stable source implementation identity paired with this rendering adapter.</summary>
+    /// <summary>
+    /// Gets the stable source implementation identity paired with this rendering adapter.
+    /// </summary>
     string implementationId { get; }
 
-    /// <summary>Gets the explicit source-language identities accepted by this adapter's typed IR generator.</summary>
+    /// <summary>
+    /// Gets the explicit source-language identities accepted by this adapter's typed IR generator.
+    /// </summary>
     IReadOnlyList<string> supportedSourceLanguages { get; }
 
-    /// <summary>Generates and compiles one typed stage, including its frozen function modules and resource layout.</summary>
-    /// <param name="request">Typed stage and exact target profile.</param>
-    /// <param name="cancellationToken">Cancellation before publishing the candidate.</param>
-    /// <returns>Immutable compiled bytes, generated binding names and structured diagnostics.</returns>
+    /// <summary>
+    /// Generates and compiles one typed stage, including its frozen function modules and resource layout.
+    /// </summary>
+    /// <param name="request">
+    /// Typed stage and exact target profile.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Cancellation before publishing the candidate.
+    /// </param>
+    /// <returns>
+    /// Immutable compiled bytes, generated binding names and structured diagnostics.
+    /// </returns>
     ValueTask<ShaderStageToolResult> CompileAsync(ShaderStageToolRequest request, CancellationToken cancellationToken);
 
     /// <summary>

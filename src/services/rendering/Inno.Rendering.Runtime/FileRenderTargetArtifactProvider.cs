@@ -26,8 +26,12 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
     /// <exception cref="DirectoryNotFoundException">
     /// Thrown when the content root does not exist.
     /// </exception>
-    /// <param name="serialization">The runtime owner serialization registry.</param>
-    /// <param name="context">Complete runtime asset/reference context used to resolve captured texture defaults.</param>
+    /// <param name="serialization">
+    /// The runtime owner serialization registry.
+    /// </param>
+    /// <param name="context">
+    /// Complete runtime asset/reference context used to resolve captured texture defaults.
+    /// </param>
     public FileRenderTargetArtifactProvider(string contentRoot, SerializationRegistry serialization, SerializationContext context)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
@@ -38,7 +42,15 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
             throw new DirectoryNotFoundException($"Runtime content root '{m_contentRoot}' does not exist.");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Reads and validates the shader definition value from its authoritative source.
+    /// </summary>
+    /// <param name="artifact">
+    /// The resolved immutable artifact payload returned to the caller.
+    /// </param>
+    /// <returns>
+    /// The validated shader definition that represents the completed operation.
+    /// </returns>
     public ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact)
     {
         ArgumentNullException.ThrowIfNull(artifact);

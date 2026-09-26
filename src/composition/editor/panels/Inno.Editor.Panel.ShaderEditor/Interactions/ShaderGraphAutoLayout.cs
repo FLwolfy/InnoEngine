@@ -7,7 +7,9 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
-/// <summary>Creates a deterministic left-to-right authoring layout without changing shader semantics.</summary>
+/// <summary>
+/// Creates a deterministic left-to-right authoring layout without changing shader semantics.
+/// </summary>
 internal static class ShaderGraphAutoLayout
 {
     private const float C_COLUMN = 350f;

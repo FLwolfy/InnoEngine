@@ -3,7 +3,9 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Shaders;
 
-/// <summary>Describes typed storage without embedding a backend register, declaration or resource handle.</summary>
+/// <summary>
+/// Describes typed storage without embedding a backend register, declaration or resource handle.
+/// </summary>
 public sealed class ShaderStorageType
 {
     private ShaderStorageType(ShaderSourceType valueType, RenderStorageAccess access, RenderTextureFormat? format,
@@ -17,24 +19,46 @@ public sealed class ShaderStorageType
         this.array = array;
     }
 
-    /// <summary>Gets the buffer element or image load/store value type; image operations use float4.</summary>
+    /// <summary>
+    /// Gets the buffer element or image load/store value type; image operations use float4.
+    /// </summary>
     public ShaderSourceType valueType { get; }
-    /// <summary>Gets the permitted memory access, independent of Render Graph scheduling.</summary>
+    /// <summary>
+    /// Gets the permitted memory access, independent of Render Graph scheduling.
+    /// </summary>
     public RenderStorageAccess access { get; }
-    /// <summary>Gets the exact storage image format, or null for a structured buffer.</summary>
+    /// <summary>
+    /// Gets the exact storage image format, or null for a structured buffer.
+    /// </summary>
     public RenderTextureFormat? format { get; }
-    /// <summary>Gets the image dimension; ignored for buffers.</summary>
+    /// <summary>
+    /// Gets the image dimension; ignored for buffers.
+    /// </summary>
     public RenderTextureDimension dimension { get; }
-    /// <summary>Gets whether a two-dimensional storage image has array layers.</summary>
+    /// <summary>
+    /// Gets whether a two-dimensional storage image has array layers.
+    /// </summary>
     public bool array { get; }
-    /// <summary>Gets whether this descriptor denotes an image rather than a structured buffer.</summary>
+    /// <summary>
+    /// Gets whether this descriptor denotes an image rather than a structured buffer.
+    /// </summary>
     public bool isImage => format.HasValue;
 
-    /// <summary>Creates a structured storage buffer with an explicit element layout.</summary>
-    /// <param name="element">Non-void value layout; resources cannot be embedded in buffer elements.</param>
-    /// <param name="access">Permitted memory operations.</param>
-    /// <returns>An immutable storage buffer description.</returns>
-    /// <exception cref="ArgumentException">The element contains void or resource handles.</exception>
+    /// <summary>
+    /// Creates a structured storage buffer with an explicit element layout.
+    /// </summary>
+    /// <param name="element">
+    /// Non-void value layout; resources cannot be embedded in buffer elements.
+    /// </param>
+    /// <param name="access">
+    /// Permitted memory operations.
+    /// </param>
+    /// <returns>
+    /// An immutable storage buffer description.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The element contains void or resource handles.
+    /// </exception>
     public static ShaderStorageType Buffer(ShaderSourceType element, RenderStorageAccess access)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -42,13 +66,27 @@ public sealed class ShaderStorageType
         return new(element, access, null, RenderTextureDimension.Texture2D, false);
     }
 
-    /// <summary>Creates a formatted storage image; target capabilities must separately support its access and format.</summary>
-    /// <param name="format">Linear, non-depth image format supported by the rendering contract.</param>
-    /// <param name="access">Permitted memory operations.</param>
-    /// <param name="dimension">Two-dimensional or three-dimensional image shape.</param>
-    /// <param name="array">Whether a two-dimensional image is an array.</param>
-    /// <returns>An immutable image description with float4 load/store values.</returns>
-    /// <exception cref="ArgumentException">The format or shape cannot represent storage image operations.</exception>
+    /// <summary>
+    /// Creates a formatted storage image; target capabilities must separately support its access and format.
+    /// </summary>
+    /// <param name="format">
+    /// Linear, non-depth image format supported by the rendering contract.
+    /// </param>
+    /// <param name="access">
+    /// Permitted memory operations.
+    /// </param>
+    /// <param name="dimension">
+    /// Two-dimensional or three-dimensional image shape.
+    /// </param>
+    /// <param name="array">
+    /// Whether a two-dimensional image is an array.
+    /// </param>
+    /// <returns>
+    /// An immutable image description with float4 load/store values.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The format or shape cannot represent storage image operations.
+    /// </exception>
     public static ShaderStorageType Image(RenderTextureFormat format, RenderStorageAccess access,
         RenderTextureDimension dimension = RenderTextureDimension.Texture2D, bool array = false)
     {
@@ -59,9 +97,15 @@ public sealed class ShaderStorageType
         return new(ShaderSourceType.Atomic("float4"), access, format, dimension, array);
     }
 
-    /// <summary>Compares complete access, format, shape and element layout contracts.</summary>
-    /// <param name="other">Candidate resource description.</param>
-    /// <returns>True only when both bindings permit exactly the same operations and values.</returns>
+    /// <summary>
+    /// Compares complete access, format, shape and element layout contracts.
+    /// </summary>
+    /// <param name="other">
+    /// Candidate resource description.
+    /// </param>
+    /// <returns>
+    /// True only when both bindings permit exactly the same operations and values.
+    /// </returns>
     public bool IsEquivalentTo(ShaderStorageType? other)
         => other is not null && access == other.access && format == other.format && dimension == other.dimension
             && array == other.array && valueType.IsEquivalentTo(other.valueType);

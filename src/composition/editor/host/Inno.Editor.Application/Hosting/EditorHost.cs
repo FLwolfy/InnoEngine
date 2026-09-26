@@ -229,13 +229,25 @@ internal sealed class EditorHost : ShellHost
     private sealed class SmokeDiagnostics : Inno.Core.Diagnostics.IDiagnosticSink
     {
         internal readonly List<string> errors = [];
-        public void Replace(Inno.Core.Diagnostics.DiagnosticReport report)
+        /// <summary>
+        /// Records errors from the current diagnostic report.
+        /// </summary>
+        /// <param name="report">
+        /// The report consumed by replace; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+public void Replace(Inno.Core.Diagnostics.DiagnosticReport report)
         {
             foreach (var diagnostic in report.diagnostics)
                 if (diagnostic.severity == Inno.Core.Diagnostics.DiagnosticSeverity.Error)
                     errors.Add(report.source.id + "/" + diagnostic.code + ": " + diagnostic.message);
         }
-        public void Clear(Inno.Core.Diagnostics.DiagnosticSource source) { }
+        /// <summary>
+        /// Removes all retained entries and returns the instance to an empty reusable state.
+        /// </summary>
+        /// <param name="source">
+        /// The source value or location read by this operation.
+        /// </param>
+public void Clear(Inno.Core.Diagnostics.DiagnosticSource source) { }
     }
     /// <summary>
     /// Submits product UI requests while the host output pipeline is open.

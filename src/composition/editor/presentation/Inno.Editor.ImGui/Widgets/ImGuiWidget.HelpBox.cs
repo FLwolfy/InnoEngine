@@ -5,15 +5,26 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
 
+/// <summary>
+/// Provides standard help box presentation in the Editor UI.
+/// </summary>
 public static partial class ImGuiWidget
 {
     [ThreadStatic]
     private static SectionLayoutState? s_sectionLayout;
 
-    /// <summary>Draws a wrapped contextual message with a semantic icon and a subdued status surface.</summary>
-    /// <param name="text">Literal message shown within the current content width.</param>
-    /// <param name="icon">Icon-font glyph identifying the message severity.</param>
-    /// <param name="color">Semantic accent for the icon, outline, and leading stripe.</param>
+    /// <summary>
+    /// Draws a wrapped contextual message with a semantic icon and a subdued status surface.
+    /// </summary>
+    /// <param name="text">
+    /// Literal message shown within the current content width.
+    /// </param>
+    /// <param name="icon">
+    /// Icon-font glyph identifying the message severity.
+    /// </param>
+    /// <param name="color">
+    /// Semantic accent for the icon, outline, and leading stripe.
+    /// </param>
     public static void HelpBox(string text, string icon, Vector4 color)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -77,7 +88,9 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws content in a scope where consecutive section headers become framed fieldsets.
     /// </summary>
-    /// <param name="drawContent">Callback that draws all content participating in the section layout.</param>
+    /// <param name="drawContent">
+    /// Callback that draws all content participating in the section layout.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="drawContent"/> is <see langword="null"/>.
     /// </exception>
@@ -136,10 +149,18 @@ public static partial class ImGuiWidget
             : layout.contentVisible;
     }
 
-    /// <summary>Draws a section heading with hover-only description using the shared Inspector presentation.</summary>
-    /// <param name="title">Section title.</param>
-    /// <param name="description">Optional hover explanation.</param>
-    /// <param name="drawLeadingControl">Optional interactive control drawn before the section title.</param>
+    /// <summary>
+    /// Draws a section heading with hover-only description using the shared Inspector presentation.
+    /// </summary>
+    /// <param name="title">
+    /// Section title.
+    /// </param>
+    /// <param name="description">
+    /// Optional hover explanation.
+    /// </param>
+    /// <param name="drawLeadingControl">
+    /// Optional interactive control drawn before the section title.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="title"/> is <see langword="null"/>.
     /// </exception>

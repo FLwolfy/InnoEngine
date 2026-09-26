@@ -657,9 +657,17 @@ namespace Inno.Native.UI
         /// <summary>
         /// To be documented.
         /// </summary>
+        internal static InnoUiResult HasElementAtPointNative(InnoUiRuntime self, ulong context, int x, int y, byte* hit)
+        {
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, int, int, byte*, InnoUiResult>)funcTable[17])(self, context, x, y, hit);
+        }
+
+        /// <summary>
+        /// To be documented.
+        /// </summary>
         internal static InnoUiResult ProcessMouseButtonNative(InnoUiRuntime self, ulong context, int button, byte down, int modifiers)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, int, byte, int, InnoUiResult>)funcTable[17])(self, context, button, down, modifiers);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, int, byte, int, InnoUiResult>)funcTable[18])(self, context, button, down, modifiers);
         }
 
         /// <summary>
@@ -667,7 +675,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult ProcessMouseWheelNative(InnoUiRuntime self, ulong context, float x, float y, int modifiers)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, float, float, int, InnoUiResult>)funcTable[18])(self, context, x, y, modifiers);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, float, float, int, InnoUiResult>)funcTable[19])(self, context, x, y, modifiers);
         }
 
         /// <summary>
@@ -675,7 +683,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult ProcessKeyNative(InnoUiRuntime self, ulong context, int key, byte down, int modifiers)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, int, byte, int, InnoUiResult>)funcTable[19])(self, context, key, down, modifiers);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, int, byte, int, InnoUiResult>)funcTable[20])(self, context, key, down, modifiers);
         }
 
         /// <summary>
@@ -683,7 +691,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult ProcessTextNative(InnoUiRuntime self, ulong context, byte* text)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, byte*, InnoUiResult>)funcTable[20])(self, context, text);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, byte*, InnoUiResult>)funcTable[21])(self, context, text);
         }
 
         /// <summary>
@@ -691,7 +699,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult UpdateNative(InnoUiRuntime self, ulong context)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[21])(self, context);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[22])(self, context);
         }
 
         /// <summary>
@@ -699,7 +707,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult RenderNative(InnoUiRuntime self, ulong context, InnoUiFrameInfo* frame)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiFrameInfo*, InnoUiResult>)funcTable[22])(self, context, frame);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiFrameInfo*, InnoUiResult>)funcTable[23])(self, context, frame);
         }
 
         /// <summary>
@@ -707,7 +715,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult GetMeshInfoNative(InnoUiRuntime self, ulong context, ulong index, InnoUiMeshInfo* mesh)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiMeshInfo*, InnoUiResult>)funcTable[23])(self, context, index, mesh);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiMeshInfo*, InnoUiResult>)funcTable[24])(self, context, index, mesh);
         }
 
         /// <summary>
@@ -715,7 +723,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyMeshVerticesNative(InnoUiRuntime self, ulong context, ulong mesh, InnoUiVertex* vertices, ulong verticesCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiVertex*, ulong, InnoUiResult>)funcTable[24])(self, context, mesh, vertices, verticesCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiVertex*, ulong, InnoUiResult>)funcTable[25])(self, context, mesh, vertices, verticesCount);
         }
 
         /// <summary>
@@ -723,7 +731,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyMeshIndicesNative(InnoUiRuntime self, ulong context, ulong mesh, InnoUiIndex* indices, ulong indicesCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiIndex*, ulong, InnoUiResult>)funcTable[25])(self, context, mesh, indices, indicesCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiIndex*, ulong, InnoUiResult>)funcTable[26])(self, context, mesh, indices, indicesCount);
         }
 
         /// <summary>
@@ -731,7 +739,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyCommandsNative(InnoUiRuntime self, ulong context, InnoUiDrawCommand* commands, ulong commandsCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiDrawCommand*, ulong, InnoUiResult>)funcTable[26])(self, context, commands, commandsCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiDrawCommand*, ulong, InnoUiResult>)funcTable[27])(self, context, commands, commandsCount);
         }
 
         /// <summary>
@@ -739,7 +747,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult GetTextureInfoNative(InnoUiRuntime self, ulong context, ulong index, InnoUiTextureInfo* texture)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiTextureInfo*, InnoUiResult>)funcTable[27])(self, context, index, texture);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiTextureInfo*, InnoUiResult>)funcTable[28])(self, context, index, texture);
         }
 
         /// <summary>
@@ -747,7 +755,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyTexturePixelsNative(InnoUiRuntime self, ulong context, ulong texture, InnoUiByte* pixels, ulong pixelsCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiByte*, ulong, InnoUiResult>)funcTable[28])(self, context, texture, pixels, pixelsCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiByte*, ulong, InnoUiResult>)funcTable[29])(self, context, texture, pixels, pixelsCount);
         }
 
         /// <summary>
@@ -755,7 +763,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyReleasedTexturesNative(InnoUiRuntime self, ulong context, InnoUiHandle* textures, ulong texturesCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiHandle*, ulong, InnoUiResult>)funcTable[29])(self, context, textures, texturesCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiHandle*, ulong, InnoUiResult>)funcTable[30])(self, context, textures, texturesCount);
         }
 
         /// <summary>
@@ -763,7 +771,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyReleasedMeshesNative(InnoUiRuntime self, ulong context, InnoUiHandle* meshes, ulong meshesCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiHandle*, ulong, InnoUiResult>)funcTable[30])(self, context, meshes, meshesCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiHandle*, ulong, InnoUiResult>)funcTable[31])(self, context, meshes, meshesCount);
         }
 
         /// <summary>
@@ -771,7 +779,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult FinishFrameNative(InnoUiRuntime self, ulong context)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[31])(self, context);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[32])(self, context);
         }
 
         /// <summary>
@@ -779,7 +787,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult GetEventCountNative(InnoUiRuntime self, ulong context, ulong* count)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong*, InnoUiResult>)funcTable[32])(self, context, count);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong*, InnoUiResult>)funcTable[33])(self, context, count);
         }
 
         /// <summary>
@@ -787,7 +795,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult GetEventInfoNative(InnoUiRuntime self, ulong context, ulong index, InnoUiEventInfo* eventInfo)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiEventInfo*, InnoUiResult>)funcTable[33])(self, context, index, eventInfo);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiEventInfo*, InnoUiResult>)funcTable[34])(self, context, index, eventInfo);
         }
 
         /// <summary>
@@ -795,7 +803,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult CopyEventTargetIdNative(InnoUiRuntime self, ulong context, ulong index, InnoUiUtf8CodeUnit* targetId, ulong targetIdCount)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiUtf8CodeUnit*, ulong, InnoUiResult>)funcTable[34])(self, context, index, targetId, targetIdCount);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, ulong, InnoUiUtf8CodeUnit*, ulong, InnoUiResult>)funcTable[35])(self, context, index, targetId, targetIdCount);
         }
 
         /// <summary>
@@ -803,7 +811,7 @@ namespace Inno.Native.UI
         /// </summary>
         internal static InnoUiResult ClearEventsNative(InnoUiRuntime self, ulong context)
         {
-            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[35])(self, context);
+            return ((delegate* unmanaged[Cdecl]<InnoUiRuntime, ulong, InnoUiResult>)funcTable[36])(self, context);
         }
     }
 
@@ -1097,6 +1105,22 @@ namespace Inno.Native.UI
         {
             InnoUiResult ret = ProcessMouseMoveNative(self, context, x, y, modifiers);
             return ret;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static InnoUiResult HasElementAtPoint(InnoUiRuntime self, ulong context, int x, int y, byte* hit)
+        {
+            InnoUiResult ret = HasElementAtPointNative(self, context, x, y, hit);
+            return ret;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static InnoUiResult HasElementAtPoint(InnoUiRuntime self, ulong context, int x, int y, ref byte hit)
+        {
+            fixed (byte* p_hit = &hit)
+            {
+                return HasElementAtPointNative(self, context, x, y, (byte*)p_hit);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1436,7 +1460,7 @@ namespace Inno.Native.UI
         internal static FunctionTable funcTable = null !;
         public static void InitApi(INativeContext context)
         {
-            funcTable = new FunctionTable(context, 36);
+            funcTable = new FunctionTable(context, 37);
             funcTable.Load(0, "inno_ui_GetLastError");
             funcTable.Load(1, "inno_ui_ClearLastError");
             funcTable.Load(2, "inno_ui_RuntimeCreate");
@@ -1454,25 +1478,26 @@ namespace Inno.Native.UI
             funcTable.Load(14, "inno_ui_Runtime_LoadFont");
             funcTable.Load(15, "inno_ui_Runtime_RegisterTexture");
             funcTable.Load(16, "inno_ui_Runtime_ProcessMouseMove");
-            funcTable.Load(17, "inno_ui_Runtime_ProcessMouseButton");
-            funcTable.Load(18, "inno_ui_Runtime_ProcessMouseWheel");
-            funcTable.Load(19, "inno_ui_Runtime_ProcessKey");
-            funcTable.Load(20, "inno_ui_Runtime_ProcessText");
-            funcTable.Load(21, "inno_ui_Runtime_Update");
-            funcTable.Load(22, "inno_ui_Runtime_Render");
-            funcTable.Load(23, "inno_ui_Runtime_GetMeshInfo");
-            funcTable.Load(24, "inno_ui_Runtime_CopyMeshVertices");
-            funcTable.Load(25, "inno_ui_Runtime_CopyMeshIndices");
-            funcTable.Load(26, "inno_ui_Runtime_CopyCommands");
-            funcTable.Load(27, "inno_ui_Runtime_GetTextureInfo");
-            funcTable.Load(28, "inno_ui_Runtime_CopyTexturePixels");
-            funcTable.Load(29, "inno_ui_Runtime_CopyReleasedTextures");
-            funcTable.Load(30, "inno_ui_Runtime_CopyReleasedMeshes");
-            funcTable.Load(31, "inno_ui_Runtime_FinishFrame");
-            funcTable.Load(32, "inno_ui_Runtime_GetEventCount");
-            funcTable.Load(33, "inno_ui_Runtime_GetEventInfo");
-            funcTable.Load(34, "inno_ui_Runtime_CopyEventTargetId");
-            funcTable.Load(35, "inno_ui_Runtime_ClearEvents");
+            funcTable.Load(17, "inno_ui_Runtime_HasElementAtPoint");
+            funcTable.Load(18, "inno_ui_Runtime_ProcessMouseButton");
+            funcTable.Load(19, "inno_ui_Runtime_ProcessMouseWheel");
+            funcTable.Load(20, "inno_ui_Runtime_ProcessKey");
+            funcTable.Load(21, "inno_ui_Runtime_ProcessText");
+            funcTable.Load(22, "inno_ui_Runtime_Update");
+            funcTable.Load(23, "inno_ui_Runtime_Render");
+            funcTable.Load(24, "inno_ui_Runtime_GetMeshInfo");
+            funcTable.Load(25, "inno_ui_Runtime_CopyMeshVertices");
+            funcTable.Load(26, "inno_ui_Runtime_CopyMeshIndices");
+            funcTable.Load(27, "inno_ui_Runtime_CopyCommands");
+            funcTable.Load(28, "inno_ui_Runtime_GetTextureInfo");
+            funcTable.Load(29, "inno_ui_Runtime_CopyTexturePixels");
+            funcTable.Load(30, "inno_ui_Runtime_CopyReleasedTextures");
+            funcTable.Load(31, "inno_ui_Runtime_CopyReleasedMeshes");
+            funcTable.Load(32, "inno_ui_Runtime_FinishFrame");
+            funcTable.Load(33, "inno_ui_Runtime_GetEventCount");
+            funcTable.Load(34, "inno_ui_Runtime_GetEventInfo");
+            funcTable.Load(35, "inno_ui_Runtime_CopyEventTargetId");
+            funcTable.Load(36, "inno_ui_Runtime_ClearEvents");
         }
 
         public static void FreeApi() => funcTable.Free();
